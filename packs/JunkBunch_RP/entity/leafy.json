@@ -29,7 +29,7 @@
         { "ability": "controller.animation.leafy.ability" }
       ],
       "render_controllers": [
-        "controller.render.default"
+        "controller.render.leafy"
       ],
       "spawn_egg": {
         "base_color": "#2d8659",

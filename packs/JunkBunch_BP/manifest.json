@@ -3,13 +3,20 @@
   "header": {
     "name": "Junk Bunch",
     "description": "Junk Bunch character add-on for Minecraft Bedrock",
+    "uuid": "c2f40fc5-0d87-4618-b601-acd4a2cbc7e1",
     "version": [1, 0, 0],
     "min_engine_version": [1, 20, 0]
   },
   "modules": [
     {
-      "type": "behavior",
-      "uuid": "d6d6d6d6-d6d6-d6d6-d6d6-d6d6d6d6d6d6",
+      "type": "data",
+      "uuid": "10ac793b-ace8-49ba-911d-ec3788e0c190",
+      "version": [1, 0, 0]
+    }
+  ],
+  "dependencies": [
+    {
+      "uuid": "fde522b4-0cae-4479-8104-2b9e19ac5e6c",
       "version": [1, 0, 0]
     }
   ]
