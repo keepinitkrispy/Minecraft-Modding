@@ -2,21 +2,22 @@
   "format_version": 2,
   "header": {
     "name": "Junk Bunch",
-    "description": "Junk Bunch character add-on for Minecraft Bedrock",
-    "uuid": "c2f40fc5-0d87-4618-b601-acd4a2cbc7e1",
+    "description": "The Junk Bunch character add-on - behavior pack",
+    "uuid": "b20101a5-2f27-4ff2-bc48-fb89662f9986",
     "version": [1, 0, 0],
-    "min_engine_version": [1, 20, 0]
+    "min_engine_version": [1, 20, 50]
   },
   "modules": [
     {
       "type": "data",
-      "uuid": "10ac793b-ace8-49ba-911d-ec3788e0c190",
+      "description": "Junk Bunch entities, items and recipes",
+      "uuid": "3fabc18f-d18b-4260-a538-eb0397312394",
       "version": [1, 0, 0]
     }
   ],
   "dependencies": [
     {
-      "uuid": "fde522b4-0cae-4479-8104-2b9e19ac5e6c",
+      "uuid": "035d95bc-142f-4860-80df-6d2a59300477",
       "version": [1, 0, 0]
     }
   ]

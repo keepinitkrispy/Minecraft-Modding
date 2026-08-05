@@ -1,0 +1,8 @@
+## Junk Bunch - English (US)
+
+item.junkbunch:summon_rake=Leafy's Rake
+entity.junkbunch:leafy.name=Leafy
+item.spawn_egg.entity.junkbunch:leafy.name=Spawn Leafy
+
+pack.name=Junk Bunch
+pack.description=The Junk Bunch adventure series

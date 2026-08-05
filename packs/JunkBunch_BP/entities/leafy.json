@@ -3,110 +3,113 @@
   "minecraft:entity": {
     "description": {
       "identifier": "junkbunch:leafy",
-      "is_summonable": true,
       "is_spawnable": true,
+      "is_summonable": true,
       "is_experimental": false
     },
     "component_groups": {
-      "following_player": {
-        "minecraft:behavior.follow_parent": {
-          "priority": 5,
-          "speed_multiplier": 0.6
+      "junkbunch:wild": {
+        "minecraft:tameable": {
+          "probability": 1.0,
+          "tame_items": ["junkbunch:summon_rake"],
+          "tame_event": {
+            "event": "junkbunch:on_tamed",
+            "target": "self"
+          }
         }
       },
-      "idle": {
-        "minecraft:behavior.look_at_player": {
-          "priority": 10,
-          "look_distance": 8.0
-        }
-      },
-      "floating": {
-        "minecraft:behavior.float": {
-          "priority": 1
-        }
+      "junkbunch:tamed": {
+        "minecraft:is_tamed": {},
+        "minecraft:behavior.follow_owner": {
+          "priority": 4,
+          "speed_multiplier": 1.0,
+          "start_distance": 5.0,
+          "stop_distance": 2.0
+        },
+        "minecraft:persistent": {}
       }
     },
     "components": {
       "minecraft:type_family": {
-        "family": ["mob", "junkbunch", "leafy"]
+        "family": ["leafy", "junkbunch", "mob"]
       },
       "minecraft:health": {
         "value": 10,
         "max": 10
       },
-      "minecraft:movement": {
-        "value": 0.15
+      "minecraft:breathable": {
+        "total_supply": 15,
+        "suffocate_time": 0
       },
-      "minecraft:nameable": {},
       "minecraft:physics": {
-        "has_gravity": true
+        "has_gravity": true,
+        "has_collision": true
       },
       "minecraft:collision_box": {
-        "width": 0.5,
-        "height": 0.6
+        "width": 0.6,
+        "height": 0.9
       },
+      "minecraft:movement": {
+        "value": 0.2
+      },
+      "minecraft:movement.basic": {},
+      "minecraft:navigation.walk": {
+        "can_path_over_water": true,
+        "avoid_water": true,
+        "avoid_damage_blocks": true
+      },
+      "minecraft:jump.static": {},
+      "minecraft:can_climb": {},
+      "minecraft:nameable": {},
       "minecraft:pushable": {
         "is_pushable": true,
         "is_pushable_by_piston": true
-      },
-      "minecraft:behavior.random_look_around": {
-        "priority": 9
-      },
-      "minecraft:behavior.wander": {
-        "priority": 11,
-        "speed_multiplier": 0.5
       },
       "minecraft:leashable": {
         "soft_distance": 4.0,
         "hard_distance": 6.0,
         "max_distance": 10.0
       },
-      "minecraft:interact": {
-        "interactions": [
-          {
-            "on_interact": {
-              "filters": [
-                { "test": "is_family", "subject": "other", "value": "player" },
-                { "test": "is_item_name_any", "subject": "other", "value": "junkbunch:summon_rake" }
-              ]
-            },
-            "use_item": false,
-            "swing_hand": true
-          }
-        ]
-      },
       "minecraft:damage_sensor": {
         "triggers": [
           {
-            "on_damage": {
-              "filters": [
-                { "test": "is_family", "subject": "self", "value": "player" }
-              ]
-            },
+            "cause": "fall",
             "deals_damage": false
           }
         ]
+      },
+      "minecraft:behavior.float": {
+        "priority": 0
+      },
+      "minecraft:behavior.panic": {
+        "priority": 1,
+        "speed_multiplier": 1.25
+      },
+      "minecraft:behavior.look_at_player": {
+        "priority": 6,
+        "look_distance": 8.0,
+        "probability": 0.02
+      },
+      "minecraft:behavior.random_stroll": {
+        "priority": 7,
+        "speed_multiplier": 0.8
+      },
+      "minecraft:behavior.random_look_around": {
+        "priority": 8
       }
     },
     "events": {
       "minecraft:entity_spawned": {
         "add": {
-          "component_groups": ["idle", "floating"]
+          "component_groups": ["junkbunch:wild"]
         }
       },
-      "junkbunch:trigger_ability": {
-        "run_command": {
-          "command": "particle junkbunch:leafy_float ~~~"
-        }
-      },
-      "junkbunch:follow": {
-        "add": {
-          "component_groups": ["following_player"]
-        }
-      },
-      "junkbunch:stop_follow": {
+      "junkbunch:on_tamed": {
         "remove": {
-          "component_groups": ["following_player"]
+          "component_groups": ["junkbunch:wild"]
+        },
+        "add": {
+          "component_groups": ["junkbunch:tamed"]
         }
       }
     }

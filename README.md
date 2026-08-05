@@ -33,6 +33,49 @@ See `/packs/README.md` for detailed upload instructions.
 
 ---
 
+## Build
+
+The importable add-on is `JunkBunch.mcaddon` at the repository root.
+
+```bash
+# validate the packs only (no build)
+python3 scripts/validate_packs.py
+
+# validate, then build JunkBunch.mcaddon
+python3 scripts/build_mcaddon.py
+```
+
+`build_mcaddon.py` refuses to package anything that fails validation, so a broken
+pack is caught here instead of failing to import on a console.
+
+**What the validator checks** — every JSON file parses; both manifests have a
+`header.uuid`, `header.version`, `min_engine_version` and a valid module `type`;
+all UUIDs are well-formed and unique; every dependency resolves to a real pack in
+this add-on and there is no circular BP↔RP dependency; every referenced geometry,
+texture, animation, animation controller, render controller and entity actually
+exists on disk; no invalid entity-event responses or legacy item components; pack
+folder names are recognised Bedrock folders.
+
+**Archive layout** — the built `.mcaddon` contains exactly two entries at its root:
+
+```
+JunkBunch_BP/
+JunkBunch_RP/
+```
+
+No `packs/` prefix, no repo root folder, no extra nesting, no `.gitkeep`, and no
+`_*` template files.
+
+### Adding a new character
+
+1. Add the behavior files under `packs/JunkBunch_BP/` and the assets under
+   `packs/JunkBunch_RP/`.
+2. Run `python3 scripts/validate_packs.py` and fix anything it reports.
+3. Run `python3 scripts/build_mcaddon.py` to regenerate `JunkBunch.mcaddon`.
+4. Commit the rebuilt archive along with the source files.
+
+---
+
 ## Workflow Documentation
 
 - **`/docs/WORKFLOW.md`** — How to create a character step-by-step

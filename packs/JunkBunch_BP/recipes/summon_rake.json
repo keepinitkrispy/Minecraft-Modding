@@ -1,5 +1,5 @@
 {
-  "format_version": "1.12",
+  "format_version": "1.20.50",
   "minecraft:recipe_shaped": {
     "description": {
       "identifier": "junkbunch:summon_rake"
@@ -18,6 +18,11 @@
         "item": "minecraft:stick"
       }
     },
+    "unlock": [
+      {
+        "item": "minecraft:stick"
+      }
+    ],
     "result": {
       "item": "junkbunch:summon_rake",
       "count": 1
