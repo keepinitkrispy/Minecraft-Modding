@@ -45,6 +45,13 @@ When creating a new character, send me:
 
 For each character, I generate:
 
+### Model authoring (Blockbench MCP)
+- Models, textures, and animations are authored in Blockbench, which Claude can
+  drive directly via the Blockbench MCP plugin. See `docs/BLOCKBENCH_MCP.md` for
+  setup. When Blockbench isn't running (e.g. a cloud session), the offline
+  fallback is `scripts/build_leafy_assets.py`. Either way the output must pass
+  `scripts/validate_packs.py` before it ships.
+
 ### Entity Files
 - Behavior component (personality, follow system, ability trigger)
 - Geometry model (based on your son's drawing style)
