@@ -16,10 +16,10 @@ def draw_leafy_correct(img, draw, x_center, y_center, scale=1.0):
     Leafy: Simple oval leaf with face ON the surface.
     """
 
-    width = 50 * scale
-    height = 100 * scale
+    width = 48 * scale
+    height = 105 * scale
 
-    # Draw oval leaf body
+    # Draw slightly more pointed oval leaf body
     draw.ellipse([x_center - width/2, y_center - height/2,
                   x_center + width/2, y_center + height/2],
                  fill=(45, 134, 89, 255), outline=(26, 77, 46, 255), width=2)
