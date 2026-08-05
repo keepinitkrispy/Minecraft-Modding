@@ -1,0 +1,47 @@
+{
+  "format_version": "1.12",
+  "minecraft:recipe_shaped": {
+    "description": {
+      "identifier": "junkbunch:summon_[character_name]"
+    },
+    "tags": ["crafting_table"],
+    "pattern": [
+      "ABC",
+      "DEF",
+      "GHI"
+    ],
+    "key": {
+      "A": {
+        "item": "minecraft:air"
+      },
+      "B": {
+        "item": "minecraft:air"
+      },
+      "C": {
+        "item": "minecraft:air"
+      },
+      "D": {
+        "item": "minecraft:air"
+      },
+      "E": {
+        "item": "minecraft:air"
+      },
+      "F": {
+        "item": "minecraft:air"
+      },
+      "G": {
+        "item": "minecraft:air"
+      },
+      "H": {
+        "item": "minecraft:air"
+      },
+      "I": {
+        "item": "minecraft:air"
+      }
+    },
+    "result": {
+      "item": "junkbunch:summon_[character_name]",
+      "count": 1
+    }
+  }
+}

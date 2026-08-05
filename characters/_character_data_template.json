@@ -1,0 +1,48 @@
+{
+  "name": "CharacterName",
+  "display_name": "§6Character Name",
+  "identifier": "junkbunch:character_name",
+  "personality": {
+    "traits": ["trait1", "trait2", "trait3"],
+    "description": "Brief personality description"
+  },
+  "special_ability": {
+    "name": "Ability Name",
+    "description": "What the ability does",
+    "animation": "ability_animation_name"
+  },
+  "summon_item": {
+    "name": "item_name",
+    "display_name": "Summon Item Name",
+    "recipe_type": "crafting",
+    "recipe": {
+      "pattern": ["ABC", "DEF", "GHI"],
+      "key": {
+        "A": {"item": "minecraft:"},
+        "B": {"item": "minecraft:"},
+        "C": {"item": "minecraft:"}
+      },
+      "result": {"item": "junkbunch:summon_item_name", "count": 1}
+    }
+  },
+  "world_origin": "1-2 sentence backstory of where this character comes from",
+  "model": {
+    "geometry": "geometry.character_name",
+    "texture": "textures/entity/characters/character_name",
+    "scale": 1.0
+  },
+  "animations": {
+    "idle": "animation.character_name.idle",
+    "walk": "animation.character_name.walk",
+    "run": "animation.character_name.run",
+    "ability": "animation.character_name.ability",
+    "interact": "animation.character_name.interact"
+  },
+  "control": {
+    "follow_enabled": true,
+    "summon_method": "item_use",
+    "direction_method": "look_at_player"
+  },
+  "created_date": "2026-08-05",
+  "status": "draft"
+}

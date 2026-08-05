@@ -1,0 +1,16 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Junk Bunch",
+    "description": "Junk Bunch character resource pack for Minecraft Bedrock",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 20, 0]
+  },
+  "modules": [
+    {
+      "type": "resources",
+      "uuid": "e7e7e7e7-e7e7-e7e7-e7e7-e7e7e7e7e7e7",
+      "version": [1, 0, 0]
+    }
+  ]
+}
