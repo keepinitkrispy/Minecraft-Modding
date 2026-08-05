@@ -1,0 +1,82 @@
+{
+  "name": "Leafy",
+  "display_name": "§2Leafy",
+  "identifier": "junkbunch:leafy",
+  "season": 2,
+  "personality": {
+    "traits": ["fun", "helpful", "shy"],
+    "description": "A gentle, floating leaf with a kind heart. A little shy at first, but eager to help. Loves to float gracefully and explore new places."
+  },
+  "special_ability": {
+    "name": "Slow Float",
+    "description": "Leafy slows their fall and emits floating leaf particles, creating a gentle shimmer effect",
+    "animation": "leafy_ability_float"
+  },
+  "summon_item": {
+    "name": "summon_rake",
+    "display_name": "§6Leafy's Rake",
+    "recipe_type": "crafting_shaped",
+    "recipe": {
+      "pattern": ["AAA", " B ", " B "],
+      "key": {
+        "A": "minecraft:iron_nugget",
+        "B": "minecraft:stick"
+      },
+      "result": "junkbunch:summon_rake"
+    }
+  },
+  "world_origin": "Leafy drifted down from the Floating Gardens, a place where all the magical leaves live. They came to help adventurers with their quests.",
+  "model": {
+    "geometry": "geometry.leafy.main",
+    "texture": "textures/entity/characters/leafy",
+    "scale": 1.0,
+    "description": "Round leaf body with stick limbs and a curly stem antenna. Bright green with leaf vein details."
+  },
+  "animations": {
+    "idle": "animation.leafy.idle",
+    "walk": "animation.leafy.walk",
+    "float": "animation.leafy.float",
+    "ability": "animation.leafy.ability_float",
+    "interact": "animation.leafy.interact"
+  },
+  "dialogue": {
+    "summon": [
+      "Um... hi there!",
+      "Oh! You summoned me!",
+      "I'm ready to help!",
+      "Hehe, that tickles!"
+    ],
+    "interact": [
+      "What can I do for you?",
+      "I'm here to help!",
+      "Do you need me?",
+      "*gentle leaf rustle*"
+    ],
+    "ability": [
+      "Wheee!",
+      "So floaty...",
+      "Look at me fly!",
+      "I'm floating!"
+    ],
+    "follow": [
+      "I'll follow you!",
+      "Let's go together!",
+      "Coming with you!"
+    ]
+  },
+  "control": {
+    "follow_enabled": true,
+    "summon_method": "item_use",
+    "direction_method": "look_at_player",
+    "speed": "slow"
+  },
+  "visual_style": {
+    "primary_color": "#2d8659",
+    "secondary_color": "#1a4d2e",
+    "accent_color": "#90ee90",
+    "theme": "nature, leaf, gentle"
+  },
+  "created_date": "2026-08-05",
+  "status": "draft",
+  "design_notes": "Based on hand-drawn concept showing a round leaf body with stick limbs, curly stem antenna, and a friendly smile. Personality is shy but helpful. Floats slowly due to light leaf nature."
+}

@@ -1,0 +1,40 @@
+{
+  "format_version": "1.10.0",
+  "minecraft:client_entity": {
+    "description": {
+      "identifier": "junkbunch:leafy",
+      "min_engine_version": "1.20.0",
+      "materials": {
+        "default": "entity_alphatest",
+        "body": "entity_alphatest"
+      },
+      "geometries": {
+        "default": "geometry.leafy.main"
+      },
+      "textures": {
+        "default": "textures/entity/characters/leafy",
+        "body": "textures/entity/characters/leafy"
+      },
+      "animations": {
+        "move": "controller.animation.leafy.move",
+        "ability": "controller.animation.leafy.ability",
+        "idle": "animation.leafy.idle",
+        "walk": "animation.leafy.walk",
+        "float": "animation.leafy.float",
+        "ability_float": "animation.leafy.ability_float",
+        "interact": "animation.leafy.interact"
+      },
+      "animation_controllers": [
+        { "move": "controller.animation.leafy.move" },
+        { "ability": "controller.animation.leafy.ability" }
+      ],
+      "render_controllers": [
+        "controller.render.default"
+      ],
+      "spawn_egg": {
+        "base_color": "#2d8659",
+        "overlay_color": "#90ee90"
+      }
+    }
+  }
+}

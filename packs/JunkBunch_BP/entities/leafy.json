@@ -1,0 +1,113 @@
+{
+  "format_version": "1.20.50",
+  "minecraft:entity": {
+    "description": {
+      "identifier": "junkbunch:leafy",
+      "is_summonable": true,
+      "is_spawnable": true,
+      "is_experimental": false
+    },
+    "component_groups": {
+      "following_player": {
+        "minecraft:behavior.follow_parent": {
+          "priority": 5,
+          "speed_multiplier": 0.6
+        }
+      },
+      "idle": {
+        "minecraft:behavior.look_at_player": {
+          "priority": 10,
+          "look_distance": 8.0
+        }
+      },
+      "floating": {
+        "minecraft:behavior.float": {
+          "priority": 1
+        }
+      }
+    },
+    "components": {
+      "minecraft:type_family": {
+        "family": ["mob", "junkbunch", "leafy"]
+      },
+      "minecraft:health": {
+        "value": 10,
+        "max": 10
+      },
+      "minecraft:movement": {
+        "value": 0.15
+      },
+      "minecraft:nameable": {},
+      "minecraft:physics": {
+        "has_gravity": true
+      },
+      "minecraft:collision_box": {
+        "width": 0.5,
+        "height": 0.6
+      },
+      "minecraft:pushable": {
+        "is_pushable": true,
+        "is_pushable_by_piston": true
+      },
+      "minecraft:behavior.random_look_around": {
+        "priority": 9
+      },
+      "minecraft:behavior.wander": {
+        "priority": 11,
+        "speed_multiplier": 0.5
+      },
+      "minecraft:leashable": {
+        "soft_distance": 4.0,
+        "hard_distance": 6.0,
+        "max_distance": 10.0
+      },
+      "minecraft:interact": {
+        "interactions": [
+          {
+            "on_interact": {
+              "filters": [
+                { "test": "is_family", "subject": "other", "value": "player" }
+              ]
+            },
+            "use_item": false,
+            "swing_hand": true
+          }
+        ]
+      },
+      "minecraft:damage_sensor": {
+        "triggers": [
+          {
+            "on_damage": {
+              "filters": [
+                { "test": "is_family", "subject": "self", "value": "player" }
+              ]
+            },
+            "deals_damage": false
+          }
+        ]
+      }
+    },
+    "events": {
+      "minecraft:entity_spawned": {
+        "add": {
+          "component_groups": ["idle", "floating"]
+        }
+      },
+      "junkbunch:trigger_ability": {
+        "run_command": {
+          "command": "particle junkbunch:leafy_float ~~~"
+        }
+      },
+      "junkbunch:follow": {
+        "add": {
+          "component_groups": ["following_player"]
+        }
+      },
+      "junkbunch:stop_follow": {
+        "remove": {
+          "component_groups": ["following_player"]
+        }
+      }
+    }
+  }
+}

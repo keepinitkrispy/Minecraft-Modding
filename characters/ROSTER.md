@@ -6,7 +6,9 @@ Tracking all Junk Bunch characters created for the series.
 
 ## Active Characters
 
-*(None yet—waiting for first character creation)*
+| Name | Status | Traits | Ability | Summon Item | Created | Data File |
+|------|--------|--------|---------|-------------|---------|-----------|
+| Leafy | draft | fun, helpful, shy | Slow Float (emits leaf particles) | Rake | 2026-08-05 | leafy.json |
 
 ---
 
