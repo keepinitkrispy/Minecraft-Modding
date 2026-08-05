@@ -69,20 +69,20 @@ def draw_leafy_correct(img, draw, x_center, y_center, scale=1.0):
     arm_y = y_center
 
     # Left arm
-    draw.line([(x_center - width/2 - 2, arm_y), (x_center - width/2 - 25, arm_y)],
+    draw.line([(x_center - width/2 - 2, arm_y), (x_center - width/2 - 35, arm_y)],
               fill=(101, 67, 33, 255), width=2)
 
     # Right arm
-    draw.line([(x_center + width/2 + 2, arm_y), (x_center + width/2 + 25, arm_y)],
+    draw.line([(x_center + width/2 + 2, arm_y), (x_center + width/2 + 35, arm_y)],
               fill=(101, 67, 33, 255), width=2)
 
     # Left leg
     leg_y = y_center + height/3
-    draw.line([(x_center - width/3, leg_y), (x_center - width/3, leg_y + 20)],
+    draw.line([(x_center - width/3, leg_y), (x_center - width/3, leg_y + 32)],
               fill=(101, 67, 33, 255), width=2)
 
     # Right leg
-    draw.line([(x_center + width/3, leg_y), (x_center + width/3, leg_y + 20)],
+    draw.line([(x_center + width/3, leg_y), (x_center + width/3, leg_y + 32)],
               fill=(101, 67, 33, 255), width=2)
 
 
