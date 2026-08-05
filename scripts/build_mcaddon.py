@@ -13,6 +13,7 @@ Usage:
     python3 scripts/build_mcaddon.py
 """
 
+import json
 import os
 import subprocess
 import sys
@@ -23,6 +24,42 @@ SRC = os.path.join(REPO, "packs")
 OUT = os.path.join(REPO, "JunkBunch.mcaddon")
 
 PACK_DIRS = ["JunkBunch_BP", "JunkBunch_RP"]
+BP_MANIFEST = os.path.join(SRC, "JunkBunch_BP", "manifest.json")
+RP_MANIFEST = os.path.join(SRC, "JunkBunch_RP", "manifest.json")
+
+
+def bump_versions():
+    """Increment the patch version of both packs, keeping UUIDs stable.
+
+    Bedrock treats a re-import with the same header UUID and the SAME version as
+    'already installed' and keeps the old cached copy - which is exactly how an
+    update silently fails to apply. Bumping the version every build (while UUIDs
+    stay put, so it's still recognised as the same pack being updated) makes
+    updates reliable.
+    """
+    bp = json.load(open(BP_MANIFEST))
+    rp = json.load(open(RP_MANIFEST))
+
+    cur = max(tuple(bp["header"]["version"]), tuple(rp["header"]["version"]))
+    new = [cur[0], cur[1], cur[2] + 1]
+
+    for manifest in (bp, rp):
+        manifest["header"]["version"] = list(new)
+        for mod in manifest["modules"]:
+            mod["version"] = list(new)
+    # keep the BP -> RP dependency pinned to the RP's new version
+    for dep in bp.get("dependencies", []):
+        if dep.get("uuid") == rp["header"]["uuid"]:
+            dep["version"] = list(new)
+
+    with open(BP_MANIFEST, "w") as fh:
+        json.dump(bp, fh, indent=2)
+        fh.write("\n")
+    with open(RP_MANIFEST, "w") as fh:
+        json.dump(rp, fh, indent=2)
+        fh.write("\n")
+    print(f"Version bumped to {new[0]}.{new[1]}.{new[2]} (UUIDs unchanged)\n")
+    return new
 
 EXCLUDE_NAMES = {
     ".gitkeep",
@@ -92,5 +129,6 @@ def build():
 
 
 if __name__ == "__main__":
+    bump_versions()
     validate()
     build()
