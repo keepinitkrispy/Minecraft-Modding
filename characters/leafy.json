@@ -77,6 +77,10 @@
     "theme": "nature, leaf, gentle"
   },
   "created_date": "2026-08-05",
-  "status": "draft",
-  "design_notes": "Based on hand-drawn concept showing a round leaf body with stick limbs, curly stem antenna, and a friendly smile. Personality is shy but helpful. Floats slowly due to light leaf nature."
+  "status": "ready",
+  "design_notes": "Simple oval leaf design (like picking a leaf off the ground). Eyes on leaf surface, friendly smile. Longer arms and legs. Faithful to drawing. Ready for testing on Realm.",
+  "test_status": "first_build",
+  "approved_by": "user_and_son",
+  "geometry_version": "oval_simple",
+  "last_updated": "2026-08-05T13:45Z"
 }
