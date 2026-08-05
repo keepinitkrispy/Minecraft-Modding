@@ -19,10 +19,16 @@
           "event": "junkbunch:summon_leafy"
         }
       },
+      "minecraft:on_use_on": {
+        "on_use_on": {
+          "event": "junkbunch:command_leafy"
+        }
+      },
       "minecraft:cooldown": {
         "category": "item_used",
-        "duration": 0.5
-      }
+        "duration": 0.1
+      },
+      "minecraft:hand_equipped": true
     }
   }
 }

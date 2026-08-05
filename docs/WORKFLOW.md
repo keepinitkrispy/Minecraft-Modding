@@ -74,21 +74,27 @@ For each character, I generate:
 
 ## PS5 Control System
 
-**Summoning the character:**
-- Have the summon item in your hand
-- Press and hold **ZR** (or your bound use key)
+**Summoning the character (L2):**
+- Have the summon item in your hand (main or off-hand)
+- Hold **L2** (left trigger)
 - Character appears at your crosshair location
+- Release L2 when done
 
-**Directing the character:**
-- Keep holding **ZR** while the character is spawned
+**Directing the character (R1):**
+- While character is spawned, hold **R1** (right shoulder button)
 - Look where you want the character to go
-- Character walks/teleports to that location
-- Release **ZR** to stop directing
+- Character walks/pathfinds to that location
+- Release **R1** to stop directing (character stays in place)
 
-**Special ability:**
-- While character is spawned, press **Y** to trigger ability
-- Character performs special animation/action
-- Works on PS5 with controller only (no mouse/keyboard)
+**Special ability (L1):**
+- While character is spawned, press **L1** (left shoulder button)
+- Character performs its special action/ability
+- Works on PS5 controller (no mouse/keyboard needed)
+
+**Mining (R2):**
+- Normal Minecraft mining works unchanged
+- R2 attacks/mines normally
+- No conflicts with character controls
 
 ---
 

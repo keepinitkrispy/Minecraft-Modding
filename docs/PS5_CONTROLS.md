@@ -8,11 +8,11 @@ All Junk Bunch characters use this standardized control scheme on PS5 Bedrock Ed
 
 | Action | Button | Behavior |
 |--------|--------|----------|
-| **Summon character** | Hold **ZR** with summon item | Spawns character at crosshair |
-| **Direct character** | Hold **ZR** while spawned | Character pathfinds to your crosshair |
-| **Release** | Release **ZR** | Character stops following directions, remains spawned |
-| **Special ability** | Press **Y** (while spawned) | Triggers character's unique ability |
-| **Despawn** (optional) | Crouch + interact with character | Character returns to item (works if ability needs it) |
+| **Summon character** | Hold **L2** with summon item in hand or off-hand | Spawns character at your crosshair location |
+| **Direct character** | Hold **R1** (after spawned) | Character pathfinds/walks to where you're looking (crosshair) |
+| **Special ability** | Press **L1** (while character spawned) | Triggers character's unique ability (particles, effects, etc.) |
+| **Despawn** (optional) | Release **L2** or walk away | Character stays spawned; can be re-summoned |
+| **Switch to mining** | Press **R2** (mining unchanged) | Normal Minecraft mining works normally with character spawned |
 
 ---
 
@@ -66,23 +66,25 @@ All Junk Bunch characters use this standardized control scheme on PS5 Bedrock Ed
 
 ## Implementation Details
 
-### On-Item Use
+### Summon (L2 Hold)
 Each summon item is configured to:
-- Trigger on **ZR hold** (not just press)
-- Spawn the entity at the player's crosshair + offset
-- Check if entity already spawned (prevent duplicates)
+- Trigger on **L2 hold** (not just press)
+- Works from main hand OR off-hand
+- Spawns the entity at the player's crosshair location
+- Only one instance of each character can be active at a time
 
-### Pathfinding
+### Direct/Command (R1 Hold)
 Characters use Bedrock's native pathfinding:
-- When you hold ZR and look elsewhere, the entity recalculates path every tick
+- When you hold **R1**, the entity pathfinds to where you're looking (crosshair)
+- Recalculates path every tick
 - Avoids obstacles automatically
-- If path is blocked for 5+ seconds, teleport (optional, prevents soft-locks)
+- Release R1 to stop commanding (character stays in place)
 
-### Ability System
+### Special Ability (L1 Press)
 Each character has a behavior event `trigger_ability` that fires when:
-- Player presses Y
-- Character is nearby
-- Character is not on cooldown (usually no cooldown)
+- Player presses **L1**
+- Character is nearby (within ~16 blocks)
+- Character is not on cooldown (default: no cooldown, can spam)
 
 ---
 
@@ -108,13 +110,15 @@ Each character has a behavior event `trigger_ability` that fires when:
 
 For each character, verify:
 
-- [ ] ZR spawns the character at crosshair
-- [ ] ZR hold moves character to crosshair aim point
-- [ ] Character navigates around obstacles
-- [ ] Y triggers the special ability
-- [ ] No controller lag/delay (should be <1 frame)
+- [ ] L2 hold spawns character at crosshair
+- [ ] L2 works from main hand and off-hand
+- [ ] R1 hold moves character to where you're looking
+- [ ] R1 pathfinding avoids obstacles
+- [ ] L1 press triggers special ability
+- [ ] R2 mining still works normally (no conflicts)
+- [ ] No controller lag/delay (<1 frame response)
 - [ ] Works in Realm (not just single player)
-- [ ] Works on PS5 specifically (not just Bedrock PC)
+- [ ] Works on PS5 controller specifically
 
 ---
 
