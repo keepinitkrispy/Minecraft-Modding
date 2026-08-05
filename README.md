@@ -143,9 +143,9 @@ Each character follows this process:
 
 | Action | Button |
 |--------|--------|
-| Summon character | Hold **ZR** with summon item |
-| Direct character | Hold **ZR**, look where to go |
-| Special ability | Press **Y** (while spawned) |
+| Summon character | Aim at ground, hold **L2** with summon item |
+| Bond so it follows | Hold **L2** on the character with the summon item |
+| Special ability | Automatic (passive) |
 
 Full details: `/docs/PS5_CONTROLS.md`
 

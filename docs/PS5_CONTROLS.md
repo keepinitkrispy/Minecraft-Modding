@@ -1,132 +1,39 @@
-# PS5 Bedrock Junk Bunch Controls
+# PS5 Bedrock — Junk Bunch Controls
 
-All Junk Bunch characters use this standardized control scheme on PS5 Bedrock Edition.
-
----
+Every Junk Bunch character uses the **same one-button scheme** on a PS5 controller.
+It never fights with mining, placing, or the hotbar.
 
 ## Button Mapping
 
 | Action | Button | Behavior |
 |--------|--------|----------|
-| **Summon character** | Hold **L2** with summon item in hand or off-hand | Spawns character at your crosshair location |
-| **Direct character** | Hold **R1** (after spawned) | Character pathfinds/walks to where you're looking (crosshair) |
-| **Special ability** | Press **L1** (while character spawned) | Triggers character's unique ability (particles, effects, etc.) |
-| **Despawn** (optional) | Release **L2** or walk away | Character stays spawned; can be re-summoned |
-| **Switch to mining** | Press **R2** (mining unchanged) | Normal Minecraft mining works normally with character spawned |
+| **Summon** | Aim at the ground, hold **L2** with the summon item | Places the character where you're looking |
+| **Bond so it follows** | Hold **L2** on the character while holding its summon item | Bonds it; it then follows you like a tamed pet and stays loaded |
+| **Special ability** | *automatic* | Passive — always on, no button needed |
+| **Mine / place** | **R2 / L2 on blocks** | Unchanged; summoning only fires when the summon item is in hand |
 
----
+**Why one button, and not R1/L1:** R1 and L1 scroll the hotbar on PS5, so binding
+an action to them would fight normal play. L2 is the standard "use item" trigger
+and works from the main hand **or** the off-hand, so you can keep a tool in your
+main hand and the summon item in your off-hand. Each character's special ability is
+**passive** (always on), so it never needs a button.
 
-## Standard Behaviors
+## Per-character notes
 
-### Summoning
-- Hold the summon item in your hand
-- Press and hold **ZR**
-- Character appears at your crosshair location (slightly offset from you, in the direction you're looking)
-- Character is now active in the world
+### Leafy
+- **Summon item:** Leafy's Rake (craft: 3 iron nuggets on top, 2 sticks down the middle).
+- **Summon:** hold the rake, aim at the ground, hold **L2** — Leafy appears.
+- **Follow:** hold **L2** on Leafy while holding the rake to bond; he then follows you.
+- **Passive ability — Slow Float:** Leafy drifts gently and never takes fall damage,
+  so he can follow you off any ledge and float down safely.
+- **Size:** about half a player's height (~0.9 blocks) — a small companion.
 
-### Directing
-- Keep holding **ZR** while looking around
-- Your crosshair shows where the character will go
-- Character walks (or teleports, depending on distance) to that spot
-- Release **ZR** when done directing
+## Testing checklist
 
-### Special Ability
-- While character is spawned and you're within ~10 blocks
-- Press **Y**
-- Character performs its ability (spark emission, climb, glow, etc.)
-- No cooldown by default; can spam if desired
-
-### Despawn (Optional)
-- Some characters may need to return to item form (for challenges, storage, etc.)
-- Approach the character
-- Crouch + press **ZR** on them
-- Character returns to item
-- This is not required for basic gameplay—characters can stay spawned
-
----
-
-## Why This Control Scheme
-
-**ZR for summon/direct:**
-- ZR is the standard "use" button on Bedrock PS5
-- Holding it is intuitive (like aiming)
-- Works with any directional control method
-
-**Y for ability:**
-- Y is easy to reach while holding ZR (right hand thumb)
-- Distinctive and doesn't conflict with movement
-- Fits the "special action" concept
-
-**No mouse/keyboard:**
-- Everything works with controller only
-- PS5 players expect button mapping, not M+KB emulation
-- Crosshair aiming is native to Bedrock
-
----
-
-## Implementation Details
-
-### Summon (L2 Hold)
-Each summon item is configured to:
-- Trigger on **L2 hold** (not just press)
-- Works from main hand OR off-hand
-- Spawns the entity at the player's crosshair location
-- Only one instance of each character can be active at a time
-
-### Direct/Command (R1 Hold)
-Characters use Bedrock's native pathfinding:
-- When you hold **R1**, the entity pathfinds to where you're looking (crosshair)
-- Recalculates path every tick
-- Avoids obstacles automatically
-- Release R1 to stop commanding (character stays in place)
-
-### Special Ability (L1 Press)
-Each character has a behavior event `trigger_ability` that fires when:
-- Player presses **L1**
-- Character is nearby (within ~16 blocks)
-- Character is not on cooldown (default: no cooldown, can spam)
-
----
-
-## Edge Cases
-
-**Character falls off world:**
-- If character despawns via void, it returns to item automatically
-- If stuck in terrain, character teleports back to player
-
-**Multiple summoned characters:**
-- Only one instance of each character can be active at a time
-- Summoning again despawns the previous one and spawns at your new location
-- (Later: challenges can change this to allow multiple)
-
-**Abilities with cooldown:**
-- Some abilities have 10-30 second cooldowns (indicated in character description)
-- Y press while on cooldown plays "fail" sound/animation
-- Cooldown resets when character despawns and resummoned
-
----
-
-## Testing Checklist
-
-For each character, verify:
-
-- [ ] L2 hold spawns character at crosshair
-- [ ] L2 works from main hand and off-hand
-- [ ] R1 hold moves character to where you're looking
-- [ ] R1 pathfinding avoids obstacles
-- [ ] L1 press triggers special ability
-- [ ] R2 mining still works normally (no conflicts)
-- [ ] No controller lag/delay (<1 frame response)
-- [ ] Works in Realm (not just single player)
-- [ ] Works on PS5 controller specifically
-
----
-
-## Future: Multiplayer & Challenges
-
-When challenges are added:
-
-- Multiple players can summon different characters
-- Challenge arena might override controls (e.g., auto-direct to arena)
-- Challenge system will document any control changes per challenge
-- Base summon/ability always works as documented here
+- [ ] Rake shows its icon in the inventory/hotbar
+- [ ] Holding the rake + **L2** on the ground spawns Leafy
+- [ ] Leafy is visible with his leaf body, face, arms, legs, and stem
+- [ ] The auto-generated spawn egg (Creative) also spawns a visible Leafy
+- [ ] Holding **L2** on Leafy with the rake bonds him and he follows
+- [ ] Leafy takes no fall damage when following you off a drop
+- [ ] Works in a Realm on PS5, not just single-player PC

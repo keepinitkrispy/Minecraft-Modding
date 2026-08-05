@@ -457,6 +457,84 @@ def main():
     check(len(render_controllers) > 1,
           f"{RP_NAME}/render_controllers/ defines no render controllers")
 
+    # ----------------------------------------------------------------------
+    # 11. RENDER SANITY: geometry <-> texture agreement and opacity
+    #     (this is the class of bug that made Leafy import clean but show nothing:
+    #      a transparent / mis-sized entity skin renders invisible under alphatest)
+    # ----------------------------------------------------------------------
+    try:
+        from PIL import Image
+        have_pil = True
+    except ImportError:
+        have_pil = False
+        warnings.append("Pillow not installed; skipped texture/geometry render checks")
+
+    if have_pil:
+        for path, data in parsed.items():
+            if "minecraft:geometry" not in data:
+                continue
+            for geo in data["minecraft:geometry"]:
+                desc = geo.get("description", {})
+                gw = desc.get("texture_width")
+                gh = desc.get("texture_height")
+                geo_id = desc.get("identifier", os.path.basename(path))
+
+                # find the client entity that uses this geometry and its texture
+                tex_files = []
+                for cpath, cdata in parsed.items():
+                    if "minecraft:client_entity" not in cdata:
+                        continue
+                    cdesc = cdata["minecraft:client_entity"]["description"]
+                    if geo_id in (cdesc.get("geometry") or {}).values():
+                        for tex in (cdesc.get("textures") or {}).values():
+                            for ext in (".png", ".tga"):
+                                fp = os.path.join(rp, tex + ext)
+                                if os.path.isfile(fp):
+                                    tex_files.append(fp)
+
+                for fp in tex_files:
+                    try:
+                        im = Image.open(fp).convert("RGBA")
+                    except Exception as exc:            # noqa: BLE001
+                        errors.append(f"{rel(root, fp)}: cannot open image ({exc})")
+                        continue
+                    tw, th = im.size
+                    check(gw is None or tw == gw,
+                          f"{rel(root, fp)}: texture width {tw} != geometry "
+                          f"texture_width {gw} for {geo_id} (UVs will not line up)")
+                    check(gh is None or th == gh,
+                          f"{rel(root, fp)}: texture height {th} != geometry "
+                          f"texture_height {gh} for {geo_id}")
+                    px = im.load()
+                    opaque = sum(1 for y in range(th) for x in range(tw)
+                                 if px[x, y][3] == 255)
+                    frac = opaque / float(tw * th)
+                    check(frac >= 0.5,
+                          f"{rel(root, fp)}: entity skin is only {frac*100:.0f}% "
+                          f"opaque; entity textures must be essentially fully opaque "
+                          f"or faces render invisible under alphatest")
+
+                # every cube UV box must fit inside the texture sheet
+                if gw and gh:
+                    for bone in geo.get("bones", []):
+                        for cube in bone.get("cubes", []):
+                            uv = cube.get("uv")
+                            size = cube.get("size", [0, 0, 0])
+                            if isinstance(uv, list) and len(uv) == 2:
+                                w, h, d = (int(round(s)) for s in size)
+                                need_w = 2 * (d + w)
+                                need_h = d + h
+                                check(uv[0] + need_w <= gw and uv[1] + need_h <= gh,
+                                      f"{rel(root, path)}: cube in bone "
+                                      f"{bone.get('name')!r} has box-UV at {uv} needing "
+                                      f"{need_w}x{need_h} which overflows the "
+                                      f"{gw}x{gh} sheet")
+
+    # item icon textures must physically exist and open
+    if have_pil:
+        for key in item_texture_keys:
+            pass  # covered by section 9; kept explicit for readability
+
     print(f"[ok] resource pack: {len(geometries)} geometries, {len(animations)} animations, "
           f"{len(anim_controllers)} animation controllers, "
           f"{len(render_controllers) - 1} render controllers")

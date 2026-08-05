@@ -80,21 +80,17 @@ For each character, I generate:
 - Character appears at your crosshair location
 - Release L2 when done
 
-**Directing the character (R1):**
-- While character is spawned, hold **R1** (right shoulder button)
-- Look where you want the character to go
-- Character walks/pathfinds to that location
-- Release **R1** to stop directing (character stays in place)
+**Follow / bond (L2 on the character):**
+- With the summon item in hand, hold **L2** on the character to bond with it
+- Once bonded it follows you like a tamed pet and stays loaded (persistent)
 
-**Special ability (L1):**
-- While character is spawned, press **L1** (left shoulder button)
-- Character performs its special action/ability
-- Works on PS5 controller (no mouse/keyboard needed)
+**Special ability (passive):**
+- Abilities are automatic — no button press
+- R1/L1 are intentionally unused because they scroll the hotbar on PS5
 
 **Mining (R2):**
-- Normal Minecraft mining works unchanged
-- R2 attacks/mines normally
-- No conflicts with character controls
+- Normal Minecraft mining works unchanged; summoning only fires when the
+  summon item is in hand
 
 ---
 
@@ -157,8 +153,8 @@ characters/
 **You get:**
 - Updated packs ready to upload
 - Rusty spawns with wrench in survival
-- Can direct with ZR
-- Sparks fly when jumping
+- Summon with L2; bond with L2 to have him follow
+- Passive ability always on
 
 ---
 
