@@ -20,7 +20,7 @@ DEPTH = 4            # model units of thickness
 CELL = 1.0           # model units per cell
 
 # where the flat colour swatches live on the texture sheet
-SOLID = {"body": (40, 0), "dark": (42, 0), "accent": (44, 0)}
+SOLID = {"body": (40, 0), "dark": (42, 0), "accent": (44, 0), "limb": (46, 0)}
 
 
 def luma(c):
@@ -137,6 +137,122 @@ def smooth(solid):
     return cur
 
 
+def clean_profile(solid, gw=GRID_W, gh=GRID_H):
+    """Turn a ragged trace into a clean, symmetric silhouette.
+
+    A pencil outline scanned to a grid is lopsided and lumpy. We keep what the
+    drawing actually says - how wide the character is at each height - then
+    centre and smooth it. The result is the same creature, drawn cleanly.
+    Arm spikes are removed here; limbs are added back as their own parts.
+    """
+    widths = []
+    for row in solid:
+        n = sum(1 for v in row if v)
+        widths.append(n)
+
+    rows = [i for i, w in enumerate(widths) if w > 0]
+    if not rows:
+        return []
+    top, bot = rows[0], rows[-1]
+
+    core = widths[top:bot + 1]
+    # median filter kills the outstretched-arm spikes
+    med = []
+    for i in range(len(core)):
+        lo = max(0, i - 2); hi = min(len(core), i + 3)
+        win = sorted(core[lo:hi])
+        med.append(win[len(win) // 2])
+    # then a mean pass for a smooth curve
+    prof = []
+    for i in range(len(med)):
+        lo = max(0, i - 1); hi = min(len(med), i + 2)
+        prof.append(sum(med[lo:hi]) / (hi - lo))
+
+    prof = [max(1, int(round(w))) for w in prof]
+
+    # A hand-drawn outline rarely closes to a point, so the raw profile starts
+    # and ends blunt. Re-cast it as a pointed oval that keeps the drawing's own
+    # widest measurement and height - the creature it was drawn as, drawn well.
+    import math
+    n = len(prof)
+    peak = max(prof)
+    fullness = sum(prof) / float(peak * n)          # how round vs how pointed
+    power = 1.15 - 0.75 * min(1.0, max(0.0, fullness))
+    shaped = []
+    for i in range(n):
+        t = (i + 0.5) / n
+        shaped.append(max(1, int(round(peak * (math.sin(math.pi * t) ** power)))))
+    return shaped
+
+
+def stylised_cubes(profile, gw=GRID_W, gh=GRID_H):
+    """Body from the cleaned profile, plus the stick limbs and stem
+    that every Junk Bunch character is drawn with."""
+    if not profile:
+        return []
+
+    body_top = 2                       # rows reserved for the stem
+    leg_rows = 3                       # rows reserved for the legs
+    room = gh - body_top - leg_rows
+    if len(profile) > room:            # squeeze the profile to fit
+        step = len(profile) / float(room)
+        profile = [profile[min(len(profile) - 1, int(i * step))] for i in range(room)]
+    n = len(profile)
+
+    cubes = []
+    for i, w in enumerate(profile):
+        r = body_top + i
+        if r >= gh:
+            break
+        half = max(1, w // 2)
+        c0 = gw // 2 - half
+        c1 = gw // 2 + half - (0 if w % 2 else 1)
+        c0 = max(0, c0); c1 = min(gw - 1, c1)
+        cubes.append({"c0": c0, "c1": c1, "r0": r, "r1": r, "part": "body"})
+
+    # merge identical neighbouring rows so the model stays light
+    merged = []
+    for c in cubes:
+        if merged and merged[-1]["c0"] == c["c0"] and merged[-1]["c1"] == c["c1"] \
+           and merged[-1]["r1"] == c["r0"] - 1 and merged[-1]["part"] == "body":
+            merged[-1]["r1"] = c["r1"]
+        else:
+            merged.append(dict(c))
+
+    body_bottom = merged[-1]["r1"]
+    widest_i = max(range(n), key=lambda i: profile[i])
+    arm_r = body_top + widest_i
+    arm_len = 3
+
+    def edge_at(r):
+        for c in merged:
+            if c["r0"] <= r <= c["r1"]:
+                return c["c0"], c["c1"]
+        return gw // 2, gw // 2
+
+    l, rgt = edge_at(arm_r)
+    merged.append({"c0": max(0, l - arm_len), "c1": max(0, l - 1),
+                   "r0": arm_r, "r1": arm_r, "part": "limb"})
+    merged.append({"c0": min(gw - 1, rgt + 1), "c1": min(gw - 1, rgt + arm_len),
+                   "r0": arm_r, "r1": arm_r, "part": "limb"})
+
+    # two legs under the body
+    leg_top = body_bottom + 1
+    leg_bot = min(gh - 1, leg_top + 2)
+    if leg_top < gh:
+        bl, br = edge_at(body_bottom)
+        span = br - bl
+        lx = bl + max(1, span // 4)
+        rx = br - max(1, span // 4)
+        merged.append({"c0": lx, "c1": lx, "r0": leg_top, "r1": leg_bot, "part": "limb"})
+        merged.append({"c0": rx, "c1": rx, "r0": leg_top, "r1": leg_bot, "part": "limb"})
+
+    # stem on top
+    merged.append({"c0": gw // 2, "c1": gw // 2,
+                   "r0": max(0, body_top - 2), "r1": max(0, body_top - 1), "part": "stem"})
+    return merged
+
+
 def runs_of(row):
     out, x = [], 0
     gw = len(row)
@@ -170,6 +286,9 @@ def cubes_from(solid):
     return cubes
 
 
+PART_UV = {"body": None, "limb": (46, 0), "stem": (46, 0)}
+
+
 def build_geometry(cid, cubes, tex_w, tex_h, gh=GRID_H, gw=GRID_W):
     """Bedrock geometry with per-face UVs so art and shape always agree."""
     bones = [{"name": "root", "pivot": [0, 0, 0], "children": ["body"]}]
@@ -184,21 +303,27 @@ def build_geometry(cid, cubes, tex_w, tex_h, gh=GRID_H, gw=GRID_W):
         # centre horizontally; row 0 is the TOP of the drawing
         ox = (c["c0"] - gw / 2.0) * CELL
         oy = (gh - 1 - c["r1"]) * CELL
-        body["cubes"].append({
-            "origin": [round(ox, 3), round(oy, 3), -DEPTH / 2.0],
-            "size": [round(w, 3), round(h, 3), DEPTH],
-            "uv": {
-                # front and back sample the drawing itself
-                "north": {"uv": [c["c0"], c["r0"]], "uv_size": [c["c1"] - c["c0"] + 1,
-                                                                c["r1"] - c["r0"] + 1]},
-                "south": {"uv": [c["c0"], c["r0"]], "uv_size": [c["c1"] - c["c0"] + 1,
-                                                                c["r1"] - c["r0"] + 1]},
-                # the thin sides use flat colour
+        part = c.get("part", "body")
+        depth = DEPTH if part == "body" else DEPTH * 0.5
+        flat = PART_UV.get(part)
+        if flat:
+            face = {"uv": list(flat), "uv_size": [1, 1]}
+            uv = {k: face for k in ("north", "south", "west", "east", "up", "down")}
+        else:
+            uv = {
+                "north": {"uv": [c["c0"], c["r0"]],
+                          "uv_size": [c["c1"] - c["c0"] + 1, c["r1"] - c["r0"] + 1]},
+                "south": {"uv": [c["c0"], c["r0"]],
+                          "uv_size": [c["c1"] - c["c0"] + 1, c["r1"] - c["r0"] + 1]},
                 "west":  {"uv": list(sd), "uv_size": [1, 1]},
                 "east":  {"uv": list(sd), "uv_size": [1, 1]},
                 "up":    {"uv": list(sb), "uv_size": [1, 1]},
                 "down":  {"uv": list(sb), "uv_size": [1, 1]},
-            },
+            }
+        body["cubes"].append({
+            "origin": [round(ox, 3), round(oy, 3), round(-depth / 2.0, 3)],
+            "size": [round(w, 3), round(h, 3), round(depth, 3)],
+            "uv": uv,
         })
 
     bones.append(body)
@@ -219,23 +344,58 @@ def build_geometry(cid, cubes, tex_w, tex_h, gh=GRID_H, gw=GRID_W):
 
 
 def build_texture(crop, bg, thresh, ink_map, solid, primary, dark, accent,
-                  tex=64, gw=GRID_W, gh=GRID_H):
-    """The drawing itself in the top-left, plus flat swatches for the sides."""
+                  tex=64, gw=GRID_W, gh=GRID_H, cubes=None, limb=None):
+    """Leaf body with a centre vein, the drawn face on top, and side swatches."""
     img = Image.new("RGBA", (tex, tex), tuple(int(v) for v in primary) + (255,))
     p = img.load()
     pr = tuple(int(v) for v in primary)
     dk = tuple(int(v) for v in dark)
+    vein = tuple(int(v) for v in [(a * 2 + b) / 3 for a, b in zip(primary, dark)])
 
     for gy in range(gh):
         for gx in range(gw):
-            if ink_map[gy][gx]:
-                p[gx, gy] = dk + (255,)
-            elif solid[gy][gx]:
-                p[gx, gy] = pr + (255,)
-            else:
-                p[gx, gy] = pr + (255,)      # never sampled, kept opaque
+            p[gx, gy] = pr + (255,)
 
-    for name, col in (("body", primary), ("dark", dark), ("accent", accent)):
+    # centre vein and side veins, like a real leaf
+    mid = gw // 2
+    rows = [c for c in (cubes or []) if c.get("part") == "body"]
+    if rows:
+        top = min(c["r0"] for c in rows)
+        bot = max(c["r1"] for c in rows)
+        for r in range(top, bot + 1):
+            p[mid, r] = vein + (255,)
+        step = max(2, (bot - top) // 6)
+        for i, r in enumerate(range(top + step, bot - step + 1, step)):
+            reach = 2 + (i % 2)
+            for k in range(1, reach + 1):
+                if mid - k >= 0 and r + k < gh:
+                    p[mid - k, r + k] = vein + (255,)
+                if mid + k < gw and r + k < gh:
+                    p[mid + k, r + k] = vein + (255,)
+
+    # a clean face, placed on the widest part of the leaf
+    if rows:
+        widest = max(rows, key=lambda c: c["c1"] - c["c0"])
+        fy = max(top + 2, (top + bot) // 2 - 3)
+        halfspan = max(2, (widest["c1"] - widest["c0"]) // 5)
+        eye_l, eye_r = mid - halfspan, mid + halfspan
+        for ex in (eye_l, eye_r):
+            for dy in range(2):
+                for dx in range(2):
+                    if 0 <= ex + dx < gw and 0 <= fy + dy < gh:
+                        p[ex + dx, fy + dy] = (18, 22, 18, 255)
+        smile_y = fy + 4
+        for k in range(-halfspan, halfspan + 1):
+            x = mid + k
+            y = smile_y + (1 if abs(k) <= 1 else 0)
+            if 0 <= x < gw and 0 <= y < gh:
+                p[x, y] = (18, 22, 18, 255)
+        for x, y in ((mid - halfspan - 1, smile_y - 1), (mid + halfspan + 1, smile_y - 1)):
+            if 0 <= x < gw and 0 <= y < gh:
+                p[x, y] = (18, 22, 18, 255)
+
+    for name, col in (("body", primary), ("dark", dark), ("accent", accent),
+                      ("limb", limb if limb is not None else dark)):
         x, y = SOLID[name]
         c = tuple(int(v) for v in col) + (255,)
         for dy in range(2):

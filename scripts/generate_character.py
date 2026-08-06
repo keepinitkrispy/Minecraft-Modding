@@ -123,12 +123,34 @@ def hsl_rgb(h, s, l):
     return [(r + m) * 255, (g + m) * 255, (b + m) * 255]
 
 
+NAME_HUES = {
+    "leaf": 110, "leafy": 110, "vine": 105, "moss": 100, "sprout": 115, "bud": 118,
+    "grass": 105, "tree": 100, "twig": 95, "fern": 108, "pine": 95, "clover": 112,
+    "fire": 18, "flame": 20, "ember": 14, "lava": 10, "spark": 40, "sun": 48,
+    "ice": 195, "frost": 200, "snow": 205, "water": 205, "wave": 200, "rain": 210,
+    "rock": 28, "stone": 30, "mud": 30, "dirt": 28, "sand": 45,
+    "berry": 330, "flower": 320, "bloom": 325, "petal": 330,
+    "night": 265, "shadow": 270, "ghost": 275, "storm": 250,
+}
+
+
+def hue_for_name(seed):
+    """Names carry meaning: a character called Leafy should be green."""
+    low = seed.lower()
+    for word, hue in sorted(NAME_HUES.items(), key=lambda kv: -len(kv[0])):
+        if word in low:
+            return hue
+    return None
+
+
 def palette_from_name(seed):
     """A vivid, stable palette for drawings that have no colour of their own."""
     h = 2166136261
     for ch in seed:
         h = ((h ^ ord(ch)) * 16777619) & 0xFFFFFFFF
-    hue = h % 360
+    hue = hue_for_name(seed)
+    if hue is None:
+        hue = h % 360
     return (hsl_rgb(hue, 0.52, 0.46),
             hsl_rgb((hue + 28) % 360, 0.45, 0.32),
             hsl_rgb((hue + 165) % 360, 0.62, 0.58))
@@ -252,14 +274,21 @@ def analyse(path, crop_frac=None, rotate=0):
                 accent=[int(v) for v in accent])
 
 
-def finalise_palette(a, seed):
+def finalise_palette(a, seed, force_hue=None):
     """Pick the final colours, then knock the paper out of the crop.
 
     A pencil drawing has no colour of its own, so we give it a vivid palette
     derived from its name and keep the pencil lines on top - the art still
     shows, it just is not grey.
     """
-    if a["low_colour"]:
+    if force_hue is not None:
+        p, s, ac = (hsl_rgb(force_hue, 0.52, 0.46),
+                    hsl_rgb((force_hue + 28) % 360, 0.45, 0.32),
+                    hsl_rgb((force_hue + 165) % 360, 0.62, 0.58))
+        a["primary"] = [int(v) for v in p]
+        a["secondary"] = [int(v) for v in s]
+        a["accent"] = [int(v) for v in ac]
+    elif a["low_colour"]:
         p, s, ac = palette_from_name(seed)
         a["primary"] = [int(v) for v in p]
         a["secondary"] = [int(v) for v in s]
@@ -422,7 +451,7 @@ def build_pack(out_dir, cid, display, trait, version, analysis):
     # the drawing's own outline becomes the model's shape
     ink = analysis["ink"]
     solid = analysis["solid"]
-    cubes = S.cubes_from(solid)
+    cubes = S.stylised_cubes(S.clean_profile(solid))
     if not cubes:
         raise SystemExit("no drawing found in that crop")
     geo = S.build_geometry(cid, cubes, TEX, TEX)
@@ -632,7 +661,8 @@ def build_pack(out_dir, cid, display, trait, version, analysis):
     S.build_texture(analysis["crop"], analysis["bg"], analysis["thresh"],
                     analysis["ink_strong"], solid,
                     analysis["primary"], shade(analysis["primary"], -105),
-                    analysis["accent"], tex=TEX
+                    analysis["accent"], tex=TEX, cubes=cubes,
+                    limb=[122, 84, 48]
                     ).save(os.path.join(RP, "textures/entity/junkbunch", f"{cid}.png"))
     build_item_icon(analysis).save(os.path.join(RP, "textures/items", f"{cid}_charm.png"))
     icon = build_pack_icon(analysis)
@@ -649,6 +679,8 @@ def main():
     ap.add_argument("--crop", default=None,
                     help="x,y,w,h as fractions of the photo (e.g. 0.30,0.40,0.45,0.22) "
                          "to pick one character off a page holding several")
+    ap.add_argument("--hue", type=int, default=None,
+                    help="force a hue 0-359 (110 = leaf green)")
     ap.add_argument("--rotate", type=int, default=0, choices=[0, 90, 180, 270],
                     help="rotate the photo clockwise before cropping")
     args = ap.parse_args()
@@ -661,7 +693,7 @@ def main():
 
     print(f"analysing {args.drawing} ...")
     cf = [float(v) for v in args.crop.split(",")] if args.crop else None
-    a = finalise_palette(analyse(args.drawing, cf, args.rotate), cid)
+    a = finalise_palette(analyse(args.drawing, cf, args.rotate), cid, args.hue)
     note = " (from name - drawing has no colour)" if a["low_colour"] else " (from the drawing)"
     print(f"  colours: {to_hex(a['primary'])} {to_hex(a['secondary'])} {to_hex(a['accent'])}{note}")
 

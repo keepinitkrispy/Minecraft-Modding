@@ -534,11 +534,29 @@ function hslRgb(h, s, l) {
   const t = [[c,x,0],[x,c,0],[0,c,x],[0,x,c],[x,0,c],[c,0,x]][Math.floor(h / 60) % 6];
   return [(t[0]+m)*255, (t[1]+m)*255, (t[2]+m)*255];
 }
+/* Names carry meaning: a character called Leafy should be green. */
+const NAME_HUES = {
+  leafy:110, leaf:110, vine:105, moss:100, sprout:115, bud:118, grass:105,
+  tree:100, twig:95, fern:108, pine:95, clover:112,
+  fire:18, flame:20, ember:14, lava:10, spark:40, sun:48,
+  ice:195, frost:200, snow:205, water:205, wave:200, rain:210,
+  rock:28, stone:30, mud:30, dirt:28, sand:45,
+  berry:330, flower:320, bloom:325, petal:330,
+  night:265, shadow:270, ghost:275, storm:250
+};
+function hueForName(seed) {
+  const low = seed.toLowerCase();
+  const keys = Object.keys(NAME_HUES).sort((a, b) => b.length - a.length);
+  for (const k of keys) if (low.includes(k)) return NAME_HUES[k];
+  return null;
+}
+
 /* a vivid, stable palette for drawings with no colour of their own */
 function paletteFromName(seed) {
   let h = 2166136261;
   for (let i = 0; i < seed.length; i++) h = Math.imul(h ^ seed.charCodeAt(i), 16777619) >>> 0;
-  const hue = h % 360;
+  const named = hueForName(seed);
+  const hue = named === null ? (h % 360) : named;
   return [
     hslRgb(hue, 0.52, 0.46),
     hslRgb((hue + 28) % 360, 0.45, 0.32),
@@ -778,7 +796,7 @@ function inkPreservingResize(src, tw, th, inkRgb, bodyRgb, coverage) {
    and emit a cube per horizontal run. Per-face UVs let each cube sample its
    own slice of the art, so shape and picture can never drift apart. */
 const GRID_W = 22, GRID_H = 30, DEPTH = 4, CELL = 1;
-const SOLID_UV = { body: [40, 0], dark: [42, 0], accent: [44, 0] };
+const SOLID_UV = { body: [40, 0], dark: [42, 0], accent: [44, 0], limb: [46, 0] };
 
 function occupancy(crop, bg, thresh, cover) {
   const g = crop.getContext("2d", { willReadFrequently: true });
@@ -900,22 +918,109 @@ function cubesFrom(solid) {
   return cubes;
 }
 
+
+/* A pencil outline scanned to a grid is lopsided and lumpy. Keep what the
+   drawing actually says - how wide the character is at each height - then
+   centre, smooth, and re-close it to points. Same creature, drawn cleanly. */
+function cleanProfile(solid) {
+  const widths = solid.map(r => r.reduce((n, v) => n + (v ? 1 : 0), 0));
+  const rows = widths.map((w, i) => [w, i]).filter(p => p[0] > 0).map(p => p[1]);
+  if (!rows.length) return [];
+  const core = widths.slice(rows[0], rows[rows.length - 1] + 1);
+
+  const med = core.map((_, i) => {
+    const win = core.slice(Math.max(0, i - 2), Math.min(core.length, i + 3)).sort((a, b) => a - b);
+    return win[win.length >> 1];
+  });
+  const prof = med.map((_, i) => {
+    const lo = Math.max(0, i - 1), hi = Math.min(med.length, i + 2);
+    return med.slice(lo, hi).reduce((a, b) => a + b, 0) / (hi - lo);
+  }).map(w => Math.max(1, Math.round(w)));
+
+  const n = prof.length, peak = Math.max(...prof);
+  const fullness = prof.reduce((a, b) => a + b, 0) / (peak * n);
+  const power = 1.15 - 0.75 * Math.min(1, Math.max(0, fullness));
+  return prof.map((_, i) => {
+    const t = (i + 0.5) / n;
+    return Math.max(1, Math.round(peak * Math.pow(Math.sin(Math.PI * t), power)));
+  });
+}
+
+/* body from the cleaned profile, plus the stick limbs and stem every
+   Junk Bunch character is drawn with */
+function stylisedCubes(profile) {
+  if (!profile.length) return [];
+  const bodyTop = 2, legRows = 3;
+  const room = GRID_H - bodyTop - legRows;
+  if (profile.length > room) {
+    const step = profile.length / room;
+    profile = Array.from({ length: room }, (_, i) =>
+      profile[Math.min(profile.length - 1, Math.floor(i * step))]);
+  }
+  const raw = [];
+  profile.forEach((w, i) => {
+    const r = bodyTop + i;
+    if (r >= GRID_H) return;
+    const half = Math.max(1, w >> 1);
+    const c0 = Math.max(0, (GRID_W >> 1) - half);
+    const c1 = Math.min(GRID_W - 1, (GRID_W >> 1) + half - (w % 2 ? 0 : 1));
+    raw.push({ c0, c1, r0: r, r1: r, part: "body" });
+  });
+  const merged = [];
+  for (const c of raw) {
+    const last = merged[merged.length - 1];
+    if (last && last.part === "body" && last.c0 === c.c0 && last.c1 === c.c1 && last.r1 === c.r0 - 1) last.r1 = c.r1;
+    else merged.push({ ...c });
+  }
+
+  const bodyBottom = merged[merged.length - 1].r1;
+  const widestI = profile.reduce((bi, w, i) => (w > profile[bi] ? i : bi), 0);
+  const armR = bodyTop + widestI;
+  const edgeAt = r => {
+    for (const c of merged) if (c.r0 <= r && r <= c.r1) return [c.c0, c.c1];
+    return [GRID_W >> 1, GRID_W >> 1];
+  };
+  const [l, rt] = edgeAt(armR);
+  merged.push({ c0: Math.max(0, l - 3), c1: Math.max(0, l - 1), r0: armR, r1: armR, part: "limb" });
+  merged.push({ c0: Math.min(GRID_W - 1, rt + 1), c1: Math.min(GRID_W - 1, rt + 3), r0: armR, r1: armR, part: "limb" });
+
+  const legTop = bodyBottom + 1, legBot = Math.min(GRID_H - 1, bodyBottom + 3);
+  if (legTop < GRID_H) {
+    const [bl, br] = edgeAt(bodyBottom);
+    const span = br - bl;
+    const lx = bl + Math.max(1, span >> 2), rx = br - Math.max(1, span >> 2);
+    merged.push({ c0: lx, c1: lx, r0: legTop, r1: legBot, part: "limb" });
+    merged.push({ c0: rx, c1: rx, r0: legTop, r1: legBot, part: "limb" });
+  }
+  merged.push({ c0: GRID_W >> 1, c1: GRID_W >> 1, r0: Math.max(0, bodyTop - 2), r1: Math.max(0, bodyTop - 1), part: "stem" });
+  return merged;
+}
+
 function buildShapeGeometry(id, cubes) {
   const body = { name: "body", pivot: [0, 0, 0], cubes: [] };
   for (const c of cubes) {
     const w = (c.c1 - c.c0 + 1) * CELL, h = (c.r1 - c.r0 + 1) * CELL;
     const uvw = c.c1 - c.c0 + 1, uvh = c.r1 - c.r0 + 1;
-    body.cubes.push({
-      origin: [+((c.c0 - GRID_W / 2) * CELL).toFixed(3), +((GRID_H - 1 - c.r1) * CELL).toFixed(3), -DEPTH / 2],
-      size: [w, h, DEPTH],
-      uv: {
+    const part = c.part || "body";
+    const depth = part === "body" ? DEPTH : DEPTH * 0.5;
+    let uv;
+    if (part === "body") {
+      uv = {
         north: { uv: [c.c0, c.r0], uv_size: [uvw, uvh] },
         south: { uv: [c.c0, c.r0], uv_size: [uvw, uvh] },
         west:  { uv: SOLID_UV.dark, uv_size: [1, 1] },
         east:  { uv: SOLID_UV.dark, uv_size: [1, 1] },
         up:    { uv: SOLID_UV.body, uv_size: [1, 1] },
         down:  { uv: SOLID_UV.body, uv_size: [1, 1] }
-      }
+      };
+    } else {
+      const f = { uv: SOLID_UV.limb, uv_size: [1, 1] };
+      uv = { north: f, south: f, west: f, east: f, up: f, down: f };
+    }
+    body.cubes.push({
+      origin: [+((c.c0 - GRID_W / 2) * CELL).toFixed(3), +((GRID_H - 1 - c.r1) * CELL).toFixed(3), +(-depth / 2).toFixed(3)],
+      size: [w, h, +depth.toFixed(3)],
+      uv
     });
   }
   return {
@@ -932,20 +1037,48 @@ function buildShapeGeometry(id, cubes) {
   };
 }
 
-function buildShapeTexture(inkStrong, solid, primary, dark, accent) {
+function buildShapeTexture(cubes, primary, dark, accent, limb) {
   const cv = document.createElement("canvas");
   cv.width = TEX; cv.height = TEX;
   const g = cv.getContext("2d", { willReadFrequently: true });
+  const vein = primary.map((v, i) => (v * 2 + dark[i]) / 3);
+
   g.fillStyle = rgbToHex(primary);
   g.fillRect(0, 0, TEX, TEX);
-  for (let gy = 0; gy < GRID_H; gy++) {
-    for (let gx = 0; gx < GRID_W; gx++) {
-      g.fillStyle = inkStrong[gy][gx] ? rgbToHex(dark) : rgbToHex(primary);
-      g.fillRect(gx, gy, 1, 1);
+
+  const rows = cubes.filter(c => (c.part || "body") === "body");
+  const mid = GRID_W >> 1;
+  if (rows.length) {
+    const top = Math.min(...rows.map(c => c.r0));
+    const bot = Math.max(...rows.map(c => c.r1));
+    g.fillStyle = rgbToHex(vein);
+    for (let r = top; r <= bot; r++) g.fillRect(mid, r, 1, 1);
+    const step = Math.max(2, Math.floor((bot - top) / 6));
+    let i = 0;
+    for (let r = top + step; r <= bot - step; r += step, i++) {
+      const reach = 2 + (i % 2);
+      for (let k = 1; k <= reach; k++) {
+        if (mid - k >= 0 && r + k < GRID_H) g.fillRect(mid - k, r + k, 1, 1);
+        if (mid + k < GRID_W && r + k < GRID_H) g.fillRect(mid + k, r + k, 1, 1);
+      }
     }
+    // a clean face on the widest part
+    const widest = rows.reduce((a, b) => ((b.c1 - b.c0) > (a.c1 - a.c0) ? b : a), rows[0]);
+    const fy = Math.max(top + 2, ((top + bot) >> 1) - 3);
+    const hs = Math.max(2, Math.floor((widest.c1 - widest.c0) / 5));
+    g.fillStyle = "#12160f";
+    g.fillRect(mid - hs, fy, 2, 2);
+    g.fillRect(mid + hs, fy, 2, 2);
+    const sy = fy + 4;
+    for (let k = -hs; k <= hs; k++) g.fillRect(mid + k, sy + (Math.abs(k) <= 1 ? 1 : 0), 1, 1);
+    g.fillRect(mid - hs - 1, sy - 1, 1, 1);
+    g.fillRect(mid + hs + 1, sy - 1, 1, 1);
   }
+
   const put = (uv, col) => { g.fillStyle = rgbToHex(col); g.fillRect(uv[0], uv[1], 2, 2); };
-  put(SOLID_UV.body, primary); put(SOLID_UV.dark, dark); put(SOLID_UV.accent, accent);
+  put(SOLID_UV.body, primary); put(SOLID_UV.dark, dark);
+  put(SOLID_UV.accent, accent); put(SOLID_UV.limb, limb);
+
   const d = g.getImageData(0, 0, TEX, TEX);
   for (let i = 3; i < d.data.length; i += 4) d.data[i] = 255;
   g.putImageData(d, 0, 0);
@@ -1502,7 +1635,10 @@ function drawPreview(cv, tex, cubes, scale) {
     const w = (c.c1 - c.c0 + 1) * CELL, h = (c.r1 - c.r0 + 1) * CELL;
     const ox = (c.c0 - GRID_W / 2) * CELL;
     const oy = (GRID_H - 1 - c.r1) * CELL;
-    g.drawImage(tex, c.c0, c.r0, c.c1 - c.c0 + 1, c.r1 - c.r0 + 1,
+    const body = (c.part || "body") === "body";
+    const sx = body ? c.c0 : SOLID_UV.limb[0], sy = body ? c.r0 : SOLID_UV.limb[1];
+    const sw = body ? (c.c1 - c.c0 + 1) : 1, sh = body ? (c.r1 - c.r0 + 1) : 1;
+    g.drawImage(tex, sx, sy, sw, sh,
                 Math.round(cxp + ox * eff * scale), Math.round(groundY - (oy + h) * eff * scale),
                 Math.max(1, Math.round(w * eff * scale)), Math.max(1, Math.round(h * eff * scale)));
   }
@@ -1693,11 +1829,12 @@ goBtn.addEventListener("click", async () => {
     const version = nextVersion(id);
     const analysis = finalisePalette(raw, id);
 
-    const cubes = cubesFrom(analysis.solid);
+    const cubes = stylisedCubes(cleanProfile(analysis.solid));
     if (!cubes.length) throw new Error("No drawing found in that box - move it over a character.");
-    const texCv = buildShapeTexture(analysis.inkStrong, analysis.solid,
-                                    analysis.primary, shade(analysis.primary, -105).map(Math.round),
-                                    analysis.accent);
+    const LIMB = [122, 84, 48];
+    const texCv = buildShapeTexture(cubes, analysis.primary,
+                                    shade(analysis.primary, -105).map(Math.round),
+                                    analysis.accent, LIMB);
     const [texBytes, iconBytes, packIconBytes] = await Promise.all([
       canvasBytes(texCv),
       canvasBytes(buildItemIcon(analysis)),
