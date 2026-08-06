@@ -1,0 +1,1558 @@
+<title>Junk Bunch Maker</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<style>
+  :root {
+    color-scheme: light dark;
+
+    --ink:        #15181d;
+    --ink-soft:   #3d4550;
+    --paper:      #fcfbf8;
+    --card:       #ffffff;
+    --edge:       #e2e0d8;
+    --muted:      #6d7a70;
+    --grass:      #2f9e44;
+    --grass-deep: #1f7a32;
+    --crayon:     #f4713b;
+    --sky:        #3b82c4;
+
+    --bg:      var(--paper);
+    --fg:      var(--ink);
+    --fg-soft: var(--ink-soft);
+    --surface: var(--card);
+    --line:    var(--edge);
+    --accent:  var(--grass);
+    --accent-2:var(--crayon);
+
+    --r-lg: 20px;
+    --r-md: 14px;
+    --r-sm: 9px;
+
+    --step-1: clamp(1.9rem, 7vw, 2.6rem);
+    --step-0: 1rem;
+    --step--1: 0.85rem;
+    --step--2: 0.74rem;
+
+    --display: ui-rounded, "SF Pro Rounded", "Hiragino Maru Gothic ProN",
+               "Segoe UI Variable Display", system-ui, sans-serif;
+    --body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:      #101317;
+      --fg:      #eef1ee;
+      --fg-soft: #a9b3ad;
+      --surface: #191d22;
+      --line:    #2b3138;
+      --accent:  #52c46a;
+      --accent-2:#ff8b57;
+      --muted:   #8a978e;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:      #101317;
+    --fg:      #eef1ee;
+    --fg-soft: #a9b3ad;
+    --surface: #191d22;
+    --line:    #2b3138;
+    --accent:  #52c46a;
+    --accent-2:#ff8b57;
+    --muted:   #8a978e;
+  }
+  :root[data-theme="light"] {
+    --bg:      var(--paper);
+    --fg:      var(--ink);
+    --fg-soft: var(--ink-soft);
+    --surface: var(--card);
+    --line:    var(--edge);
+    --accent:  var(--grass);
+    --accent-2:var(--crayon);
+    --muted:   #6d7a70;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--body);
+    font-size: var(--step-0);
+    line-height: 1.5;
+    -webkit-text-size-adjust: 100%;
+    padding: 0 0 max(2rem, env(safe-area-inset-bottom));
+  }
+
+  .wrap {
+    width: min(560px, 100%);
+    margin-inline: auto;
+    padding: 1.25rem 1.1rem 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1.1rem;
+  }
+
+  header { display: flex; flex-direction: column; gap: .3rem; }
+
+  h1 {
+    font-family: var(--display);
+    font-size: var(--step-1);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
+    margin: 0;
+    text-wrap: balance;
+  }
+  h1 .leaf { color: var(--accent); }
+
+  .tagline {
+    margin: 0;
+    color: var(--muted);
+    font-size: var(--step--1);
+    max-width: 40ch;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: .8rem;
+  }
+
+  .stepnum {
+    display: inline-flex;
+    align-items: center;
+    gap: .5rem;
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: var(--step--1);
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .stepnum b {
+    width: 1.4rem; height: 1.4rem;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    display: grid; place-items: center;
+    font-size: var(--step--2);
+  }
+
+  /* photo drop zone */
+  .shot {
+    position: relative;
+    border: 2px dashed var(--line);
+    border-radius: var(--r-md);
+    min-height: 190px;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    background: color-mix(in srgb, var(--accent) 4%, transparent);
+    text-align: center;
+    padding: 1rem;
+  }
+  .shot.has-img { border-style: solid; padding: 0; min-height: 0; }
+  .shot img { display: block; width: 100%; height: auto; }
+  .shot input[type=file] {
+    position: absolute; inset: 0;
+    opacity: 0; width: 100%; height: 100%;
+    cursor: pointer;
+  }
+  .shot .hint { pointer-events: none; display: flex; flex-direction: column; gap: .35rem; align-items: center; }
+  .shot .hint strong { font-family: var(--display); font-size: 1.05rem; }
+  .shot .hint span { color: var(--muted); font-size: var(--step--1); }
+  .shot svg { width: 42px; height: 42px; color: var(--accent); }
+
+  label.fieldlabel {
+    font-size: var(--step--1);
+    font-weight: 600;
+    color: var(--fg-soft);
+  }
+
+  input[type=text] {
+    width: 100%;
+    font: inherit;
+    font-family: var(--display);
+    font-size: 1.15rem;
+    font-weight: 600;
+    padding: .8rem .9rem;
+    color: var(--fg);
+    background: var(--bg);
+    border: 1.5px solid var(--line);
+    border-radius: var(--r-md);
+  }
+  input[type=text]:focus-visible,
+  .shot:focus-within,
+  button:focus-visible {
+    outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent);
+    outline-offset: 2px;
+  }
+
+  .chips { display: flex; flex-wrap: wrap; gap: .4rem; }
+  .chip {
+    font: inherit;
+    font-size: var(--step--2);
+    font-weight: 600;
+    padding: .4rem .7rem;
+    border-radius: 999px;
+    border: 1.5px solid var(--line);
+    background: transparent;
+    color: var(--fg-soft);
+    cursor: pointer;
+  }
+  .chip[aria-pressed="true"] {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+
+  button.go {
+    font-family: var(--display);
+    font-size: 1.15rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    color: #fff;
+    background: var(--accent);
+    border: none;
+    border-radius: var(--r-md);
+    padding: 1rem;
+    width: 100%;
+    cursor: pointer;
+    box-shadow: 0 2px 0 0 color-mix(in srgb, var(--accent) 55%, #000);
+  }
+  button.go:active { transform: translateY(1px); box-shadow: 0 1px 0 0 color-mix(in srgb, var(--accent) 55%, #000); }
+  button.go:disabled { background: var(--line); color: var(--muted); box-shadow: none; cursor: not-allowed; }
+
+  button.dl {
+    font-family: var(--display);
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: #fff;
+    background: var(--accent-2);
+    border: none;
+    border-radius: var(--r-md);
+    padding: 1rem;
+    width: 100%;
+    cursor: pointer;
+    box-shadow: 0 2px 0 0 color-mix(in srgb, var(--accent-2) 55%, #000);
+    text-decoration: none;
+    display: block;
+    text-align: center;
+  }
+
+  button.ghost {
+    font: inherit; font-weight: 600;
+    background: transparent;
+    color: var(--fg-soft);
+    border: 1.5px solid var(--line);
+    border-radius: var(--r-md);
+    padding: .75rem;
+    width: 100%;
+    cursor: pointer;
+  }
+
+  /* preview stage */
+  .stage {
+    background:
+      linear-gradient(180deg,
+        color-mix(in srgb, var(--sky) 22%, var(--surface)) 0%,
+        color-mix(in srgb, var(--sky) 8%, var(--surface)) 62%,
+        color-mix(in srgb, var(--accent) 16%, var(--surface)) 62.1%,
+        color-mix(in srgb, var(--accent) 10%, var(--surface)) 100%);
+    border-radius: var(--r-md);
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+  }
+  .stage canvas {
+    image-rendering: pixelated;
+    width: 100%;
+    max-width: 320px;
+    height: auto;
+    display: block;
+  }
+
+  .cropwrap { display: flex; flex-direction: column; gap: .6rem; }
+  #cropCv {
+    width: 100%; height: auto; display: block;
+    border-radius: var(--r-md);
+    touch-action: none;
+    background: #000;
+  }
+  .crophint { margin: 0; font-size: var(--step--1); color: var(--muted); }
+  .crophint b { color: var(--fg); }
+
+  .facts { display: grid; grid-template-columns: 1fr 1fr; gap: .55rem; }
+  .fact {
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    padding: .55rem .65rem;
+    display: flex; flex-direction: column; gap: .1rem;
+  }
+  .fact dt { font-size: var(--step--2); color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+  .fact dd { margin: 0; font-weight: 650; font-size: var(--step--1); }
+
+  .swatches { display: flex; gap: .3rem; }
+  .swatches i { width: 20px; height: 20px; border-radius: 6px; border: 1px solid rgba(0,0,0,.15); display: block; }
+
+  .status {
+    font-size: var(--step--1);
+    color: var(--muted);
+    display: flex; align-items: center; gap: .5rem;
+    min-height: 1.4em;
+  }
+  .status.err { color: #d1462f; font-weight: 600; }
+  .status.ok  { color: var(--accent); font-weight: 600; }
+
+  .spinner {
+    width: 15px; height: 15px; flex: none;
+    border: 2.5px solid color-mix(in srgb, var(--accent) 30%, transparent);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2s; } }
+
+  details.how {
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    padding: .8rem 1rem;
+    background: var(--surface);
+  }
+  details.how summary {
+    cursor: pointer; font-weight: 650; font-size: var(--step--1);
+    font-family: var(--display);
+  }
+  details.how ol { margin: .7rem 0 0; padding-left: 1.2rem; font-size: var(--step--1); color: var(--fg-soft); }
+  details.how li { margin-bottom: .45rem; }
+  details.how b { color: var(--fg); }
+
+  footer { text-align: center; color: var(--muted); font-size: var(--step--2); padding-top: .3rem; }
+
+  .hidden { display: none !important; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Junk&nbsp;Bunch <span class="leaf">Maker</span></h1>
+    <p class="tagline">Snap a drawing. Name it. Get a Minecraft add-on you can load straight onto your Realm.</p>
+  </header>
+
+  <section class="card">
+    <span class="stepnum"><b>1</b> The drawing</span>
+    <div class="shot" id="shot">
+      <div class="hint" id="shotHint">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M3 8a2 2 0 0 1 2-2h2.2l1.3-1.8A1 1 0 0 1 9.3 4h5.4a1 1 0 0 1 .8.4L16.8 6H19a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+          <circle cx="12" cy="12.5" r="3.4" />
+        </svg>
+        <strong>Take a photo</strong>
+        <span>or pick one from your camera roll</span>
+      </div>
+      <img id="shotImg" alt="" class="hidden" />
+      <input type="file" id="file" accept="image/*" capture="environment" aria-label="Photo of the drawing" />
+    </div>
+
+    <div id="cropWrap" class="hidden cropwrap">
+      <canvas id="cropCv"></canvas>
+      <p class="crophint">Drag the box onto <b>one</b> character. Drag a corner to resize.</p>
+      <button type="button" class="ghost" id="retake">Use a different photo</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <span class="stepnum"><b>2</b> The name</span>
+    <label class="fieldlabel" for="name">What is this character called?</label>
+    <input type="text" id="name" placeholder="Leafy" autocomplete="off" autocapitalize="words" spellcheck="false" maxlength="24" />
+
+    <label class="fieldlabel" for="traitrow">How does it act?</label>
+    <div class="chips" id="traitrow">
+      <button type="button" class="chip" data-trait="friendly" aria-pressed="true">Friendly</button>
+      <button type="button" class="chip" data-trait="shy" aria-pressed="false">Shy</button>
+      <button type="button" class="chip" data-trait="bouncy" aria-pressed="false">Bouncy</button>
+      <button type="button" class="chip" data-trait="sneaky" aria-pressed="false">Sneaky</button>
+      <button type="button" class="chip" data-trait="brave" aria-pressed="false">Brave</button>
+    </div>
+  </section>
+
+  <button class="go" id="go" disabled>Generate character</button>
+  <p class="status" id="status" role="status" aria-live="polite"></p>
+
+  <section class="card hidden" id="result">
+    <span class="stepnum"><b>3</b> Meet <span id="resName">them</span></span>
+    <div class="stage"><canvas id="preview" width="320" height="290"></canvas></div>
+
+    <dl class="facts">
+      <div class="fact"><dt>Height</dt><dd id="fHeight">—</dd></div>
+      <div class="fact"><dt>Summon with</dt><dd id="fItem">—</dd></div>
+      <div class="fact"><dt>Personality</dt><dd id="fTrait">—</dd></div>
+      <div class="fact"><dt>Colors</dt><dd><span class="swatches" id="fSwatch"></span></dd></div>
+    </dl>
+
+    <a class="dl" id="download" download>Download add-on</a>
+    <button class="ghost" id="again">Start over</button>
+  </section>
+
+  <details class="how">
+    <summary>How to get it into your world</summary>
+    <ol>
+      <li>Tap <b>Download add-on</b>. Your phone saves a <b>.mcaddon</b> file.</li>
+      <li>Open that file from your Downloads — <b>Minecraft opens automatically</b> and imports it.</li>
+      <li>In your world or Realm settings, turn the <b>Junk Bunch</b> packs on (both of them).</li>
+      <li>On PS5, join the Realm — it downloads the packs for you.</li>
+      <li>Craft the summon item, hold <b>L2</b> aiming at the ground, and your character appears.</li>
+      <li>Hold <b>L2</b> on them while holding the item to make them follow you.</li>
+    </ol>
+  </details>
+
+  <footer>Made for The Junk Bunch · works offline once loaded</footer>
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   Junk Bunch Maker
+   Everything runs in this page: the drawing is analysed, a
+   Bedrock model + texture are generated, and a complete
+   behaviour pack + resource pack are zipped into a .mcaddon.
+   ============================================================ */
+
+/* ---------- model definition -------------------------------
+   One source of truth for the geometry AND the texture, so the
+   box-UV rectangles always line up with the painted pixels.
+   Bedrock box-UV net for a cube of size w,h,d at (u,v):
+     up    (u+d,      v,   w, d)   down  (u+d+w,    v,   w, d)
+     west  (u,        v+d, d, h)   north (u+d,      v+d, w, h)
+     east  (u+d+w,    v+d, d, h)   south (u+2d+w,   v+d, w, h)
+   Net size = 2*(d+w) wide, d+h tall. Texture is 64x64.
+------------------------------------------------------------ */
+const TEX = 64;
+const MODEL_SCALE = 0.5;          // -> about half a player tall
+
+const BOXES = [
+  { name: "body",      origin: [-8,  6, -4], size: [16, 20, 8], uv: [ 0,  0], role: "body"  },
+  { name: "left_arm",  origin: [-10,14, -1], size: [ 2,  8, 2], uv: [48,  0], role: "limb"  },
+  { name: "right_arm", origin: [ 8, 14, -1], size: [ 2,  8, 2], uv: [56,  0], role: "limb"  },
+  { name: "left_leg",  origin: [-4.5, 0,-1], size: [ 2,  6, 2], uv: [48, 10], role: "limb"  },
+  { name: "right_leg", origin: [ 2.5, 0,-1], size: [ 2,  6, 2], uv: [56, 10], role: "limb"  },
+  { name: "topper",    origin: [-1, 26, -1], size: [ 2,  4, 2], uv: [48, 18], role: "top"   }
+];
+
+const PIVOTS = {
+  root: [0, 0, 0], body: [0, 6, 0],
+  left_arm: [-8, 22, 0], right_arm: [8, 22, 0],
+  left_leg: [-3.5, 6, 0], right_leg: [3.5, 6, 0],
+  topper: [0, 26, 0]
+};
+
+function faceRects(u, v, w, h, d) {
+  return {
+    up:    [u + d,           v,     w, d],
+    down:  [u + d + w,       v,     w, d],
+    west:  [u,               v + d, d, h],
+    north: [u + d,           v + d, w, h],
+    east:  [u + d + w,       v + d, d, h],
+    south: [u + 2 * d + w,   v + d, w, h]
+  };
+}
+
+/* ---------- tiny utilities --------------------------------- */
+const enc = new TextEncoder();
+
+function slug(name) {
+  let s = (name || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  if (!s || /^[0-9]/.test(s)) s = "jb_" + s;
+  return s.slice(0, 24) || "friend";
+}
+function titleCase(name) {
+  return (name || "").trim().replace(/\s+/g, " ").replace(/\b\w/g, c => c.toUpperCase()) || "Friend";
+}
+
+/* deterministic UUID from a seed string, so regenerating the same
+   character keeps the same pack identity (Minecraft updates it
+   instead of adding a duplicate). */
+function uuidFrom(seed) {
+  let h1 = 0x811c9dc5, h2 = 0x01000193, h3 = 0x9e3779b9, h4 = 0x85ebca6b;
+  for (let i = 0; i < seed.length; i++) {
+    const c = seed.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 16777619) >>> 0;
+    h2 = Math.imul(h2 + c + i, 2246822519) >>> 0;
+    h3 = Math.imul(h3 ^ (c + i * 7), 3266489917) >>> 0;
+    h4 = Math.imul(h4 + (c * 31), 668265263) >>> 0;
+  }
+  const hex = n => (n >>> 0).toString(16).padStart(8, "0");
+  let s = hex(h1) + hex(h2) + hex(h3) + hex(h4);
+  // stamp version 4 + RFC variant so it is a well formed UUID
+  s = s.slice(0, 12) + "4" + s.slice(13);
+  const variant = "89ab"[(h2 >>> 28) & 3];
+  s = s.slice(0, 16) + variant + s.slice(17);
+  return `${s.slice(0,8)}-${s.slice(8,12)}-${s.slice(12,16)}-${s.slice(16,20)}-${s.slice(20,32)}`;
+}
+
+/* version counter per character so re-downloads actually replace
+   the old pack instead of being ignored as "already installed" */
+function nextVersion(id) {
+  const key = "jbmaker_ver_" + id;
+  let n = 1;
+  try {
+    n = parseInt(localStorage.getItem(key) || "0", 10) + 1;
+    localStorage.setItem(key, String(n));
+  } catch (e) {
+    n = Math.floor(Date.now() / 60000) % 100000;
+  }
+  return [1, 0, n];
+}
+
+/* ---------- colour helpers --------------------------------- */
+const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
+function rgbToHex([r, g, b]) {
+  return "#" + [r, g, b].map(v => clamp(Math.round(v), 0, 255).toString(16).padStart(2, "0")).join("");
+}
+function shade(c, amt) {
+  return c.map(v => clamp(v + amt, 0, 255));
+}
+function mix(a, b, t) {
+  return [0, 1, 2].map(i => a[i] + (b[i] - a[i]) * t);
+}
+function luma([r, g, b]) { return 0.2126 * r + 0.7152 * g + 0.0722 * b; }
+function saturation(c) {
+  const mx = Math.max(...c), mn = Math.min(...c);
+  return mx <= 0 ? 0 : (mx - mn) / mx;
+}
+function hslRgb(h, s, l) {
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = l - c / 2;
+  const t = [[c,x,0],[x,c,0],[0,c,x],[0,x,c],[x,0,c],[c,0,x]][Math.floor(h / 60) % 6];
+  return [(t[0]+m)*255, (t[1]+m)*255, (t[2]+m)*255];
+}
+/* a vivid, stable palette for drawings with no colour of their own */
+function paletteFromName(seed) {
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) h = Math.imul(h ^ seed.charCodeAt(i), 16777619) >>> 0;
+  const hue = h % 360;
+  return [
+    hslRgb(hue, 0.52, 0.46),
+    hslRgb((hue + 28) % 360, 0.45, 0.32),
+    hslRgb((hue + 165) % 360, 0.62, 0.58)
+  ];
+}
+function dist(a, b) {
+  const dr = a[0] - b[0], dg = a[1] - b[1], db = a[2] - b[2];
+  return Math.sqrt(dr * dr + dg * dg + db * db);
+}
+
+/* ---------- 1. load + auto-find the drawing ----------------- */
+async function loadBitmap(file) {
+  try {
+    return await createImageBitmap(file, { imageOrientation: "from-image" });
+  } catch (e) {
+    return await new Promise((res, rej) => {
+      const img = new Image();
+      img.onload = () => res(img);
+      img.onerror = () => rej(new Error("Could not read that photo. Try a different one."));
+      img.src = URL.createObjectURL(file);
+    });
+  }
+}
+
+/* returns a working canvas plus a suggested crop box around the biggest drawing */
+function prepare(bmp) {
+  const W = 300;
+  const H = Math.max(1, Math.round((bmp.height / bmp.width) * W));
+  const cv = document.createElement("canvas");
+  cv.width = W; cv.height = H;
+  cv.getContext("2d", { willReadFrequently: true }).drawImage(bmp, 0, 0, W, H);
+
+  const g = cv.getContext("2d", { willReadFrequently: true });
+  const px = g.getImageData(0, 0, W, H).data;
+  const at = (x, y) => { const i = (y * W + x) * 4; return [px[i], px[i+1], px[i+2]]; };
+
+  const ring = [];
+  for (let x = 0; x < W; x += 2) { ring.push(at(x, 0)); ring.push(at(x, H - 1)); }
+  for (let y = 0; y < H; y += 2) { ring.push(at(0, y)); ring.push(at(W - 1, y)); }
+  const bg = [0, 1, 2].map(ch => {
+    const v = ring.map(c => c[ch]).sort((a, b) => a - b);
+    return v[Math.floor(v.length / 2)];
+  });
+
+  const thresh = 46;
+  const mask = new Uint8Array(W * H);
+  let any = false;
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      if (dist(at(x, y), bg) > thresh) { mask[y * W + x] = 1; any = true; }
+    }
+  }
+
+  /* suggest a square-ish box around the densest patch of ink */
+  let box = { x: Math.round(W * 0.2), y: Math.round(H * 0.2), w: Math.round(W * 0.6), h: Math.round(H * 0.6) };
+  if (any) {
+    let minX = W, minY = H, maxX = -1, maxY = -1;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      if (mask[y * W + x]) {
+        if (x < minX) minX = x; if (x > maxX) maxX = x;
+        if (y < minY) minY = y; if (y > maxY) maxY = y;
+      }
+    }
+    /* if the ink spans a tall page it probably holds several drawings:
+       start on the densest third rather than the whole sheet */
+    const spanH = maxY - minY + 1, spanW = maxX - minX + 1;
+    if (spanH > spanW * 1.6) {
+      const bandH = Math.round(spanH / 3);
+      let bestY = minY, bestN = -1;
+      for (let y0 = minY; y0 + bandH <= maxY; y0 += Math.max(1, Math.round(bandH / 4))) {
+        let n = 0;
+        for (let y = y0; y < y0 + bandH; y++) for (let x = minX; x <= maxX; x++) n += mask[y * W + x];
+        if (n > bestN) { bestN = n; bestY = y0; }
+      }
+      box = { x: minX, y: bestY, w: spanW, h: bandH };
+    } else {
+      box = { x: minX, y: minY, w: spanW, h: spanH };
+    }
+    const pad = Math.round(Math.max(box.w, box.h) * 0.05) + 2;
+    box.x = clamp(box.x - pad, 0, W - 4);
+    box.y = clamp(box.y - pad, 0, H - 4);
+    box.w = clamp(box.w + pad * 2, 4, W - box.x);
+    box.h = clamp(box.h + pad * 2, 4, H - box.y);
+  }
+  return { cv, W, H, bg, thresh, box };
+}
+
+/* ---------- analyse whatever the crop box contains ---------- */
+function analyseCrop(prep, box) {
+  const { cv, bg, thresh } = prep;
+  const bx = Math.round(box.x), by = Math.round(box.y);
+  const bw = Math.max(2, Math.round(box.w)), bh = Math.max(2, Math.round(box.h));
+
+  const crop = document.createElement("canvas");
+  crop.width = bw; crop.height = bh;
+  const cg = crop.getContext("2d", { willReadFrequently: true });
+  cg.drawImage(cv, bx, by, bw, bh, 0, 0, bw, bh);
+
+  const d = cg.getImageData(0, 0, bw, bh).data;
+  const buckets = new Map();
+  for (let i = 0; i < d.length; i += 4) {
+    const c = [d[i], d[i + 1], d[i + 2]];
+    if (dist(c, bg) <= thresh) continue;      // paper
+    if (luma(c) < 42) continue;               // ink outline
+    const k = (c[0] >> 5) * 64 + (c[1] >> 5) * 8 + (c[2] >> 5);
+    let e = buckets.get(k);
+    if (!e) { e = { n: 0, r: 0, g: 0, b: 0 }; buckets.set(k, e); }
+    e.n++; e.r += c[0]; e.g += c[1]; e.b += c[2];
+  }
+  let pal = [...buckets.values()].filter(e => e.n > 6)
+    .sort((a, b) => b.n - a.n).slice(0, 5)
+    .map(e => [e.r / e.n, e.g / e.n, e.b / e.n]);
+  if (!pal.length) pal = [[86, 158, 92]];
+
+  const primary = pal[0];
+  const secondary = pal.find(c => dist(c, primary) > 70) || shade(primary, luma(primary) > 128 ? -52 : 58);
+  const accent = pal.find(c => dist(c, primary) > 70 && dist(c, secondary) > 60)
+                 || shade(secondary, luma(secondary) > 128 ? -40 : 46);
+
+  return {
+    crop, bg, thresh,
+    lowColour: saturation(primary) < 0.18,
+    primary: primary.map(Math.round),
+    secondary: secondary.map(Math.round),
+    accent: accent.map(Math.round)
+  };
+}
+
+/* Pick the final colours, then knock the paper out of the crop. A pencil
+   drawing has no colour of its own, so it gets a vivid palette from its
+   name and keeps its pencil lines on top - the art still shows. */
+function finalisePalette(a, seed) {
+  if (a.lowColour) {
+    const [p, s, ac] = paletteFromName(seed);
+    a.primary = p.map(Math.round);
+    a.secondary = s.map(Math.round);
+    a.accent = ac.map(Math.round);
+  }
+  const g = a.crop.getContext("2d", { willReadFrequently: true });
+  const d = g.getImageData(0, 0, a.crop.width, a.crop.height);
+  const ink = shade(a.primary, -95).map(Math.round);
+  for (let i = 0; i < d.data.length; i += 4) {
+    const c = [d.data[i], d.data[i + 1], d.data[i + 2]];
+    let out;
+    if (dist(c, a.bg) <= a.thresh) out = a.primary;          // paper -> body colour
+    else if (a.lowColour && luma(c) < 110) out = ink;        // pencil line -> dark tint
+    else if (a.lowColour) out = a.primary;
+    else out = c;
+    d.data[i] = out[0]; d.data[i + 1] = out[1]; d.data[i + 2] = out[2];
+    d.data[i + 3] = 255;
+  }
+  g.putImageData(d, 0, 0);
+  return a;
+}
+
+/* Downscale line art to skin resolution. Averaging erases pencil lines and
+   darkest-wins turns everything black once lines are dense, so a cell becomes
+   ink only when enough of it is actually dark. */
+function inkPreservingResize(src, tw, th, inkRgb, bodyRgb, coverage) {
+  coverage = coverage === undefined ? 0.16 : coverage;
+  const sg = src.getContext("2d", { willReadFrequently: true });
+  const sd = sg.getImageData(0, 0, src.width, src.height);
+  const S = src.width, SH = src.height;
+
+  // median-ish denoise: paper grain reads as ink at this scale
+  const lum = new Float32Array(S * SH);
+  for (let i = 0, p = 0; i < sd.data.length; i += 4, p++) {
+    lum[p] = luma([sd.data[i], sd.data[i + 1], sd.data[i + 2]]);
+  }
+  const sm = new Float32Array(S * SH);
+  for (let y = 0; y < SH; y++) {
+    for (let x = 0; x < S; x++) {
+      const v = [];
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const nx = x + dx, ny = y + dy;
+        if (nx >= 0 && nx < S && ny >= 0 && ny < SH) v.push(lum[ny * S + nx]);
+      }
+      v.sort((a, b) => a - b);
+      sm[y * S + x] = v[v.length >> 1];
+    }
+  }
+
+  const sorted = Float32Array.from(sm).sort();
+  const lo = sorted[Math.floor(sorted.length * 0.06)];
+  const hi = sorted[Math.floor(sorted.length * 0.94)];
+  const cut = lo + (hi - lo) * 0.45;
+
+  const isInk = new Uint8Array(tw * th);
+  for (let ty = 0; ty < th; ty++) {
+    for (let tx = 0; tx < tw; tx++) {
+      const x0 = Math.floor(tx * S / tw), x1 = Math.max(x0 + 1, Math.floor((tx + 1) * S / tw));
+      const y0 = Math.floor(ty * SH / th), y1 = Math.max(y0 + 1, Math.floor((ty + 1) * SH / th));
+      let dark = 0, tot = 0;
+      for (let yy = y0; yy < Math.min(y1, SH); yy++) {
+        for (let xx = x0; xx < Math.min(x1, S); xx++) {
+          tot++;
+          if (sm[yy * S + xx] < cut) dark++;
+        }
+      }
+      if (tot && dark / tot >= coverage) isInk[ty * tw + tx] = 1;
+    }
+  }
+  // drop truly isolated pixels: at this scale they are grain
+  const cleaned = Uint8Array.from(isInk);
+  for (let ty = 0; ty < th; ty++) {
+    for (let tx = 0; tx < tw; tx++) {
+      if (!isInk[ty * tw + tx]) continue;
+      let n = 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        if (!dx && !dy) continue;
+        const nx = tx + dx, ny = ty + dy;
+        if (nx >= 0 && nx < tw && ny >= 0 && ny < th && isInk[ny * tw + nx]) n++;
+      }
+      if (n < 1) cleaned[ty * tw + tx] = 0;
+    }
+  }
+
+  const out = new ImageData(tw, th);
+  for (let i = 0; i < tw * th; i++) {
+    const c = cleaned[i] ? inkRgb : bodyRgb;
+    const o = i * 4;
+    out.data[o] = c[0]; out.data[o + 1] = c[1]; out.data[o + 2] = c[2]; out.data[o + 3] = 255;
+  }
+  return out;
+}
+
+/* ---------- 2. paint the entity texture --------------------- */
+function buildTexture(a) {
+  const cv = document.createElement("canvas");
+  cv.width = TEX; cv.height = TEX;
+  const g = cv.getContext("2d", { willReadFrequently: true });
+  g.imageSmoothingEnabled = false;
+
+  /* opaque base everywhere: a transparent texel renders as a hole */
+  g.fillStyle = rgbToHex(a.primary);
+  g.fillRect(0, 0, TEX, TEX);
+
+  const limbCol   = rgbToHex(shade(a.secondary, -18));
+  const limbShade = rgbToHex(shade(a.secondary, -60));
+  const topCol    = rgbToHex(a.accent);
+  const sideCol   = rgbToHex(shade(a.primary, -26));
+  const backCol   = rgbToHex(shade(a.primary, -12));
+
+  for (const box of BOXES) {
+    const [w, h, d] = box.size;
+    const f = faceRects(box.uv[0], box.uv[1], w, h, d);
+
+    if (box.role === "body") {
+      // sides / top / bottom / back in flat shades
+      for (const k of ["up", "down", "west", "east", "south"]) {
+        const [x, y, fw, fh] = f[k];
+        g.fillStyle = (k === "south") ? backCol : sideCol;
+        g.fillRect(x, y, fw, fh);
+      }
+      // FRONT = the child's actual drawing. It already has the face, so
+      // nothing is painted over it.
+      const [x, y, fw, fh] = f.north;
+      g.putImageData(inkPreservingResize(a.crop, fw, fh,
+                 shade(a.primary, -105).map(Math.round), a.primary), x, y);
+    } else {
+      const col = box.role === "top" ? topCol : limbCol;
+      for (const k of ["up", "down", "west", "north", "east", "south"]) {
+        const [x, y, fw, fh] = f[k];
+        g.fillStyle = col;
+        g.fillRect(x, y, fw, fh);
+      }
+      // one shaded edge so limbs read as 3D
+      const [nx, ny, , nh] = f.north;
+      g.fillStyle = limbShade;
+      g.fillRect(nx, ny, 1, nh);
+    }
+  }
+
+  // guarantee full opacity
+  const id = g.getImageData(0, 0, TEX, TEX);
+  for (let i = 3; i < id.data.length; i += 4) id.data[i] = 255;
+  g.putImageData(id, 0, 0);
+  return cv;
+}
+
+/* item icon: a small orb in the character's colours */
+function buildItemIcon(a) {
+  const cv = document.createElement("canvas");
+  cv.width = 16; cv.height = 16;
+  const g = cv.getContext("2d");
+  g.clearRect(0, 0, 16, 16);
+  const body = rgbToHex(a.primary);
+  const edge = rgbToHex(shade(a.primary, -70));
+  const glow = rgbToHex(mix(a.accent, [255, 255, 255], 0.45));
+  // rounded gem shape
+  const rows = [[5,10],[3,12],[2,13],[2,13],[2,13],[2,13],[2,13],[3,12],[3,12],[4,11],[5,10],[6,9]];
+  rows.forEach((r, i) => {
+    const y = i + 2;
+    g.fillStyle = body;
+    g.fillRect(r[0], y, r[1] - r[0] + 1, 1);
+    g.fillStyle = edge;
+    g.fillRect(r[0], y, 1, 1);
+    g.fillRect(r[1], y, 1, 1);
+  });
+  g.fillStyle = glow;
+  g.fillRect(5, 4, 2, 2);
+  g.fillStyle = rgbToHex(a.accent);
+  g.fillRect(7, 9, 2, 2);
+  return cv;
+}
+
+/* pack thumbnail shown in Minecraft's add-on list = their drawing */
+function buildPackIcon(a) {
+  const S = 128;
+  const cv = document.createElement("canvas");
+  cv.width = S; cv.height = S;
+  const g = cv.getContext("2d");
+  g.fillStyle = rgbToHex(mix(a.primary, [255, 255, 255], 0.12));
+  g.fillRect(0, 0, S, S);
+  const s = Math.min(a.crop.width, a.crop.height);
+  const sx = (a.crop.width - s) / 2, sy = (a.crop.height - s) / 2;
+  g.imageSmoothingEnabled = true;
+  g.drawImage(a.crop, sx, sy, s, s, 6, 6, S - 12, S - 12);
+  g.strokeStyle = rgbToHex(shade(a.primary, -70));
+  g.lineWidth = 6;
+  g.strokeRect(3, 3, S - 6, S - 6);
+  return cv;
+}
+
+async function canvasBytes(cv) {
+  const blob = await new Promise(res => cv.toBlob(res, "image/png"));
+  return new Uint8Array(await blob.arrayBuffer());
+}
+
+/* ---------- 3. Bedrock JSON -------------------------------- */
+function buildGeometry(id) {
+  const kids = { root: ["body"], body: ["left_arm", "right_arm", "left_leg", "right_leg", "topper"] };
+  const order = ["root", "body", "left_arm", "right_arm", "left_leg", "right_leg", "topper"];
+  const byName = Object.fromEntries(BOXES.map(b => [b.name, b]));
+
+  const bones = order.map(name => {
+    const bone = { name, pivot: PIVOTS[name] };
+    if (kids[name]) bone.children = kids[name];
+    const b = byName[name];
+    if (b) bone.cubes = [{ origin: b.origin, size: b.size, uv: b.uv }];
+    return bone;
+  });
+
+  return {
+    format_version: "1.16.0",
+    "minecraft:geometry": [{
+      description: {
+        identifier: `geometry.${id}.main`,
+        texture_width: TEX,
+        texture_height: TEX,
+        visible_bounds_width: 3,
+        visible_bounds_height: 3,
+        visible_bounds_offset: [0, 1, 0]
+      },
+      bones
+    }]
+  };
+}
+
+const TRAITS = {
+  friendly: { speed: 0.22, stroll: 0.9,  look: 0.10, scaleAdj: 0,     desc: "friendly" },
+  shy:      { speed: 0.18, stroll: 0.6,  look: 0.04, scaleAdj: -0.05, desc: "shy" },
+  bouncy:   { speed: 0.28, stroll: 1.15, look: 0.08, scaleAdj: -0.02, desc: "bouncy" },
+  sneaky:   { speed: 0.26, stroll: 1.0,  look: 0.05, scaleAdj: -0.08, desc: "sneaky" },
+  brave:    { speed: 0.24, stroll: 0.85, look: 0.12, scaleAdj: 0.06,  desc: "brave" }
+};
+
+function buildPack(opts) {
+  const { id, display, trait, version, texBytes, iconBytes, packIconBytes, analysis } = opts;
+  const t = TRAITS[trait] || TRAITS.friendly;
+  const scale = +(MODEL_SCALE + t.scaleAdj).toFixed(2);
+
+  const bpHeader = uuidFrom(id + "|bp|header");
+  const bpModule = uuidFrom(id + "|bp|module");
+  const rpHeader = uuidFrom(id + "|rp|header");
+  const rpModule = uuidFrom(id + "|rp|module");
+
+  const entity = `junkbunch:${id}`;
+  const item   = `junkbunch:${id}_charm`;
+  const files  = [];
+  const J = (path, obj) => files.push({ path, bytes: enc.encode(JSON.stringify(obj, null, 2)) });
+
+  /* ---- manifests (BP depends on RP only: no dependency loop) ---- */
+  J("JunkBunch_BP/manifest.json", {
+    format_version: 2,
+    header: {
+      name: `${display} (Junk Bunch)`,
+      description: `${display} - behaviour`,
+      uuid: bpHeader, version, min_engine_version: [1, 20, 50]
+    },
+    modules: [{ type: "data", description: `${display} entity, item and recipe`, uuid: bpModule, version }],
+    dependencies: [{ uuid: rpHeader, version }]
+  });
+
+  J("JunkBunch_RP/manifest.json", {
+    format_version: 2,
+    header: {
+      name: `${display} (Junk Bunch)`,
+      description: `${display} - looks`,
+      uuid: rpHeader, version, min_engine_version: [1, 20, 50]
+    },
+    modules: [{ type: "resources", description: `${display} model and texture`, uuid: rpModule, version }]
+  });
+
+  /* ---- behaviour: entity ---- */
+  J("JunkBunch_BP/entities/" + id + ".json", {
+    format_version: "1.20.50",
+    "minecraft:entity": {
+      description: { identifier: entity, is_spawnable: true, is_summonable: true, is_experimental: false },
+      component_groups: {
+        "junkbunch:wild": {
+          "minecraft:tameable": {
+            probability: 1.0,
+            tame_items: [item],
+            tame_event: { event: "junkbunch:on_tamed", target: "self" }
+          }
+        },
+        "junkbunch:tamed": {
+          "minecraft:is_tamed": {},
+          "minecraft:behavior.follow_owner": {
+            priority: 3, speed_multiplier: 1.1, start_distance: 4.0, stop_distance: 1.5
+          },
+          "minecraft:persistent": {}
+        }
+      },
+      components: {
+        "minecraft:type_family": { family: [id, "junkbunch", "mob"] },
+        "minecraft:health": { value: 12, max: 12 },
+        "minecraft:scale": { value: scale },
+        "minecraft:collision_box": { width: 0.7, height: +(30 * scale / 16).toFixed(2) },
+        "minecraft:breathable": { total_supply: 15, suffocate_time: 0 },
+        "minecraft:physics": { has_gravity: true, has_collision: true },
+        "minecraft:movement": { value: t.speed },
+        "minecraft:movement.basic": {},
+        "minecraft:navigation.walk": { can_path_over_water: true, avoid_water: true, avoid_damage_blocks: true },
+        "minecraft:jump.static": {},
+        "minecraft:can_climb": {},
+        "minecraft:nameable": {},
+        "minecraft:pushable": { is_pushable: true, is_pushable_by_piston: true },
+        "minecraft:leashable": { soft_distance: 4.0, hard_distance: 6.0, max_distance: 10.0 },
+        "minecraft:damage_sensor": { triggers: [{ cause: "fall", deals_damage: false }] },
+        "minecraft:behavior.float": { priority: 0 },
+        "minecraft:behavior.panic": { priority: 1, speed_multiplier: 1.25 },
+        "minecraft:behavior.look_at_player": { priority: 6, look_distance: 8.0, probability: t.look },
+        "minecraft:behavior.random_stroll": { priority: 7, speed_multiplier: t.stroll },
+        "minecraft:behavior.random_look_around": { priority: 8 }
+      },
+      events: {
+        "minecraft:entity_spawned": { add: { component_groups: ["junkbunch:wild"] } },
+        "junkbunch:on_tamed": {
+          remove: { component_groups: ["junkbunch:wild"] },
+          add: { component_groups: ["junkbunch:tamed"] }
+        }
+      }
+    }
+  });
+
+  /* ---- behaviour: summon item + recipe ---- */
+  J("JunkBunch_BP/items/" + id + "_charm.json", {
+    format_version: "1.20.50",
+    "minecraft:item": {
+      description: { identifier: item, menu_category: { category: "equipment" } },
+      components: {
+        "minecraft:max_stack_size": 1,
+        "minecraft:icon": { texture: id + "_charm" },
+        "minecraft:hand_equipped": true,
+        "minecraft:allow_off_hand": true,
+        "minecraft:entity_placer": { entity: entity }
+      }
+    }
+  });
+
+  J("JunkBunch_BP/recipes/" + id + "_charm.json", {
+    format_version: "1.20.50",
+    "minecraft:recipe_shaped": {
+      description: { identifier: item },
+      tags: ["crafting_table"],
+      pattern: [" A ", "ABA", " A "],
+      key: { A: { item: "minecraft:stick" }, B: { item: "minecraft:emerald" } },
+      unlock: [{ item: "minecraft:stick" }],
+      result: { item: item, count: 1 }
+    }
+  });
+
+  /* ---- resources: client entity ---- */
+  J("JunkBunch_RP/entity/" + id + ".json", {
+    format_version: "1.10.0",
+    "minecraft:client_entity": {
+      description: {
+        identifier: entity,
+        materials: { default: "entity_alphatest" },
+        geometry: { default: `geometry.${id}.main` },
+        textures: { default: `textures/entity/junkbunch/${id}` },
+        animations: {
+          idle: `animation.${id}.idle`,
+          walk: `animation.${id}.walk`,
+          move_controller: `controller.animation.${id}.move`
+        },
+        scripts: { animate: ["move_controller"] },
+        render_controllers: [`controller.render.${id}`],
+        spawn_egg: {
+          base_color: rgbToHex(analysis.primary),
+          overlay_color: rgbToHex(analysis.accent)
+        }
+      }
+    }
+  });
+
+  J("JunkBunch_RP/models/entity/" + id + ".geo.json", buildGeometry(id));
+
+  J("JunkBunch_RP/render_controllers/" + id + ".json", {
+    format_version: "1.10.0",
+    render_controllers: {
+      [`controller.render.${id}`]: {
+        geometry: "Geometry.default",
+        materials: [{ "*": "Material.default" }],
+        textures: ["Texture.default"]
+      }
+    }
+  });
+
+  J("JunkBunch_RP/animation_controllers/" + id + ".json", {
+    format_version: "1.10.0",
+    animation_controllers: {
+      [`controller.animation.${id}.move`]: {
+        initial_state: "idle",
+        states: {
+          idle: { animations: ["idle"], transitions: [{ walk: "query.modified_move_speed > 0.1" }] },
+          walk: { animations: ["walk"], transitions: [{ idle: "query.modified_move_speed <= 0.1" }] }
+        }
+      }
+    }
+  });
+
+  const bob = t.desc === "bouncy" ? 1.1 : 0.45;
+  J("JunkBunch_RP/animations/" + id + ".animation.json", {
+    format_version: "1.8.0",
+    animations: {
+      [`animation.${id}.idle`]: {
+        loop: true, animation_length: 3.0,
+        bones: {
+          body:   { position: [0, `math.sin(query.anim_time * 120) * ${bob}`, 0] },
+          topper: { rotation: [0, 0, "math.sin(query.anim_time * 150) * 6"] }
+        }
+      },
+      [`animation.${id}.walk`]: {
+        loop: true, animation_length: 1.0,
+        bones: {
+          body:      { position: [0, `math.sin(query.anim_time * 720) * ${bob * 0.6}`, 0] },
+          left_arm:  { rotation: ["math.sin(query.anim_time * 360) * 32", 0, 0] },
+          right_arm: { rotation: ["math.sin(query.anim_time * 360 + 180) * 32", 0, 0] },
+          left_leg:  { rotation: ["math.sin(query.anim_time * 360 + 180) * 38", 0, 0] },
+          right_leg: { rotation: ["math.sin(query.anim_time * 360) * 38", 0, 0] }
+        }
+      }
+    }
+  });
+
+  J("JunkBunch_RP/textures/item_texture.json", {
+    resource_pack_name: "JunkBunch",
+    texture_name: "atlas.items",
+    texture_data: { [id + "_charm"]: { textures: `textures/items/${id}_charm` } }
+  });
+
+  files.push({ path: "JunkBunch_RP/texts/languages.json", bytes: enc.encode(JSON.stringify(["en_US"], null, 2)) });
+  files.push({
+    path: "JunkBunch_RP/texts/en_US.lang",
+    bytes: enc.encode(
+      `item.${item}=${display}'s Charm\n` +
+      `entity.${entity}.name=${display}\n` +
+      `item.spawn_egg.entity.${entity}.name=Spawn ${display}\n` +
+      `pack.name=${display} (Junk Bunch)\n` +
+      `pack.description=${display} - a Junk Bunch character\n`
+    )
+  });
+
+  files.push({ path: `JunkBunch_RP/textures/entity/junkbunch/${id}.png`, bytes: texBytes });
+  files.push({ path: `JunkBunch_RP/textures/items/${id}_charm.png`, bytes: iconBytes });
+  files.push({ path: "JunkBunch_RP/pack_icon.png", bytes: packIconBytes });
+  files.push({ path: "JunkBunch_BP/pack_icon.png", bytes: packIconBytes });
+
+  return files;
+}
+
+/* ---------- 4. zip writer (store, no compression) ----------- */
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+function crc32(buf) {
+  let c = 0xffffffff;
+  for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+function zip(files) {
+  const chunks = [];
+  const central = [];
+  let offset = 0;
+
+  const dosTime = () => {
+    const d = new Date();
+    const time = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+    const date = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+    return { time, date };
+  };
+  const { time, date } = dosTime();
+
+  for (const f of files) {
+    const nameBytes = enc.encode(f.path);
+    const data = f.bytes;
+    const crc = crc32(data);
+
+    const local = new Uint8Array(30 + nameBytes.length);
+    const lv = new DataView(local.buffer);
+    lv.setUint32(0, 0x04034b50, true);
+    lv.setUint16(4, 20, true);        // version needed
+    lv.setUint16(6, 0, true);         // flags
+    lv.setUint16(8, 0, true);         // method 0 = store
+    lv.setUint16(10, time, true);
+    lv.setUint16(12, date, true);
+    lv.setUint32(14, crc, true);
+    lv.setUint32(18, data.length, true);
+    lv.setUint32(22, data.length, true);
+    lv.setUint16(26, nameBytes.length, true);
+    lv.setUint16(28, 0, true);
+    local.set(nameBytes, 30);
+
+    chunks.push(local, data);
+
+    const cen = new Uint8Array(46 + nameBytes.length);
+    const cv = new DataView(cen.buffer);
+    cv.setUint32(0, 0x02014b50, true);
+    cv.setUint16(4, 20, true);
+    cv.setUint16(6, 20, true);
+    cv.setUint16(8, 0, true);
+    cv.setUint16(10, 0, true);
+    cv.setUint16(12, time, true);
+    cv.setUint16(14, date, true);
+    cv.setUint32(16, crc, true);
+    cv.setUint32(20, data.length, true);
+    cv.setUint32(24, data.length, true);
+    cv.setUint16(28, nameBytes.length, true);
+    cv.setUint16(30, 0, true);
+    cv.setUint16(32, 0, true);
+    cv.setUint16(34, 0, true);
+    cv.setUint16(36, 0, true);
+    cv.setUint32(38, 0, true);
+    cv.setUint32(42, offset, true);
+    cen.set(nameBytes, 46);
+    central.push(cen);
+
+    offset += local.length + data.length;
+  }
+
+  const centralSize = central.reduce((n, c) => n + c.length, 0);
+  const end = new Uint8Array(22);
+  const ev = new DataView(end.buffer);
+  ev.setUint32(0, 0x06054b50, true);
+  ev.setUint16(8, files.length, true);
+  ev.setUint16(10, files.length, true);
+  ev.setUint32(12, centralSize, true);
+  ev.setUint32(16, offset, true);
+
+  return new Blob([...chunks, ...central, end], { type: "application/octet-stream" });
+}
+
+/* ---------- 5. self-check before handing over the file ------ */
+function verifyPack(files) {
+  const problems = [];
+  const paths = new Set(files.map(f => f.path));
+  const roots = new Set(files.map(f => f.path.split("/")[0]));
+
+  if (roots.size !== 2 || !roots.has("JunkBunch_BP") || !roots.has("JunkBunch_RP")) {
+    problems.push("archive layout is wrong");
+  }
+
+  const json = {};
+  for (const f of files) {
+    if (!f.path.endsWith(".json")) continue;
+    try { json[f.path] = JSON.parse(new TextDecoder().decode(f.bytes)); }
+    catch (e) { problems.push("bad JSON in " + f.path); }
+  }
+
+  const bp = json["JunkBunch_BP/manifest.json"];
+  const rp = json["JunkBunch_RP/manifest.json"];
+  if (!bp || !rp) { problems.push("missing a manifest"); return problems; }
+
+  const ids = [bp.header.uuid, rp.header.uuid, ...bp.modules.map(m => m.uuid), ...rp.modules.map(m => m.uuid)];
+  const re = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  ids.forEach(u => { if (!re.test(u || "")) problems.push("bad id " + u); });
+  if (new Set(ids).size !== ids.length) problems.push("duplicate ids");
+  if (bp.modules[0].type !== "data") problems.push("behaviour module type wrong");
+  if (rp.modules[0].type !== "resources") problems.push("resource module type wrong");
+  if ((rp.dependencies || []).length) problems.push("dependency loop");
+
+  // every reference the client entity makes must exist
+  const ce = Object.entries(json).find(([p]) => p.startsWith("JunkBunch_RP/entity/"));
+  if (!ce) problems.push("no client entity");
+  else {
+    const d = ce[1]["minecraft:client_entity"].description;
+    const geoId = d.geometry.default;
+    const geoFile = Object.values(json).find(v => v["minecraft:geometry"]);
+    if (!geoFile || geoFile["minecraft:geometry"][0].description.identifier !== geoId) {
+      problems.push("model missing");
+    }
+    if (!paths.has("JunkBunch_RP/" + d.textures.default + ".png")) problems.push("texture missing");
+    const rcName = d.render_controllers[0];
+    const rcFile = Object.values(json).find(v => v.render_controllers);
+    if (!rcFile || !rcFile.render_controllers[rcName]) problems.push("render controller missing");
+    for (const key of d.scripts.animate) {
+      if (!d.animations[key]) problems.push("animation key " + key + " missing");
+    }
+    const acFile = Object.values(json).find(v => v.animation_controllers);
+    const animFile = Object.values(json).find(v => v.animations && !v.animation_controllers);
+    for (const [k, v] of Object.entries(d.animations)) {
+      if (v.startsWith("controller.")) {
+        if (!acFile || !acFile.animation_controllers[v]) problems.push("controller " + v + " missing");
+      } else if (!animFile || !animFile.animations[v]) {
+        problems.push("animation " + v + " missing");
+      }
+    }
+  }
+
+  const be = Object.entries(json).find(([p]) => p.startsWith("JunkBunch_BP/entities/"));
+  if (!be) problems.push("no behaviour entity");
+  const it = Object.entries(json).find(([p]) => p.startsWith("JunkBunch_BP/items/"));
+  if (it) {
+    const comps = it[1]["minecraft:item"].components;
+    const key = comps["minecraft:icon"].texture;
+    const itex = json["JunkBunch_RP/textures/item_texture.json"];
+    if (!itex || !itex.texture_data[key]) problems.push("item icon not registered");
+    else if (!paths.has("JunkBunch_RP/" + itex.texture_data[key].textures + ".png")) {
+      problems.push("item icon file missing");
+    }
+  }
+  if (!paths.has("JunkBunch_RP/pack_icon.png") || !paths.has("JunkBunch_BP/pack_icon.png")) {
+    problems.push("thumbnail missing");
+  }
+  return problems;
+}
+
+/* ---------- 6. preview drawing ------------------------------ */
+function drawPreview(cv, tex, scale) {
+  const g = cv.getContext("2d");
+  g.imageSmoothingEnabled = false;
+  g.clearRect(0, 0, cv.width, cv.height);
+
+  const unit = 8.2;                       // screen px per model unit
+  const eff = unit * (scale / MODEL_SCALE) * MODEL_SCALE;
+  const groundY = cv.height - 26;
+  const cxp = cv.width / 2 - 34;
+
+  // player silhouette for scale
+  const playerH = Math.round(1.8 * 16 * eff / 1.0);
+  g.fillStyle = "rgba(120,130,140,0.30)";
+  const pw = Math.round(playerH * 0.28);
+  g.fillRect(cv.width - 70, groundY - playerH, pw, playerH);
+  g.fillStyle = "rgba(90,100,110,0.55)";
+  g.font = "500 11px system-ui, sans-serif";
+  g.textAlign = "center";
+  g.fillText("player", cv.width - 70 + pw / 2, groundY + 15);
+
+  // the character, drawn from its own boxes + skin (front faces)
+  const order = ["left_leg", "right_leg", "left_arm", "right_arm", "body", "topper"];
+  for (const name of order) {
+    const b = BOXES.find(x => x.name === name);
+    if (!b) continue;
+    const [w, h, d] = b.size;
+    const [fx, fy, fw, fh] = faceRects(b.uv[0], b.uv[1], w, h, d).north;
+    const dw = Math.max(1, Math.round(w * eff));
+    const dh = Math.max(1, Math.round(h * eff));
+    const sx = Math.round(cxp + b.origin[0] * eff);
+    const sy = Math.round(groundY - (b.origin[1] + h) * eff);
+    g.drawImage(tex, fx, fy, fw, fh, sx, sy, dw, dh);
+  }
+
+  g.fillStyle = "rgba(90,100,110,0.55)";
+  g.fillText("your character", cxp + 6, groundY + 15);
+}
+
+/* ---------- 7. wire up the page ----------------------------- */
+const $ = id => document.getElementById(id);
+const fileInput = $("file"), shot = $("shot"), shotImg = $("shotImg"), shotHint = $("shotHint");
+const nameInput = $("name"), goBtn = $("go"), statusEl = $("status"), resultCard = $("result");
+const dlLink = $("download"), previewCv = $("preview");
+
+let chosenFile = null;
+let trait = "friendly";
+let blobUrl = null;
+let prep = null;                 // { cv, W, H, bg, thresh, box }
+let cropBox = null;              // in prep-canvas coordinates
+
+/* --- crop box drawing + touch handling --- */
+const cropCv = $("cropCv"), cropWrap = $("cropWrap");
+const HANDLE = 26;               // touch target for corners, in screen px
+
+function paintCrop() {
+  if (!prep || !cropBox) return;
+  const scale = cropCv.width / prep.W;
+  const g = cropCv.getContext("2d");
+  g.clearRect(0, 0, cropCv.width, cropCv.height);
+  g.drawImage(prep.cv, 0, 0, cropCv.width, cropCv.height);
+
+  const x = cropBox.x * scale, y = cropBox.y * scale;
+  const w = cropBox.w * scale, h = cropBox.h * scale;
+
+  g.fillStyle = "rgba(0,0,0,0.45)";
+  g.fillRect(0, 0, cropCv.width, y);
+  g.fillRect(0, y + h, cropCv.width, cropCv.height - y - h);
+  g.fillRect(0, y, x, h);
+  g.fillRect(x + w, y, cropCv.width - x - w, h);
+
+  g.strokeStyle = "#fff";
+  g.lineWidth = 3;
+  g.strokeRect(x, y, w, h);
+  g.fillStyle = "#fff";
+  const r = 9;
+  [[x, y], [x + w, y], [x, y + h], [x + w, y + h]].forEach(([px, py]) => {
+    g.beginPath(); g.arc(px, py, r, 0, Math.PI * 2); g.fill();
+  });
+}
+
+function showCrop(bmp) {
+  prep = prepare(bmp);
+  cropBox = { ...prep.box };
+  const maxW = Math.min(520, cropWrap.clientWidth || 380);
+  cropCv.width = maxW;
+  cropCv.height = Math.round(maxW * prep.H / prep.W);
+  cropWrap.classList.remove("hidden");
+  paintCrop();
+}
+
+let drag = null;
+function localPoint(ev) {
+  const r = cropCv.getBoundingClientRect();
+  const t = ev.touches ? ev.touches[0] : ev;
+  return {
+    x: (t.clientX - r.left) * (cropCv.width / r.width),
+    y: (t.clientY - r.top) * (cropCv.height / r.height)
+  };
+}
+function onDown(ev) {
+  if (!cropBox) return;
+  ev.preventDefault();
+  const p = localPoint(ev);
+  const s = cropCv.width / prep.W;
+  const x = cropBox.x * s, y = cropBox.y * s, w = cropBox.w * s, h = cropBox.h * s;
+  const corners = { nw: [x, y], ne: [x + w, y], sw: [x, y + h], se: [x + w, y + h] };
+  let hit = null;
+  for (const [k, [cx2, cy2]] of Object.entries(corners)) {
+    if (Math.hypot(p.x - cx2, p.y - cy2) < HANDLE) { hit = k; break; }
+  }
+  drag = { mode: hit || "move", start: p, box: { ...cropBox } };
+}
+function onMove(ev) {
+  if (!drag || !cropBox) return;
+  ev.preventDefault();
+  const p = localPoint(ev);
+  const s = cropCv.width / prep.W;
+  const dx = (p.x - drag.start.x) / s, dy = (p.y - drag.start.y) / s;
+  const b = drag.box;
+  let n = { ...b };
+  if (drag.mode === "move") {
+    n.x = clamp(b.x + dx, 0, prep.W - b.w);
+    n.y = clamp(b.y + dy, 0, prep.H - b.h);
+  } else {
+    if (drag.mode.includes("w")) { n.x = clamp(b.x + dx, 0, b.x + b.w - 8); n.w = b.w - (n.x - b.x); }
+    if (drag.mode.includes("n")) { n.y = clamp(b.y + dy, 0, b.y + b.h - 8); n.h = b.h - (n.y - b.y); }
+    if (drag.mode.includes("e")) { n.w = clamp(b.w + dx, 8, prep.W - b.x); }
+    if (drag.mode.includes("s")) { n.h = clamp(b.h + dy, 8, prep.H - b.y); }
+  }
+  cropBox = n;
+  paintCrop();
+}
+function onUp() { drag = null; }
+
+cropCv.addEventListener("touchstart", onDown, { passive: false });
+cropCv.addEventListener("touchmove", onMove, { passive: false });
+cropCv.addEventListener("touchend", onUp);
+cropCv.addEventListener("mousedown", onDown);
+window.addEventListener("mousemove", onMove);
+window.addEventListener("mouseup", onUp);
+
+function setStatus(msg, kind) {
+  statusEl.className = "status" + (kind ? " " + kind : "");
+  statusEl.innerHTML = "";
+  if (kind === "busy") {
+    const s = document.createElement("span");
+    s.className = "spinner";
+    statusEl.appendChild(s);
+  }
+  statusEl.appendChild(document.createTextNode(msg));
+}
+
+function refreshGo() {
+  goBtn.disabled = !(prep && cropBox && nameInput.value.trim().length > 0);
+}
+
+fileInput.addEventListener("change", async () => {
+  const f = fileInput.files && fileInput.files[0];
+  if (!f) return;
+  chosenFile = f;
+  shot.classList.add("hidden");
+  setStatus("Finding the drawing...", "busy");
+  try {
+    const bmp = await loadBitmap(f);
+    showCrop(bmp);
+    setStatus("Drag the box onto one character, then name it.");
+  } catch (err) {
+    shot.classList.remove("hidden");
+    setStatus(err.message, "err");
+  }
+  refreshGo();
+});
+
+$("retake").addEventListener("click", () => {
+  fileInput.value = "";
+  chosenFile = null; prep = null; cropBox = null;
+  cropWrap.classList.add("hidden");
+  shot.classList.remove("hidden");
+  setStatus("");
+  refreshGo();
+});
+
+nameInput.addEventListener("input", refreshGo);
+
+$("traitrow").addEventListener("click", e => {
+  const btn = e.target.closest(".chip");
+  if (!btn) return;
+  [...document.querySelectorAll(".chip")].forEach(c => c.setAttribute("aria-pressed", "false"));
+  btn.setAttribute("aria-pressed", "true");
+  trait = btn.dataset.trait;
+});
+
+$("again").addEventListener("click", () => {
+  chosenFile = null; prep = null; cropBox = null;
+  fileInput.value = "";
+  cropWrap.classList.add("hidden");
+  shot.classList.remove("hidden");
+  nameInput.value = "";
+  resultCard.classList.add("hidden");
+  setStatus("");
+  refreshGo();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+});
+
+goBtn.addEventListener("click", async () => {
+  if (!chosenFile) return;
+  goBtn.disabled = true;
+  resultCard.classList.add("hidden");
+
+  try {
+    setStatus("Looking at the drawing...", "busy");
+    await new Promise(r => setTimeout(r, 30));
+    const raw = analyseCrop(prep, cropBox);
+
+    setStatus("Building the model...", "busy");
+    await new Promise(r => setTimeout(r, 30));
+    const display = titleCase(nameInput.value);
+    const id = slug(display);
+    const version = nextVersion(id);
+    const analysis = finalisePalette(raw, id);
+
+    const texCv = buildTexture(analysis);
+    const [texBytes, iconBytes, packIconBytes] = await Promise.all([
+      canvasBytes(texCv),
+      canvasBytes(buildItemIcon(analysis)),
+      canvasBytes(buildPackIcon(analysis))
+    ]);
+
+    setStatus("Packing it up...", "busy");
+    await new Promise(r => setTimeout(r, 30));
+    const files = buildPack({ id, display, trait, version, texBytes, iconBytes, packIconBytes, analysis });
+
+    const problems = verifyPack(files);
+    if (problems.length) throw new Error("Check failed: " + problems.join("; "));
+
+    const blob = zip(files);
+    if (blobUrl) URL.revokeObjectURL(blobUrl);
+    blobUrl = URL.createObjectURL(blob);
+    dlLink.href = blobUrl;
+    dlLink.download = `${display.replace(/[^A-Za-z0-9]+/g, "")}.mcaddon`;
+    dlLink.textContent = `Download ${display}`;
+
+    const t = TRAITS[trait];
+    const scale = +(MODEL_SCALE + t.scaleAdj).toFixed(2);
+    drawPreview(previewCv, texCv, scale);
+
+    $("resName").textContent = display;
+    $("fHeight").textContent = (30 * scale / 16).toFixed(2) + " blocks";
+    $("fItem").textContent = `${display}'s Charm`;
+    $("fTrait").textContent = t.desc.replace(/^./, c => c.toUpperCase());
+    $("fSwatch").innerHTML = "";
+    [analysis.primary, analysis.secondary, analysis.accent].forEach(c => {
+      const i = document.createElement("i");
+      i.style.background = rgbToHex(c);
+      $("fSwatch").appendChild(i);
+    });
+
+    resultCard.classList.remove("hidden");
+    setStatus(`${display} is ready — ${files.length} files, all checks passed.`, "ok");
+    resultCard.scrollIntoView({ behavior: "smooth", block: "start" });
+  } catch (err) {
+    setStatus(err.message || "Something went wrong. Try another photo.", "err");
+  } finally {
+    goBtn.disabled = false;
+    refreshGo();
+  }
+});
+</script>
