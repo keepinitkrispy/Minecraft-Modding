@@ -19,6 +19,7 @@ import zipfile
 from PIL import Image, ImageFilter
 
 import shape as S
+import trace_art as T
 
 TEX = 64
 MODEL_SCALE = 0.5
@@ -449,18 +450,25 @@ def build_pack(out_dir, cid, display, trait, version, analysis):
     t = TRAITS.get(trait, TRAITS["friendly"])
 
     # the drawing's own outline becomes the model's shape
-    ink = analysis["ink"]
-    solid = analysis["solid"]
-    cubes = S.stylised_cubes(S.clean_profile(solid))
-    if not cubes:
-        raise SystemExit("no drawing found in that crop")
-    geo = S.build_geometry(cid, cubes, TEX, TEX)
-    height_units = S.model_height_units(cubes)
+    art_grid = analysis.get("art_grid")
+    if art_grid is not None:
+        cubes = T.cubes(art_grid)
+        geo = T.build_geometry(cid, cubes, tex=TEX)
+        width_units, height_units = T.dims(cubes)
+        width_cells = width_units
+    else:
+        ink = analysis["ink"]
+        solid = analysis["solid"]
+        cubes = S.stylised_cubes(S.clean_profile(solid))
+        if not cubes:
+            raise SystemExit("no drawing found in that crop")
+        geo = S.build_geometry(cid, cubes, TEX, TEX)
+        height_units = S.model_height_units(cubes)
+        width_cells = max(c["c1"] for c in cubes) - min(c["c0"] for c in cubes) + 1
 
     # aim for about half a player, adjusted by personality
     target_blocks = 0.95 + t["scale_adj"]
     scale = round(max(0.2, min(2.0, target_blocks * 16.0 / height_units)), 3)
-    width_cells = max(c["c1"] for c in cubes) - min(c["c0"] for c in cubes) + 1
     entity = f"junkbunch:{cid}"
     item = f"junkbunch:{cid}_charm"
 
@@ -658,12 +666,16 @@ def build_pack(out_dir, cid, display, trait, version, analysis):
                  f"pack.name={display} (Junk Bunch)\n"
                  f"pack.description={display} - a Junk Bunch character\n")
 
-    S.build_texture(analysis["crop"], analysis["bg"], analysis["thresh"],
+    if art_grid is not None:
+        T.build_texture(art_grid, tex=TEX).save(
+            os.path.join(RP, "textures/entity/junkbunch", f"{cid}.png"))
+    else:
+        S.build_texture(analysis["crop"], analysis["bg"], analysis["thresh"],
                     analysis["ink_strong"], solid,
                     analysis["primary"], shade(analysis["primary"], -105),
-                    analysis["accent"], tex=TEX, cubes=cubes,
-                    limb=[122, 84, 48]
-                    ).save(os.path.join(RP, "textures/entity/junkbunch", f"{cid}.png"))
+                        analysis["accent"], tex=TEX, cubes=cubes,
+                        limb=[122, 84, 48]
+                        ).save(os.path.join(RP, "textures/entity/junkbunch", f"{cid}.png"))
     build_item_icon(analysis).save(os.path.join(RP, "textures/items", f"{cid}_charm.png"))
     icon = build_pack_icon(analysis)
     icon.save(os.path.join(RP, "pack_icon.png"))
@@ -679,6 +691,9 @@ def main():
     ap.add_argument("--crop", default=None,
                     help="x,y,w,h as fractions of the photo (e.g. 0.30,0.40,0.45,0.22) "
                          "to pick one character off a page holding several")
+    ap.add_argument("--art", action="store_true",
+                    help="input is clean character art (traced faithfully, "
+                         "arms/hands/legs preserved) rather than a pencil photo")
     ap.add_argument("--hue", type=int, default=None,
                     help="force a hue 0-359 (110 = leaf green)")
     ap.add_argument("--rotate", type=int, default=0, choices=[0, 90, 180, 270],
@@ -693,7 +708,17 @@ def main():
 
     print(f"analysing {args.drawing} ...")
     cf = [float(v) for v in args.crop.split(",")] if args.crop else None
-    a = finalise_palette(analyse(args.drawing, cf, args.rotate), cid, args.hue)
+
+    if args.art:
+        im = T.load_art(args.drawing, args.rotate)
+        grid = T.prune(T.trace(im))
+        pal = T.palette(grid)
+        a = {"art_grid": grid, "primary": pal[0], "secondary": pal[1],
+             "accent": pal[2], "low_colour": False, "crop": im.convert("RGB")}
+        print(f"  traced {sum(1 for r in grid for c in r if c)} cells "
+              f"from the artwork (arms, hands and legs kept)")
+    else:
+        a = finalise_palette(analyse(args.drawing, cf, args.rotate), cid, args.hue)
     note = " (from name - drawing has no colour)" if a["low_colour"] else " (from the drawing)"
     print(f"  colours: {to_hex(a['primary'])} {to_hex(a['secondary'])} {to_hex(a['accent'])}{note}")
 

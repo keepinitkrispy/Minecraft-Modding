@@ -996,6 +996,193 @@ function stylisedCubes(profile) {
   return merged;
 }
 
+
+/* ---------- faithful trace for finished character art ----------
+   A pencil scan needs cleaning up; finished art must be reproduced exactly.
+   Nothing is smoothed here, so arms, hands, legs and feet all survive. */
+const ART_GW = 32, ART_GH = 40, ART_SWATCH = [48, 0];
+
+function hasTransparency(cv) {
+  const g = cv.getContext("2d", { willReadFrequently: true });
+  const d = g.getImageData(0, 0, cv.width, cv.height).data;
+  for (let i = 3; i < d.data ? 0 : d.length; i += 4) if (d[i] < 250) return true;
+  return false;
+}
+
+function traceArt(cv, bg, thresh, cover) {
+  thresh = thresh === undefined ? 52 : thresh;
+  cover = cover === undefined ? 0.34 : cover;
+  const W = cv.width, H = cv.height;
+  const d = cv.getContext("2d", { willReadFrequently: true }).getImageData(0, 0, W, H).data;
+  const at = (x, y) => { const i = (y * W + x) * 4; return [d[i], d[i+1], d[i+2], d[i+3]]; };
+  const solid = (x, y) => {
+    const [r, g, b, a] = at(x, y);
+    if (a <= 128) return false;
+    return bg === null ? true : dist([r, g, b], bg) > thresh;
+  };
+
+  let x0 = W, x1 = -1, y0 = H, y1 = -1;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    if (solid(x, y)) {
+      if (x < x0) x0 = x; if (x > x1) x1 = x;
+      if (y < y0) y0 = y; if (y > y1) y1 = y;
+    }
+  }
+  if (x1 < 0) return null;
+
+  const bw = x1 - x0 + 1, bh = y1 - y0 + 1;
+  let cw = ART_GW, ch = ART_GH;
+  if (bw / bh > ART_GW / ART_GH) ch = Math.max(1, Math.round(ART_GW * bh / bw));
+  else cw = Math.max(1, Math.round(ART_GH * bw / bh));
+  const offx = (ART_GW - cw) >> 1, offy = (ART_GH - ch) >> 1;
+
+  const grid = Array.from({ length: ART_GH }, () => new Array(ART_GW).fill(null));
+  for (let cy = 0; cy < ch; cy++) {
+    for (let cx = 0; cx < cw; cx++) {
+      const sx0 = x0 + Math.floor(cx * bw / cw), sx1 = Math.max(sx0 + 1, x0 + Math.floor((cx + 1) * bw / cw));
+      const sy0 = y0 + Math.floor(cy * bh / ch), sy1 = Math.max(sy0 + 1, y0 + Math.floor((cy + 1) * bh / ch));
+      let n = 0, tot = 0, ar = 0, ag = 0, ab = 0;
+      for (let yy = sy0; yy < Math.min(sy1, H); yy++) {
+        for (let xx = sx0; xx < Math.min(sx1, W); xx++) {
+          tot++;
+          if (solid(xx, yy)) { const c = at(xx, yy); n++; ar += c[0]; ag += c[1]; ab += c[2]; }
+        }
+      }
+      if (tot && n / tot >= cover) {
+        grid[offy + cy][offx + cx] = [Math.round(ar / n), Math.round(ag / n), Math.round(ab / n)];
+      }
+    }
+  }
+  return grid;
+}
+
+function pruneArt(grid) {
+  const seen = grid.map(r => r.map(() => false));
+  let best = [];
+  for (let y = 0; y < ART_GH; y++) for (let x = 0; x < ART_GW; x++) {
+    if (!grid[y][x] || seen[y][x]) continue;
+    const stack = [[x, y]], cells = [];
+    seen[y][x] = true;
+    while (stack.length) {
+      const [cx, cy] = stack.pop();
+      cells.push([cx, cy]);
+      for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]]) {
+        const nx = cx + dx, ny = cy + dy;
+        if (nx >= 0 && nx < ART_GW && ny >= 0 && ny < ART_GH && grid[ny][nx] && !seen[ny][nx]) {
+          seen[ny][nx] = true; stack.push([nx, ny]);
+        }
+      }
+    }
+    if (cells.length > best.length) best = cells;
+  }
+  const keep = new Set(best.map(([x, y]) => y * ART_GW + x));
+  return grid.map((r, y) => r.map((c, x) => (keep.has(y * ART_GW + x) ? c : null)));
+}
+
+function cubesArt(grid) {
+  const rows = [];
+  for (let y = 0; y < ART_GH; y++) {
+    const runs = []; let x = 0;
+    while (x < ART_GW) {
+      if (grid[y][x]) { const a = x; while (x < ART_GW && grid[y][x]) x++; runs.push([a, x - 1]); }
+      else x++;
+    }
+    rows.push(runs);
+  }
+  const sameRow = (y1, y2) => {
+    if (rows[y1].length !== rows[y2].length) return false;
+    for (let i = 0; i < rows[y1].length; i++)
+      if (rows[y1][i][0] !== rows[y2][i][0] || rows[y1][i][1] !== rows[y2][i][1]) return false;
+    for (const [a, b] of rows[y1]) for (let x = a; x <= b; x++) {
+      const p = grid[y1][x], q = grid[y2][x];
+      if (!p || !q || p[0] !== q[0] || p[1] !== q[1] || p[2] !== q[2]) return false;
+    }
+    return true;
+  };
+  const used = new Array(ART_GH).fill(false), out = [];
+  for (let y = 0; y < ART_GH; y++) {
+    if (used[y] || !rows[y].length) continue;
+    let y2 = y;
+    while (y2 + 1 < ART_GH && rows[y2 + 1].length && sameRow(y, y2 + 1)) y2++;
+    for (let yy = y; yy <= y2; yy++) used[yy] = true;
+    for (const [c0, c1] of rows[y]) out.push({ c0, c1, r0: y, r1: y2 });
+  }
+  return out;
+}
+
+function buildArtTexture(grid) {
+  const cv = document.createElement("canvas");
+  cv.width = TEX; cv.height = TEX;
+  const g = cv.getContext("2d", { willReadFrequently: true });
+  const filled = [];
+  grid.forEach(r => r.forEach(c => { if (c) filled.push(c); }));
+  const avg = filled.length
+    ? [0,1,2].map(i => Math.round(filled.reduce((a, c) => a + c[i], 0) / filled.length))
+    : [150,150,150];
+  g.fillStyle = rgbToHex(avg);
+  g.fillRect(0, 0, TEX, TEX);
+  for (let y = 0; y < ART_GH; y++) for (let x = 0; x < ART_GW; x++) {
+    g.fillStyle = rgbToHex(grid[y][x] || avg);
+    g.fillRect(x, y, 1, 1);
+  }
+  g.fillStyle = rgbToHex(avg.map(v => Math.round(v * 0.62)));
+  g.fillRect(ART_SWATCH[0], ART_SWATCH[1], 2, 2);
+  const d = g.getImageData(0, 0, TEX, TEX);
+  for (let i = 3; i < d.data.length; i += 4) d.data[i] = 255;
+  g.putImageData(d, 0, 0);
+  return cv;
+}
+
+function buildArtGeometry(id, cs) {
+  const body = { name: "body", pivot: [0, 0, 0], cubes: [] };
+  for (const c of cs) {
+    const w = (c.c1 - c.c0 + 1) * CELL, h = (c.r1 - c.r0 + 1) * CELL;
+    const sw = { uv: ART_SWATCH, uv_size: [1, 1] };
+    body.cubes.push({
+      origin: [+((c.c0 - ART_GW / 2) * CELL).toFixed(3), +((ART_GH - 1 - c.r1) * CELL).toFixed(3), -DEPTH / 2],
+      size: [w, h, DEPTH],
+      uv: {
+        north: { uv: [c.c0, c.r0], uv_size: [c.c1 - c.c0 + 1, c.r1 - c.r0 + 1] },
+        south: { uv: [c.c0, c.r0], uv_size: [c.c1 - c.c0 + 1, c.r1 - c.r0 + 1] },
+        west: sw, east: sw, up: sw, down: sw
+      }
+    });
+  }
+  return {
+    format_version: "1.16.0",
+    "minecraft:geometry": [{
+      description: {
+        identifier: `geometry.${id}.main`,
+        texture_width: TEX, texture_height: TEX,
+        visible_bounds_width: 4, visible_bounds_height: 4,
+        visible_bounds_offset: [0, 1, 0]
+      },
+      bones: [{ name: "root", pivot: [0, 0, 0], children: ["body"] }, body]
+    }]
+  };
+}
+
+function artDims(cs) {
+  const top = Math.min(...cs.map(c => c.r0)), bot = Math.max(...cs.map(c => c.r1));
+  const l = Math.min(...cs.map(c => c.c0)), r = Math.max(...cs.map(c => c.c1));
+  return { w: (r - l + 1) * CELL, h: (bot - top + 1) * CELL };
+}
+
+function artPalette(grid) {
+  const counts = new Map();
+  grid.forEach(r => r.forEach(c => {
+    if (!c) return;
+    const k = (c[0] >> 4) + "," + (c[1] >> 4) + "," + (c[2] >> 4);
+    const e = counts.get(k) || [0, 0, 0, 0];
+    e[0]++; e[1] += c[0]; e[2] += c[1]; e[3] += c[2];
+    counts.set(k, e);
+  }));
+  const top = [...counts.values()].sort((a, b) => b[0] - a[0]).slice(0, 3)
+    .map(e => [Math.round(e[1] / e[0]), Math.round(e[2] / e[0]), Math.round(e[3] / e[0])]);
+  while (top.length < 3) top.push(top[top.length - 1] || [120, 160, 110]);
+  return top;
+}
+
 function buildShapeGeometry(id, cubes) {
   const body = { name: "body", pivot: [0, 0, 0], cubes: [] };
   for (const c of cubes) {
@@ -1235,8 +1422,9 @@ const TRAITS = {
 function buildPack(opts) {
   const { id, display, trait, version, texBytes, iconBytes, packIconBytes, analysis, cubes } = opts;
   const t = TRAITS[trait] || TRAITS.friendly;
-  const heightUnits = shapeHeightUnits(cubes);
-  const widthCells = Math.max(...cubes.map(c => c.c1)) - Math.min(...cubes.map(c => c.c0)) + 1;
+  const heightUnits = opts.hUnits || shapeHeightUnits(cubes);
+  const widthCells = opts.wUnits ||
+    (Math.max(...cubes.map(c => c.c1)) - Math.min(...cubes.map(c => c.c0)) + 1);
   const targetBlocks = 0.95 + t.scaleAdj;
   const scale = +Math.max(0.2, Math.min(2, targetBlocks * 16 / heightUnits)).toFixed(3);
 
@@ -1378,7 +1566,7 @@ function buildPack(opts) {
     }
   });
 
-  J("JunkBunch_RP/models/entity/" + id + ".geo.json", buildShapeGeometry(id, cubes));
+  J("JunkBunch_RP/models/entity/" + id + ".geo.json", opts.geo || buildShapeGeometry(id, cubes));
 
   J("JunkBunch_RP/render_controllers/" + id + ".json", {
     format_version: "1.10.0",
@@ -1613,7 +1801,7 @@ function verifyPack(files) {
 }
 
 /* ---------- 6. preview drawing ------------------------------ */
-function drawPreview(cv, tex, cubes, scale) {
+function drawPreview(cv, tex, cubes, scale, artMode) {
   const g = cv.getContext("2d");
   g.imageSmoothingEnabled = false;
   g.clearRect(0, 0, cv.width, cv.height);
@@ -1633,9 +1821,10 @@ function drawPreview(cv, tex, cubes, scale) {
   const cxp = cv.width * 0.38;
   for (const c of cubes) {
     const w = (c.c1 - c.c0 + 1) * CELL, h = (c.r1 - c.r0 + 1) * CELL;
-    const ox = (c.c0 - GRID_W / 2) * CELL;
-    const oy = (GRID_H - 1 - c.r1) * CELL;
-    const body = (c.part || "body") === "body";
+    const GX = artMode ? ART_GW : GRID_W, GY = artMode ? ART_GH : GRID_H;
+    const ox = (c.c0 - GX / 2) * CELL;
+    const oy = (GY - 1 - c.r1) * CELL;
+    const body = artMode || (c.part || "body") === "body";
     const sx = body ? c.c0 : SOLID_UV.limb[0], sy = body ? c.r0 : SOLID_UV.limb[1];
     const sw = body ? (c.c1 - c.c0 + 1) : 1, sh = body ? (c.r1 - c.r0 + 1) : 1;
     g.drawImage(tex, sx, sy, sw, sh,
@@ -1829,12 +2018,27 @@ goBtn.addEventListener("click", async () => {
     const version = nextVersion(id);
     const analysis = finalisePalette(raw, id);
 
-    const cubes = stylisedCubes(cleanProfile(analysis.solid));
-    if (!cubes.length) throw new Error("No drawing found in that box - move it over a character.");
-    const LIMB = [122, 84, 48];
-    const texCv = buildShapeTexture(cubes, analysis.primary,
-                                    shade(analysis.primary, -105).map(Math.round),
-                                    analysis.accent, LIMB);
+    let cubes, texCv, geo, hUnits, wUnits;
+    if (artMode) {
+      const grid = pruneArt(traceArt(prep.cv, prep.artBg, prep.thresh));
+      if (!grid) throw new Error("No character found in that image.");
+      cubes = cubesArt(grid);
+      if (!cubes.length) throw new Error("No character found in that image.");
+      const pal = artPalette(grid);
+      analysis.primary = pal[0]; analysis.secondary = pal[1]; analysis.accent = pal[2];
+      texCv = buildArtTexture(grid);
+      geo = buildArtGeometry(id, cubes);
+      const dm = artDims(cubes); hUnits = dm.h; wUnits = dm.w;
+    } else {
+      cubes = stylisedCubes(cleanProfile(analysis.solid));
+      if (!cubes.length) throw new Error("No drawing found in that box - move it over a character.");
+      texCv = buildShapeTexture(cubes, analysis.primary,
+                                shade(analysis.primary, -105).map(Math.round),
+                                analysis.accent, [122, 84, 48]);
+      geo = buildShapeGeometry(id, cubes);
+      hUnits = shapeHeightUnits(cubes);
+      wUnits = (Math.max(...cubes.map(c => c.c1)) - Math.min(...cubes.map(c => c.c0)) + 1) * CELL;
+    }
     const [texBytes, iconBytes, packIconBytes] = await Promise.all([
       canvasBytes(texCv),
       canvasBytes(buildItemIcon(analysis)),
@@ -1843,7 +2047,7 @@ goBtn.addEventListener("click", async () => {
 
     setStatus("Packing it up...", "busy");
     await new Promise(r => setTimeout(r, 30));
-    const files = buildPack({ id, display, trait, version, texBytes, iconBytes, packIconBytes, analysis, cubes });
+    const files = buildPack({ id, display, trait, version, texBytes, iconBytes, packIconBytes, analysis, cubes, geo, hUnits, wUnits, artMode });
 
     const problems = verifyPack(files);
     if (problems.length) throw new Error("Check failed: " + problems.join("; "));
@@ -1856,9 +2060,8 @@ goBtn.addEventListener("click", async () => {
     dlLink.textContent = `Download ${display}`;
 
     const t = TRAITS[trait];
-    const hUnits = shapeHeightUnits(cubes);
     const scale = +Math.max(0.2, Math.min(2, (0.95 + t.scaleAdj) * 16 / hUnits)).toFixed(3);
-    drawPreview(previewCv, texCv, cubes, scale);
+    drawPreview(previewCv, texCv, cubes, scale, artMode);
 
     $("resName").textContent = display;
     $("fHeight").textContent = (hUnits * scale / 16).toFixed(2) + " blocks";
