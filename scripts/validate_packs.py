@@ -520,6 +520,15 @@ def main():
                         for cube in bone.get("cubes", []):
                             uv = cube.get("uv")
                             size = cube.get("size", [0, 0, 0])
+                            if isinstance(uv, dict):
+                                for fname, fv in uv.items():
+                                    fu = fv.get("uv"); fs = fv.get("uv_size", [1, 1])
+                                    if not (isinstance(fu, list) and len(fu) == 2):
+                                        continue
+                                    check(fu[0] + abs(fs[0]) <= gw and fu[1] + abs(fs[1]) <= gh,
+                                          f"{rel(root, path)}: bone {bone.get('name')!r} face "
+                                          f"{fname} UV {fu}+{fs} overflows the {gw}x{gh} sheet")
+                                continue
                             if isinstance(uv, list) and len(uv) == 2:
                                 w, h, d = (int(round(s)) for s in size)
                                 need_w = 2 * (d + w)

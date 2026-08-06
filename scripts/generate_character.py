@@ -18,6 +18,8 @@ import zipfile
 
 from PIL import Image, ImageFilter
 
+import shape as S
+
 TEX = 64
 MODEL_SCALE = 0.5
 
@@ -238,7 +240,13 @@ def analyse(path, crop_frac=None, rotate=0):
     low_colour = saturation(primary) < 0.18
 
     crop = im.crop((cx0, cy0, cx1 + 1, cy1 + 1))
-    return dict(crop=crop, bg=bg, thresh=thresh, low_colour=low_colour,
+    # measure the silhouette now, while the crop still holds the real photo
+    ink = S.occupancy(crop, bg, thresh, cover=0.10)          # silhouette: catch faint edges
+    ink_strong = S.occupancy(crop, bg, thresh, cover=0.30)    # detail: only real strokes
+    solid = S.smooth(S.largest_component(S.solidify(ink)))
+    return dict(crop=crop, ink=ink, ink_strong=ink_strong, solid=solid,
+                bg=bg, thresh=thresh,
+                low_colour=low_colour,
                 primary=[int(v) for v in primary],
                 secondary=[int(v) for v in secondary],
                 accent=[int(v) for v in accent])
@@ -408,37 +416,22 @@ def build_pack_icon(a):
     return img
 
 
-def build_geometry(cid):
-    kids = {"root": ["body"],
-            "body": ["left_arm", "right_arm", "left_leg", "right_leg", "topper"]}
-    order = ["root", "body", "left_arm", "right_arm", "left_leg", "right_leg", "topper"]
-    by = {b[0]: b for b in BOXES}
-    bones = []
-    for name in order:
-        bone = {"name": name, "pivot": PIVOTS[name]}
-        if name in kids:
-            bone["children"] = kids[name]
-        if name in by:
-            _, origin, size, uv, _ = by[name]
-            bone["cubes"] = [{"origin": list(origin), "size": list(size), "uv": list(uv)}]
-        bones.append(bone)
-    return {
-        "format_version": "1.16.0",
-        "minecraft:geometry": [{
-            "description": {
-                "identifier": f"geometry.{cid}.main",
-                "texture_width": TEX, "texture_height": TEX,
-                "visible_bounds_width": 3, "visible_bounds_height": 3,
-                "visible_bounds_offset": [0, 1, 0],
-            },
-            "bones": bones,
-        }],
-    }
-
-
 def build_pack(out_dir, cid, display, trait, version, analysis):
     t = TRAITS.get(trait, TRAITS["friendly"])
-    scale = round(MODEL_SCALE + t["scale_adj"], 2)
+
+    # the drawing's own outline becomes the model's shape
+    ink = analysis["ink"]
+    solid = analysis["solid"]
+    cubes = S.cubes_from(solid)
+    if not cubes:
+        raise SystemExit("no drawing found in that crop")
+    geo = S.build_geometry(cid, cubes, TEX, TEX)
+    height_units = S.model_height_units(cubes)
+
+    # aim for about half a player, adjusted by personality
+    target_blocks = 0.95 + t["scale_adj"]
+    scale = round(max(0.2, min(2.0, target_blocks * 16.0 / height_units)), 3)
+    width_cells = max(c["c1"] for c in cubes) - min(c["c0"] for c in cubes) + 1
     entity = f"junkbunch:{cid}"
     item = f"junkbunch:{cid}_charm"
 
@@ -498,7 +491,9 @@ def build_pack(out_dir, cid, display, trait, version, analysis):
                 "minecraft:type_family": {"family": [cid, "junkbunch", "mob"]},
                 "minecraft:health": {"value": 12, "max": 12},
                 "minecraft:scale": {"value": scale},
-                "minecraft:collision_box": {"width": 0.7, "height": round(30 * scale / 16, 2)},
+                "minecraft:collision_box": {
+                    "width": round(max(0.4, min(1.6, width_cells * S.CELL * scale / 16)), 2),
+                    "height": round(max(0.4, height_units * scale / 16), 2)},
                 "minecraft:breathable": {"total_supply": 15, "suffocate_time": 0},
                 "minecraft:physics": {"has_gravity": True, "has_collision": True},
                 "minecraft:movement": {"value": t["speed"]},
@@ -573,7 +568,7 @@ def build_pack(out_dir, cid, display, trait, version, analysis):
         },
     })
 
-    w(os.path.join(RP, "models/entity", f"{cid}.geo.json"), build_geometry(cid))
+    w(os.path.join(RP, "models/entity", f"{cid}.geo.json"), geo)
 
     w(os.path.join(RP, "render_controllers", f"{cid}.json"), {
         "format_version": "1.10.0",
@@ -601,26 +596,21 @@ def build_pack(out_dir, cid, display, trait, version, analysis):
         },
     })
 
-    bob = 1.1 if trait == "bouncy" else 0.45
+    bob = 0.9 if trait == "bouncy" else 0.35
     w(os.path.join(RP, "animations", f"{cid}.animation.json"), {
         "format_version": "1.8.0",
         "animations": {
             f"animation.{cid}.idle": {
                 "loop": True, "animation_length": 3.0,
-                "bones": {
-                    "body": {"position": [0, f"math.sin(query.anim_time * 120) * {bob}", 0]},
-                    "topper": {"rotation": [0, 0, "math.sin(query.anim_time * 150) * 6"]},
-                },
+                "bones": {"body": {
+                    "position": [0, f"math.sin(query.anim_time * 120) * {bob}", 0],
+                    "rotation": [0, 0, "math.sin(query.anim_time * 90) * 2"]}},
             },
             f"animation.{cid}.walk": {
-                "loop": True, "animation_length": 1.0,
-                "bones": {
-                    "body": {"position": [0, f"math.sin(query.anim_time * 720) * {round(bob*0.6,3)}", 0]},
-                    "left_arm": {"rotation": ["math.sin(query.anim_time * 360) * 32", 0, 0]},
-                    "right_arm": {"rotation": ["math.sin(query.anim_time * 360 + 180) * 32", 0, 0]},
-                    "left_leg": {"rotation": ["math.sin(query.anim_time * 360 + 180) * 38", 0, 0]},
-                    "right_leg": {"rotation": ["math.sin(query.anim_time * 360) * 38", 0, 0]},
-                },
+                "loop": True, "animation_length": 0.8,
+                "bones": {"body": {
+                    "position": [0, f"math.abs(math.sin(query.anim_time * 720)) * {round(bob*1.6,3)}", 0],
+                    "rotation": [0, 0, "math.sin(query.anim_time * 720) * 6"]}},
             },
         },
     })
@@ -639,7 +629,11 @@ def build_pack(out_dir, cid, display, trait, version, analysis):
                  f"pack.name={display} (Junk Bunch)\n"
                  f"pack.description={display} - a Junk Bunch character\n")
 
-    build_texture(analysis).save(os.path.join(RP, "textures/entity/junkbunch", f"{cid}.png"))
+    S.build_texture(analysis["crop"], analysis["bg"], analysis["thresh"],
+                    analysis["ink_strong"], solid,
+                    analysis["primary"], shade(analysis["primary"], -105),
+                    analysis["accent"], tex=TEX
+                    ).save(os.path.join(RP, "textures/entity/junkbunch", f"{cid}.png"))
     build_item_icon(analysis).save(os.path.join(RP, "textures/items", f"{cid}_charm.png"))
     icon = build_pack_icon(analysis)
     icon.save(os.path.join(RP, "pack_icon.png"))

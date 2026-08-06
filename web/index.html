@@ -659,8 +659,12 @@ function analyseCrop(prep, box) {
   const accent = pal.find(c => dist(c, primary) > 70 && dist(c, secondary) > 60)
                  || shade(secondary, luma(secondary) > 128 ? -40 : 46);
 
+  const ink = occupancy(crop, bg, thresh, 0.10);        // silhouette
+  const inkStrong = occupancy(crop, bg, thresh, 0.30);  // drawn detail
+  const solid = smoothShape(largestComponent(solidify(ink)));
+
   return {
-    crop, bg, thresh,
+    crop, bg, thresh, ink, inkStrong, solid,
     lowColour: saturation(primary) < 0.18,
     primary: primary.map(Math.round),
     secondary: secondary.map(Math.round),
@@ -764,6 +768,194 @@ function inkPreservingResize(src, tw, th, inkRgb, bodyRgb, coverage) {
     out.data[o] = c[0]; out.data[o + 1] = c[1]; out.data[o + 2] = c[2]; out.data[o + 3] = 255;
   }
   return out;
+}
+
+
+/* ---------- shape: the drawing's outline becomes the model -----
+   A fixed body with the drawing pasted on the front turns a leaf into a
+   rectangle wearing a picture of a leaf. Instead the silhouette drives the
+   geometry: reduce the drawing to an occupancy grid, flood fill the interior,
+   and emit a cube per horizontal run. Per-face UVs let each cube sample its
+   own slice of the art, so shape and picture can never drift apart. */
+const GRID_W = 22, GRID_H = 30, DEPTH = 4, CELL = 1;
+const SOLID_UV = { body: [40, 0], dark: [42, 0], accent: [44, 0] };
+
+function occupancy(crop, bg, thresh, cover) {
+  const g = crop.getContext("2d", { willReadFrequently: true });
+  const W = crop.width, H = crop.height;
+  const d = g.getImageData(0, 0, W, H).data;
+  const ink = [];
+  for (let gy = 0; gy < GRID_H; gy++) {
+    const row = [];
+    for (let gx = 0; gx < GRID_W; gx++) {
+      const x0 = Math.floor(gx * W / GRID_W), x1 = Math.max(x0 + 1, Math.floor((gx + 1) * W / GRID_W));
+      const y0 = Math.floor(gy * H / GRID_H), y1 = Math.max(y0 + 1, Math.floor((gy + 1) * H / GRID_H));
+      let dark = 0, tot = 0;
+      for (let yy = y0; yy < Math.min(y1, H); yy++) {
+        for (let xx = x0; xx < Math.min(x1, W); xx++) {
+          const i = (yy * W + xx) * 4;
+          tot++;
+          if (dist([d[i], d[i + 1], d[i + 2]], bg) > thresh) dark++;
+        }
+      }
+      row.push(tot > 0 && dark / tot >= cover);
+    }
+    ink.push(row);
+  }
+  return ink;
+}
+
+function solidify(ink) {
+  const gh = ink.length, gw = ink[0].length;
+  const outside = ink.map(r => r.map(() => false));
+  const stack = [];
+  const seed = (x, y) => {
+    if (!ink[y][x] && !outside[y][x]) { outside[y][x] = true; stack.push([x, y]); }
+  };
+  for (let x = 0; x < gw; x++) { seed(x, 0); seed(x, gh - 1); }
+  for (let y = 0; y < gh; y++) { seed(0, y); seed(gw - 1, y); }
+  while (stack.length) {
+    const [x, y] = stack.pop();
+    for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+      const nx = x + dx, ny = y + dy;
+      if (nx >= 0 && nx < gw && ny >= 0 && ny < gh && !ink[ny][nx] && !outside[ny][nx]) {
+        outside[ny][nx] = true; stack.push([nx, ny]);
+      }
+    }
+  }
+  return ink.map((r, y) => r.map((v, x) => v || !outside[y][x]));
+}
+
+function largestComponent(solid) {
+  const gh = solid.length, gw = solid[0].length;
+  const seen = solid.map(r => r.map(() => false));
+  let best = [];
+  for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) {
+    if (!solid[y][x] || seen[y][x]) continue;
+    const stack = [[x, y]], cells = [];
+    seen[y][x] = true;
+    while (stack.length) {
+      const [cx, cy] = stack.pop();
+      cells.push([cx, cy]);
+      for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+        const nx = cx + dx, ny = cy + dy;
+        if (nx >= 0 && nx < gw && ny >= 0 && ny < gh && solid[ny][nx] && !seen[ny][nx]) {
+          seen[ny][nx] = true; stack.push([nx, ny]);
+        }
+      }
+    }
+    if (cells.length > best.length) best = cells;
+  }
+  const out = solid.map(r => r.map(() => false));
+  best.forEach(([x, y]) => { out[y][x] = true; });
+  return out;
+}
+
+function smoothShape(solid) {
+  const gh = solid.length, gw = solid[0].length;
+  const nb = (g, x, y) => {
+    let n = 0;
+    for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+      const nx = x + dx, ny = y + dy;
+      if (nx >= 0 && nx < gw && ny >= 0 && ny < gh && g[ny][nx]) n++;
+    }
+    return n;
+  };
+  let cur = solid.map(r => r.slice());
+  for (let pass = 0; pass < 2; pass++) {
+    const next = cur.map(r => r.slice());
+    for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) {
+      const n = nb(cur, x, y);
+      if (!cur[y][x] && n >= 3) next[y][x] = true;
+      else if (cur[y][x] && n <= 1) next[y][x] = false;
+    }
+    cur = next;
+  }
+  return cur;
+}
+
+function runsOf(row) {
+  const out = [];
+  let x = 0;
+  while (x < row.length) {
+    if (row[x]) { const x0 = x; while (x < row.length && row[x]) x++; out.push([x0, x - 1]); }
+    else x++;
+  }
+  return out;
+}
+
+function cubesFrom(solid) {
+  const gh = solid.length;
+  const rows = solid.map(runsOf);
+  const used = new Array(gh).fill(false);
+  const cubes = [];
+  const same = (a, b) => a.length === b.length && a.every((r, i) => r[0] === b[i][0] && r[1] === b[i][1]);
+  for (let y = 0; y < gh; y++) {
+    if (used[y] || !rows[y].length) continue;
+    let y2 = y;
+    while (y2 + 1 < gh && rows[y2 + 1].length && same(rows[y2 + 1], rows[y])) y2++;
+    for (let yy = y; yy <= y2; yy++) used[yy] = true;
+    for (const [c0, c1] of rows[y]) cubes.push({ c0, c1, r0: y, r1: y2 });
+  }
+  return cubes;
+}
+
+function buildShapeGeometry(id, cubes) {
+  const body = { name: "body", pivot: [0, 0, 0], cubes: [] };
+  for (const c of cubes) {
+    const w = (c.c1 - c.c0 + 1) * CELL, h = (c.r1 - c.r0 + 1) * CELL;
+    const uvw = c.c1 - c.c0 + 1, uvh = c.r1 - c.r0 + 1;
+    body.cubes.push({
+      origin: [+((c.c0 - GRID_W / 2) * CELL).toFixed(3), +((GRID_H - 1 - c.r1) * CELL).toFixed(3), -DEPTH / 2],
+      size: [w, h, DEPTH],
+      uv: {
+        north: { uv: [c.c0, c.r0], uv_size: [uvw, uvh] },
+        south: { uv: [c.c0, c.r0], uv_size: [uvw, uvh] },
+        west:  { uv: SOLID_UV.dark, uv_size: [1, 1] },
+        east:  { uv: SOLID_UV.dark, uv_size: [1, 1] },
+        up:    { uv: SOLID_UV.body, uv_size: [1, 1] },
+        down:  { uv: SOLID_UV.body, uv_size: [1, 1] }
+      }
+    });
+  }
+  return {
+    format_version: "1.16.0",
+    "minecraft:geometry": [{
+      description: {
+        identifier: `geometry.${id}.main`,
+        texture_width: TEX, texture_height: TEX,
+        visible_bounds_width: 4, visible_bounds_height: 4,
+        visible_bounds_offset: [0, 1, 0]
+      },
+      bones: [{ name: "root", pivot: [0, 0, 0], children: ["body"] }, body]
+    }]
+  };
+}
+
+function buildShapeTexture(inkStrong, solid, primary, dark, accent) {
+  const cv = document.createElement("canvas");
+  cv.width = TEX; cv.height = TEX;
+  const g = cv.getContext("2d", { willReadFrequently: true });
+  g.fillStyle = rgbToHex(primary);
+  g.fillRect(0, 0, TEX, TEX);
+  for (let gy = 0; gy < GRID_H; gy++) {
+    for (let gx = 0; gx < GRID_W; gx++) {
+      g.fillStyle = inkStrong[gy][gx] ? rgbToHex(dark) : rgbToHex(primary);
+      g.fillRect(gx, gy, 1, 1);
+    }
+  }
+  const put = (uv, col) => { g.fillStyle = rgbToHex(col); g.fillRect(uv[0], uv[1], 2, 2); };
+  put(SOLID_UV.body, primary); put(SOLID_UV.dark, dark); put(SOLID_UV.accent, accent);
+  const d = g.getImageData(0, 0, TEX, TEX);
+  for (let i = 3; i < d.data.length; i += 4) d.data[i] = 255;
+  g.putImageData(d, 0, 0);
+  return cv;
+}
+
+function shapeHeightUnits(cubes) {
+  const top = Math.min(...cubes.map(c => c.r0));
+  const bot = Math.max(...cubes.map(c => c.r1));
+  return (bot - top + 1) * CELL;
 }
 
 /* ---------- 2. paint the entity texture --------------------- */
@@ -908,9 +1100,12 @@ const TRAITS = {
 };
 
 function buildPack(opts) {
-  const { id, display, trait, version, texBytes, iconBytes, packIconBytes, analysis } = opts;
+  const { id, display, trait, version, texBytes, iconBytes, packIconBytes, analysis, cubes } = opts;
   const t = TRAITS[trait] || TRAITS.friendly;
-  const scale = +(MODEL_SCALE + t.scaleAdj).toFixed(2);
+  const heightUnits = shapeHeightUnits(cubes);
+  const widthCells = Math.max(...cubes.map(c => c.c1)) - Math.min(...cubes.map(c => c.c0)) + 1;
+  const targetBlocks = 0.95 + t.scaleAdj;
+  const scale = +Math.max(0.2, Math.min(2, targetBlocks * 16 / heightUnits)).toFixed(3);
 
   const bpHeader = uuidFrom(id + "|bp|header");
   const bpModule = uuidFrom(id + "|bp|module");
@@ -969,7 +1164,9 @@ function buildPack(opts) {
         "minecraft:type_family": { family: [id, "junkbunch", "mob"] },
         "minecraft:health": { value: 12, max: 12 },
         "minecraft:scale": { value: scale },
-        "minecraft:collision_box": { width: 0.7, height: +(30 * scale / 16).toFixed(2) },
+        "minecraft:collision_box": {
+          width: +Math.max(0.4, Math.min(1.6, widthCells * CELL * scale / 16)).toFixed(2),
+          height: +Math.max(0.4, heightUnits * scale / 16).toFixed(2) },
         "minecraft:breathable": { total_supply: 15, suffocate_time: 0 },
         "minecraft:physics": { has_gravity: true, has_collision: true },
         "minecraft:movement": { value: t.speed },
@@ -1048,7 +1245,7 @@ function buildPack(opts) {
     }
   });
 
-  J("JunkBunch_RP/models/entity/" + id + ".geo.json", buildGeometry(id));
+  J("JunkBunch_RP/models/entity/" + id + ".geo.json", buildShapeGeometry(id, cubes));
 
   J("JunkBunch_RP/render_controllers/" + id + ".json", {
     format_version: "1.10.0",
@@ -1074,26 +1271,21 @@ function buildPack(opts) {
     }
   });
 
-  const bob = t.desc === "bouncy" ? 1.1 : 0.45;
+  const bob = trait === "bouncy" ? 0.9 : 0.35;
   J("JunkBunch_RP/animations/" + id + ".animation.json", {
     format_version: "1.8.0",
     animations: {
       [`animation.${id}.idle`]: {
         loop: true, animation_length: 3.0,
-        bones: {
-          body:   { position: [0, `math.sin(query.anim_time * 120) * ${bob}`, 0] },
-          topper: { rotation: [0, 0, "math.sin(query.anim_time * 150) * 6"] }
-        }
+        bones: { body: {
+          position: [0, `math.sin(query.anim_time * 120) * ${bob}`, 0],
+          rotation: [0, 0, "math.sin(query.anim_time * 90) * 2"] } }
       },
       [`animation.${id}.walk`]: {
-        loop: true, animation_length: 1.0,
-        bones: {
-          body:      { position: [0, `math.sin(query.anim_time * 720) * ${bob * 0.6}`, 0] },
-          left_arm:  { rotation: ["math.sin(query.anim_time * 360) * 32", 0, 0] },
-          right_arm: { rotation: ["math.sin(query.anim_time * 360 + 180) * 32", 0, 0] },
-          left_leg:  { rotation: ["math.sin(query.anim_time * 360 + 180) * 38", 0, 0] },
-          right_leg: { rotation: ["math.sin(query.anim_time * 360) * 38", 0, 0] }
-        }
+        loop: true, animation_length: 0.8,
+        bones: { body: {
+          position: [0, `math.abs(math.sin(query.anim_time * 720)) * ${(bob * 1.6).toFixed(3)}`, 0],
+          rotation: [0, 0, "math.sin(query.anim_time * 720) * 6"] } }
       }
     }
   });
@@ -1288,42 +1480,34 @@ function verifyPack(files) {
 }
 
 /* ---------- 6. preview drawing ------------------------------ */
-function drawPreview(cv, tex, scale) {
+function drawPreview(cv, tex, cubes, scale) {
   const g = cv.getContext("2d");
   g.imageSmoothingEnabled = false;
   g.clearRect(0, 0, cv.width, cv.height);
 
-  const unit = 8.2;                       // screen px per model unit
-  const eff = unit * (scale / MODEL_SCALE) * MODEL_SCALE;
   const groundY = cv.height - 26;
-  const cxp = cv.width / 2 - 34;
+  const playerPx = Math.round(cv.height * 0.80);
+  const eff = playerPx / (1.8 * 16);
 
-  // player silhouette for scale
-  const playerH = Math.round(1.8 * 16 * eff / 1.0);
-  g.fillStyle = "rgba(120,130,140,0.30)";
-  const pw = Math.round(playerH * 0.28);
-  g.fillRect(cv.width - 70, groundY - playerH, pw, playerH);
-  g.fillStyle = "rgba(90,100,110,0.55)";
+  const pw = Math.round(playerPx * 0.26);
+  g.fillStyle = "rgba(120,130,140,0.28)";
+  g.fillRect(cv.width - 60, groundY - playerPx, pw, playerPx);
+  g.fillStyle = "rgba(90,100,110,0.6)";
   g.font = "500 11px system-ui, sans-serif";
   g.textAlign = "center";
-  g.fillText("player", cv.width - 70 + pw / 2, groundY + 15);
+  g.fillText("player", cv.width - 60 + pw / 2, groundY + 15);
 
-  // the character, drawn from its own boxes + skin (front faces)
-  const order = ["left_leg", "right_leg", "left_arm", "right_arm", "body", "topper"];
-  for (const name of order) {
-    const b = BOXES.find(x => x.name === name);
-    if (!b) continue;
-    const [w, h, d] = b.size;
-    const [fx, fy, fw, fh] = faceRects(b.uv[0], b.uv[1], w, h, d).north;
-    const dw = Math.max(1, Math.round(w * eff));
-    const dh = Math.max(1, Math.round(h * eff));
-    const sx = Math.round(cxp + b.origin[0] * eff);
-    const sy = Math.round(groundY - (b.origin[1] + h) * eff);
-    g.drawImage(tex, fx, fy, fw, fh, sx, sy, dw, dh);
+  const cxp = cv.width * 0.38;
+  for (const c of cubes) {
+    const w = (c.c1 - c.c0 + 1) * CELL, h = (c.r1 - c.r0 + 1) * CELL;
+    const ox = (c.c0 - GRID_W / 2) * CELL;
+    const oy = (GRID_H - 1 - c.r1) * CELL;
+    g.drawImage(tex, c.c0, c.r0, c.c1 - c.c0 + 1, c.r1 - c.r0 + 1,
+                Math.round(cxp + ox * eff * scale), Math.round(groundY - (oy + h) * eff * scale),
+                Math.max(1, Math.round(w * eff * scale)), Math.max(1, Math.round(h * eff * scale)));
   }
-
-  g.fillStyle = "rgba(90,100,110,0.55)";
-  g.fillText("your character", cxp + 6, groundY + 15);
+  g.fillStyle = "rgba(90,100,110,0.6)";
+  g.fillText("your character", cxp, groundY + 15);
 }
 
 /* ---------- 7. wire up the page ----------------------------- */
@@ -1509,7 +1693,11 @@ goBtn.addEventListener("click", async () => {
     const version = nextVersion(id);
     const analysis = finalisePalette(raw, id);
 
-    const texCv = buildTexture(analysis);
+    const cubes = cubesFrom(analysis.solid);
+    if (!cubes.length) throw new Error("No drawing found in that box - move it over a character.");
+    const texCv = buildShapeTexture(analysis.inkStrong, analysis.solid,
+                                    analysis.primary, shade(analysis.primary, -105).map(Math.round),
+                                    analysis.accent);
     const [texBytes, iconBytes, packIconBytes] = await Promise.all([
       canvasBytes(texCv),
       canvasBytes(buildItemIcon(analysis)),
@@ -1518,7 +1706,7 @@ goBtn.addEventListener("click", async () => {
 
     setStatus("Packing it up...", "busy");
     await new Promise(r => setTimeout(r, 30));
-    const files = buildPack({ id, display, trait, version, texBytes, iconBytes, packIconBytes, analysis });
+    const files = buildPack({ id, display, trait, version, texBytes, iconBytes, packIconBytes, analysis, cubes });
 
     const problems = verifyPack(files);
     if (problems.length) throw new Error("Check failed: " + problems.join("; "));
@@ -1531,11 +1719,12 @@ goBtn.addEventListener("click", async () => {
     dlLink.textContent = `Download ${display}`;
 
     const t = TRAITS[trait];
-    const scale = +(MODEL_SCALE + t.scaleAdj).toFixed(2);
-    drawPreview(previewCv, texCv, scale);
+    const hUnits = shapeHeightUnits(cubes);
+    const scale = +Math.max(0.2, Math.min(2, (0.95 + t.scaleAdj) * 16 / hUnits)).toFixed(3);
+    drawPreview(previewCv, texCv, cubes, scale);
 
     $("resName").textContent = display;
-    $("fHeight").textContent = (30 * scale / 16).toFixed(2) + " blocks";
+    $("fHeight").textContent = (hUnits * scale / 16).toFixed(2) + " blocks";
     $("fItem").textContent = `${display}'s Charm`;
     $("fTrait").textContent = t.desc.replace(/^./, c => c.toUpperCase());
     $("fSwatch").innerHTML = "";

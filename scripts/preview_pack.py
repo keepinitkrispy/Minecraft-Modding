@@ -53,7 +53,8 @@ def main():
     d.rectangle([px0, ground - player_px, px0 + 34, ground], fill=(206, 212, 216), outline=(150, 157, 162))
     d.text((px0 - 4, ground + 8), "player 1.8", fill=(105, 112, 108))
 
-    order = ["left_leg", "right_leg", "left_arm", "right_arm", "body", "topper"]
+    order = [n for n in ["left_leg", "right_leg", "left_arm", "right_arm", "body", "topper"]
+             if n in bones] or [n for n in bones if bones[n].get("cubes")]
     for name in order:
         b = bones.get(name)
         if not b:
@@ -61,8 +62,13 @@ def main():
         for c in b.get("cubes", []):
             ox, oy, _ = c["origin"]
             w, h, dep = c["size"]
-            u, v = c["uv"]
-            fx, fy, fw, fh = face_north(u, v, w, h, dep)
+            u = c["uv"]
+            if isinstance(u, dict):
+                n = u["north"]
+                fx, fy = n["uv"]
+                fw, fh = n["uv_size"]
+            else:
+                fx, fy, fw, fh = face_north(u[0], u[1], w, h, dep)
             face = tex.crop((fx, fy, fx + fw, fy + fh)).resize(
                 (max(1, int(w * eff)), max(1, int(h * eff))), Image.NEAREST)
             img.alpha_composite(face, (int(cx + ox * eff), int(ground - (oy + h) * eff)))
