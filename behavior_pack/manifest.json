@@ -1,0 +1,23 @@
+{
+  "format_version": 2,
+  "header": {
+    "description": "Coiny Companion - A voxel-based coin character with a slap attack",
+    "name": "Coiny Companion",
+    "uuid": "f8e3c4d2-1a2b-4f5e-8c9d-7a6b5e4f3c2b",
+    "version": [1, 0, 0]
+  },
+  "modules": [
+    {
+      "description": "Coiny Companion Behavior",
+      "type": "data",
+      "uuid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+      "version": [1, 0, 0]
+    }
+  ],
+  "dependencies": [
+    {
+      "uuid": "1234abcd-ef01-2345-cdef-6789abcdef01",
+      "version": [1, 0, 0]
+    }
+  ]
+}

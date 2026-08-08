@@ -1,0 +1,41 @@
+{
+  "format_version": "1.10.0",
+  "animation_controllers": {
+    "controller.animation.coiny.move": {
+      "states": {
+        "default": {
+          "blend": [
+            "q.ground_speed > 0.1",
+            "walk",
+            "idle"
+          ]
+        },
+        "idle": {
+          "animations": ["animation.coiny.idle"]
+        },
+        "walk": {
+          "animations": ["animation.coiny.walk"],
+          "blend_transition": 0.2
+        }
+      }
+    },
+    "controller.animation.coiny.attack": {
+      "states": {
+        "default": {
+          "blend": [
+            "q.is_attacking",
+            "attacking",
+            "neutral"
+          ]
+        },
+        "neutral": {
+          "animations": ["animation.coiny.neutral"]
+        },
+        "attacking": {
+          "animations": ["animation.coiny.slap"],
+          "blend_transition": 0.1
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "format_version": "1.16.100",
+  "minecraft:item": {
+    "description": {
+      "identifier": "coiny:coiny_spawn_egg",
+      "category": "equipment"
+    },
+    "components": {
+      "minecraft:icon": {
+        "texture": "coiny_spawn_egg"
+      },
+      "minecraft:max_stack_size": 64,
+      "minecraft:display_name": {
+        "value": "Coiny Spawn Egg"
+      },
+      "minecraft:entity_placer": {
+        "entity": "coiny:coiny_companion",
+        "dispense_on": "any",
+        "use_on": ["grass", "dirt", "stone"]
+      }
+    }
+  }
+}

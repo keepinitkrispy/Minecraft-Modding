@@ -1,0 +1,162 @@
+{
+  "format_version": "1.20.0",
+  "minecraft:entity": {
+    "description": {
+      "identifier": "coiny:coiny_companion",
+      "is_spawnable": true,
+      "is_summonable": true,
+      "is_experimental": false
+    },
+    "component_groups": {
+      "coiny_base": {
+        "minecraft:type_family": {
+          "family": ["coiny", "mob"]
+        },
+        "minecraft:collision_box": {
+          "width": 0.6,
+          "height": 0.8
+        },
+        "minecraft:nameable": {},
+        "minecraft:health": {
+          "value": 20,
+          "max": 20
+        },
+        "minecraft:movement": {
+          "value": 0.15
+        },
+        "minecraft:navigation.walk": {
+          "can_pass_doors": true,
+          "can_walk_on_leaves": true,
+          "avoid_water": false
+        },
+        "minecraft:model": {
+          "geometry": "geometry.coiny"
+        },
+        "minecraft:render_controller": {
+          "0": "controller.render.coiny"
+        }
+      },
+      "coiny_ai": {
+        "minecraft:behavior.follow_parent": {
+          "speed_multiplier": 1.0
+        },
+        "minecraft:behavior.wander": {
+          "priority": 6,
+          "speed_multiplier": 0.5
+        },
+        "minecraft:behavior.look_at_player": {
+          "priority": 5,
+          "look_distance": 8.0,
+          "probability": 0.02
+        },
+        "minecraft:behavior.random_look_around": {
+          "priority": 4
+        }
+      },
+      "coiny_attack": {
+        "minecraft:attack": {
+          "damage": 2.0,
+          "effect_name": "slowness",
+          "effect_chance": 0.0,
+          "effect_duration": 0
+        },
+        "minecraft:behavior.melee_attack": {
+          "priority": 3,
+          "speed_multiplier": 1.5,
+          "track_target": true,
+          "attack_radius": 1.5,
+          "reach_multiplier": 2.0
+        },
+        "minecraft:mob_effect": {
+          "cooldown_time": 0.5
+        }
+      },
+      "coiny_tameable": {
+        "minecraft:tameable": {
+          "probability": 0.33,
+          "tame_items": ["wheat", "apple"],
+          "lose_interest_after": 20
+        },
+        "minecraft:rideable": {
+          "seat_count": 1,
+          "passenger_max_width": 0.5,
+          "seats": [
+            {
+              "position": [0.0, 0.4, 0.0],
+              "allow_hiding": false
+            }
+          ]
+        }
+      }
+    },
+    "components": {
+      "minecraft:type_family": {
+        "family": ["coiny", "mob"]
+      },
+      "minecraft:collision_box": {
+        "width": 0.6,
+        "height": 0.8
+      },
+      "minecraft:nameable": {},
+      "minecraft:health": {
+        "value": 20,
+        "max": 20
+      },
+      "minecraft:movement": {
+        "value": 0.15
+      },
+      "minecraft:navigation.walk": {
+        "can_pass_doors": true,
+        "can_walk_on_leaves": true,
+        "avoid_water": false
+      },
+      "minecraft:model": {
+        "geometry": "geometry.coiny"
+      },
+      "minecraft:render_controller": {
+        "0": "controller.render.coiny"
+      },
+      "minecraft:attack": {
+        "damage": 2.0
+      },
+      "minecraft:behavior.melee_attack": {
+        "priority": 3,
+        "speed_multiplier": 1.5,
+        "track_target": true,
+        "attack_radius": 1.5,
+        "reach_multiplier": 2.0
+      }
+    },
+    "events": {
+      "minecraft:entity_spawned": {
+        "add": {
+          "component_groups": ["coiny_base", "coiny_ai", "coiny_tameable"]
+        }
+      },
+      "coiny:on_slap": {
+        "sequence": [
+          {
+            "run_command": {
+              "command": "particle minecraft:punch_attack_particle ~ ~ ~"
+            }
+          },
+          {
+            "add": {
+              "component_groups": ["coiny_attack"]
+            }
+          }
+        ]
+      },
+      "coiny:start_attack": {
+        "add": {
+          "component_groups": ["coiny_attack"]
+        }
+      },
+      "coiny:stop_attack": {
+        "remove": {
+          "component_groups": ["coiny_attack"]
+        }
+      }
+    }
+  }
+}
