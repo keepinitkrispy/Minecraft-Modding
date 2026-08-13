@@ -1,139 +1,22 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This is a Claude-specific adapter, not the project constitution.
 
-## Junk Bunch AI Adventure
+Read and follow, in order:
 
-### Mission
+1. `AGENTS.md` — model-neutral operating rules
+2. `docs/METHODOLOGY.md` — open methodology and product philosophy
+3. the relevant project/source files for the current task
 
-This project creates an original Minecraft Bedrock adventure series called **The Junk Bunch**.
+Do not duplicate the entire methodology here. Keep this file small so Claude receives a map instead of a large stale manual.
 
-The goal is to build a repeatable pipeline that turns a child's drawings into Minecraft characters in 1–2 hours, then use them for ongoing episodes.
+## Claude-specific behavior
 
-Every decision should make future characters and episodes easier.
+- Read existing files before editing.
+- Use available tools to execute requested artifact work rather than replacing it with prose.
+- Check Bedrock/API claims instead of guessing.
+- Run the strongest available validation and state exactly what was not runtime-tested.
+- When a tested project yields a reusable lesson, preserve the observation/evidence separately from the promoted rule.
+- Treat desktop/Blockbench tooling as optional acceleration, not a hidden requirement; the target workflow is Android/mobile-first with Realm → PS5 deployment.
 
-### Platform Constraints
-
-- Minecraft **Bedrock Edition ONLY**
-- Primary platform: PlayStation 5
-- Distribution: Minecraft Realms
-- Development on PC → upload to Realm → play on PS5
-
-Never recommend unsupported platforms, mods, or Java-only tools.
-
-Everything must work in the PC → Realm → PS5 workflow.
-
-### Core Philosophy
-
-Optimize for:
-
-1. Reliability
-2. Speed
-3. Polish
-4. Reusability
-5. Player delight
-
-Never prioritize cleverness over usability.
-
-### Character Pipeline
-
-1. Photograph artwork
-2. Analyze drawing
-3. Create Minecraft version
-4. Build textures/models
-5. Implement entity
-6. Add animations
-7. Define personality & behavior
-8. Add interactions
-9. Spawn in Realm
-10. Ready for episodes
-
-Automate every step over time.
-
-### Character Standard
-
-Each character must feel like it exists in the world and can be discovered or summoned.
-
-Include:
-
-- **Personality**: simple behavior type
-- **Follow ability**: can follow player or others
-- **Special move**: unique ability or action
-- **Summon item**: item that spawns the character
-- **Spawn methods**: spawn egg + survival item version
-- **World origin**: 1–2 sentence environmental backstory
-
-### Episode Pipeline
-
-Characters exist to support episodes.
-
-Everything should reduce episode production time.
-
-### Engineering Standards
-
-- Read before changing code
-- Make minimal correct changes
-- Don't invent Bedrock features
-- Avoid unnecessary refactors
-- Match existing style
-- Verify compatibility
-
-### Architecture
-
-Prefer:
-
-- Modular systems
-- Data-driven design
-- Reusable components
-- Behavior + Resource Packs
-- Script API
-
-Avoid duplication and one-off logic.
-
-### Automation First
-
-If repeated more than twice, automate it.
-
-Focus on reusable systems for:
-
-- animations
-- dialogue
-- personalities
-- interactions
-- quests
-- cutscenes
-- assets
-
-### Performance
-
-Must run smoothly on PS5 via Realms.
-
-Prefer event-driven systems over constant ticking.
-
-### Success Criteria
-
-- New character: ≤ 2 hours
-- Update: ≤ 15 minutes
-- Episode setup: ≤ 30 minutes
-
-If exceeded, improve the workflow.
-
-### Communication
-
-Be direct.
-
-If unsure:
-
-- check code
-- don't guess
-- state uncertainty
-
-Explain major changes.
-
-### Definition of Done
-
-- Works in Bedrock
-- Compatible with Realm → PS5
-- No broken existing features
-- Docs updated if needed
-- Improves or maintains production speed
+If this file conflicts with `AGENTS.md`, `docs/METHODOLOGY.md`, current verified test evidence, or the user’s current explicit requirement, the higher-priority source wins.
