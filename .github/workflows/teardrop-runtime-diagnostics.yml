@@ -1,4 +1,4 @@
-name: Teardrop Bedrock Diagnostics
+name: Teardrop v1.2.1 Release Gate
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  bedrock-gates:
+  release-gate:
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     steps:
@@ -15,7 +15,7 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Reconstruct reported failing v1.2.0
+      - name: Reconstruct exact reported-failing v1.2.0 fixture
         shell: bash
         run: |
           set -euo pipefail
@@ -26,7 +26,7 @@ jobs:
           unzip -q /tmp/teardrop/outer/Teardrop_RP.mcpack -d /tmp/teardrop/project/RP
           unzip -t /tmp/teardrop/Teardrop_v1.2.0.mcaddon | tee /tmp/teardrop/logs/v1.2.0-archive.txt
 
-      - name: Build v1.2.1 candidate from exact failing fixture
+      - name: Build sealed v1.2.1 candidate
         shell: bash
         run: |
           set -euo pipefail
@@ -37,7 +37,7 @@ jobs:
       - name: Install Mojang Minecraft Creator Tools
         run: npm install -g @minecraft/creator-tools
 
-      - name: Fail-closed official Creator Tools validation
+      - name: Fail-closed Mojang all-suite validation
         shell: bash
         run: |
           set -euo pipefail
@@ -45,19 +45,12 @@ jobs:
           python scripts/validate_with_creator_tools.py /tmp/teardrop/project \
             --suite all --fail-on-warnings --log /tmp/teardrop/logs/creator-tools-all.txt
 
-      - name: Dedicated Add-On relationship validation
+      - name: Fail-closed Mojang Add-On relationship validation
         shell: bash
         run: |
           set -euo pipefail
           python scripts/validate_with_creator_tools.py /tmp/teardrop/project \
             --suite addon --fail-on-warnings --log /tmp/teardrop/logs/creator-tools-addon.txt
-
-      - name: Add temporary spawn-bisect entities after release artifact is sealed
-        shell: bash
-        run: |
-          set -euo pipefail
-          python scripts/make_teardrop_spawn_diagnostics.py /tmp/teardrop/project \
-            | tee /tmp/teardrop/logs/spawn-diagnostic-variants.txt
 
       - name: Download current official Bedrock Dedicated Server
         shell: bash
@@ -74,7 +67,7 @@ jobs:
           unzip -q bedrock-server.zip -d bds
           test -x bds/bedrock_server
 
-      - name: Configure isolated Bedrock world with diagnostic BP
+      - name: Configure isolated Bedrock world with release packs only
         shell: bash
         run: |
           set -euo pipefail
@@ -99,38 +92,79 @@ jobs:
           sed -i 's/^allow-cheats=.*/allow-cheats=true/' "$BDS/server.properties"
           sed -i 's/^content-log-console-output-enabled=.*/content-log-console-output-enabled=true/' "$BDS/server.properties"
 
-      - name: Bisect Teardrop spawn state in real Bedrock with loaded chunks
+      - name: Real Bedrock boot + Teardrop summon gate
         shell: bash
         run: |
           set -euo pipefail
           cd /tmp/teardrop/bds
           {
             sleep 8
-            echo 'tickingarea add circle 0 80 0 1 teardrop_ci true'
+            echo 'tickingarea add circle 0 80 0 1 teardrop_release_ci true'
             sleep 5
-            echo 'tickingarea list'
-            sleep 1
-            for id in td_diag_min td_diag_base td_diag_group_only td_diag_spawn_wild td_diag_tame_base teardrop; do
-              echo "summon junk_bunch:$id 0 80 0"
-              sleep 1
-              echo "testfor @e[type=junk_bunch:$id]"
-              sleep 1
-            done
+            echo 'summon junk_bunch:teardrop 0 80 0'
+            sleep 2
+            echo 'testfor @e[type=junk_bunch:teardrop]'
+            sleep 2
             echo 'stop'
-          } | timeout --signal=INT --kill-after=5s 50s env LD_LIBRARY_PATH=. ./bedrock_server 2>&1 \
-            | tee /tmp/teardrop/logs/bds-spawn-bisect.txt || code=$?
+          } | timeout --signal=INT --kill-after=5s 40s env LD_LIBRARY_PATH=. ./bedrock_server 2>&1 \
+            | tee /tmp/teardrop/logs/bds-release.txt || code=$?
           code=${code:-0}
-          echo "BDS process exit code: $code" | tee -a /tmp/teardrop/logs/bds-spawn-bisect.txt
-          grep -F 'Junk Bunch - Teardrop BP' /tmp/teardrop/logs/bds-spawn-bisect.txt
-          grep -F 'Server started.' /tmp/teardrop/logs/bds-spawn-bisect.txt
-          grep -E 'ticking area|Successfully summoned|Unable to summon object|No targets matched selector|Found ' \
-            /tmp/teardrop/logs/bds-spawn-bisect.txt \
-            | tee /tmp/teardrop/logs/spawn-bisect-summary.txt || true
+          echo "BDS process exit code: $code" | tee -a /tmp/teardrop/logs/bds-release.txt
+
+          grep -F 'Junk Bunch - Teardrop BP' /tmp/teardrop/logs/bds-release.txt
+          grep -F 'version: 1.2.1' /tmp/teardrop/logs/bds-release.txt
+          grep -F 'Server started.' /tmp/teardrop/logs/bds-release.txt
+          grep -F 'Added ticking area' /tmp/teardrop/logs/bds-release.txt
+          grep -F 'Object successfully summoned' /tmp/teardrop/logs/bds-release.txt
+          grep -F 'Found entity.junk_bunch:teardrop.name' /tmp/teardrop/logs/bds-release.txt
+
+          if grep -E '\[[^]]+ ERROR\]' /tmp/teardrop/logs/bds-release.txt; then
+            echo 'FAIL: Bedrock emitted an ERROR during release gate.'
+            exit 1
+          fi
+          if grep -F 'Unable to summon object' /tmp/teardrop/logs/bds-release.txt; then
+            echo 'FAIL: Teardrop could not be summoned.'
+            exit 1
+          fi
+
+      - name: Write release-gate summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo 'TEARDROP v1.2.1 RELEASE GATE'
+            echo '================================'
+            echo 'Mojang Creator Tools all suite: PASS, fail-closed, 0 errors / 0 warnings'
+            echo 'Mojang Creator Tools addon suite: PASS, fail-closed, 0 errors / 0 warnings'
+            echo 'Bedrock Dedicated Server: PASS'
+            grep -m1 'Version:' /tmp/teardrop/logs/bds-release.txt
+            echo 'Pack stack: Teardrop BP 1.2.1 loaded'
+            echo 'Ticking area: preloaded before entity test'
+            echo 'Entity summon: junk_bunch:teardrop successfully summoned and found'
+            echo 'Archive CRC: PASS'
+            cat /tmp/teardrop/logs/v1.2.1-sha256.txt
+            echo
+            echo 'BOUNDARY: Android/PS5 client-side resource rendering and interaction still require the real client test.'
+          } | tee /tmp/teardrop/Teardrop_v1.2.1_validation.txt
+
+      - name: Upload exact tested add-on
+        uses: actions/upload-artifact@v4
+        with:
+          name: Teardrop-v1.2.1-tested
+          path: /tmp/teardrop/Teardrop_v1.2.1.mcaddon
+          if-no-files-found: error
+
+      - name: Upload validation report
+        uses: actions/upload-artifact@v4
+        with:
+          name: Teardrop-v1.2.1-validation
+          path: /tmp/teardrop/Teardrop_v1.2.1_validation.txt
+          if-no-files-found: error
 
       - name: Upload diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: teardrop-v1.2.1-spawn-bisect
+          name: Teardrop-v1.2.1-diagnostics
           path: /tmp/teardrop/logs
           if-no-files-found: error
