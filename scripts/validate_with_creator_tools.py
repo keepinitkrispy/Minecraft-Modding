@@ -66,25 +66,41 @@ def main() -> int:
         print(f"VALIDATION HARNESS FAILURE: {exc}", file=sys.stderr)
         return 2
 
-    if payload.get("suite") != args.suite:
-        print(
-            f"VALIDATION HARNESS FAILURE: requested suite {args.suite!r} but payload reports {payload.get('suite')!r}",
-            file=sys.stderr,
-        )
+    # MCT 0.17.7's JSON payload does not echo the selected suite. Verify instead
+    # that it is an actual validate result with one or more project result sets,
+    # aggregate counters, and concrete generated test items. A plain version
+    # response or unrelated JSON therefore cannot pass this gate.
+    projects = payload.get("projects")
+    if not isinstance(projects, list) or not projects:
+        print("VALIDATION HARNESS FAILURE: no project validation results present", file=sys.stderr)
         return 2
-    if int(payload.get("projects", 0)) < 1:
-        print("VALIDATION HARNESS FAILURE: no project was actually validated", file=sys.stderr)
+    generated_items = 0
+    for project in projects:
+        if not isinstance(project, dict):
+            continue
+        items = project.get("items")
+        if isinstance(items, list):
+            generated_items += sum(
+                1 for item in items
+                if isinstance(item, dict) and item.get("generatorId")
+            )
+    if generated_items == 0:
+        print("VALIDATION HARNESS FAILURE: payload contains no generated validation items", file=sys.stderr)
         return 2
 
-    summary = payload.get("validationSummary")
-    if not isinstance(summary, dict):
-        print("VALIDATION HARNESS FAILURE: validationSummary missing", file=sys.stderr)
-        return 2
+    for key in ("errors", "warnings", "recommendations"):
+        if key not in payload:
+            print(f"VALIDATION HARNESS FAILURE: aggregate field {key!r} missing", file=sys.stderr)
+            return 2
 
-    errors = int(summary.get("errors", 0))
-    warnings = int(summary.get("warnings", 0))
-    info = int(summary.get("info", 0))
-    print(f"MCT VERIFIED PAYLOAD: suite={args.suite} errors={errors} warnings={warnings} info={info}")
+    errors = int(payload["errors"])
+    warnings = int(payload["warnings"])
+    recommendations = int(payload["recommendations"])
+    print(
+        f"MCT VERIFIED PAYLOAD: requested_suite={args.suite} "
+        f"projects={len(projects)} test_items={generated_items} "
+        f"errors={errors} warnings={warnings} recommendations={recommendations}"
+    )
 
     if proc.returncode != 0:
         print(f"MCT process exited {proc.returncode}", file=sys.stderr)
