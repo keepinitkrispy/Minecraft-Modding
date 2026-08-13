@@ -78,8 +78,10 @@ jobs:
           JSON
           sed -i 's/^level-name=.*/level-name=TeardropLoadTest/' "$BDS/server.properties"
           sed -i 's/^online-mode=.*/online-mode=false/' "$BDS/server.properties"
+          sed -i 's/^allow-list=.*/allow-list=false/' "$BDS/server.properties"
           sed -i 's/^allow-cheats=.*/allow-cheats=true/' "$BDS/server.properties"
-          grep -E '^(level-name|online-mode|allow-cheats)=' "$BDS/server.properties" | tee /tmp/teardrop/logs/server-properties.txt
+          sed -i 's/^content-log-console-output-enabled=.*/content-log-console-output-enabled=true/' "$BDS/server.properties"
+          grep -E '^(level-name|online-mode|allow-list|allow-cheats|content-log-console-output-enabled)=' "$BDS/server.properties" | tee /tmp/teardrop/logs/server-properties.txt
 
       - name: Boot real Bedrock Dedicated Server and capture content load
         id: bdsboot
@@ -98,7 +100,7 @@ jobs:
         run: |
           set +e
           log=/tmp/teardrop/logs/bds.txt
-          grep -Ei 'error|failed|invalid|exception|warning|content log|pack' "$log" > /tmp/teardrop/logs/bds-errors-and-pack-lines.txt
+          grep -Ei 'error|failed|invalid|exception|warning|content log|pack|script' "$log" > /tmp/teardrop/logs/bds-errors-and-pack-lines.txt
           cat /tmp/teardrop/logs/bds-errors-and-pack-lines.txt
           exit 0
 
