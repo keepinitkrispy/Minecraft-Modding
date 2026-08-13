@@ -29,15 +29,15 @@ jobs:
       - name: Install Mojang Minecraft Creator Tools
         run: npm install -g @minecraft/creator-tools
 
-      - name: Official Creator Tools validation
+      - name: Official Creator Tools all-suite validation
         id: mctvalidate
         shell: bash
         run: |
           set +e
           mct version 2>&1 | tee /tmp/teardrop/logs/mct-version.txt
-          mct validate addon -i /tmp/teardrop/project -v --json 2>&1 | tee /tmp/teardrop/logs/creator-tools.json
+          mct validate all -i /tmp/teardrop/project --single --verbose --json 2>&1 | tee /tmp/teardrop/logs/creator-tools.json
           code=${PIPESTATUS[0]}
-          mct validate addon -i /tmp/teardrop/project -v 2>&1 | tee /tmp/teardrop/logs/creator-tools.txt
+          mct validate all -i /tmp/teardrop/project --single --verbose 2>&1 | tee /tmp/teardrop/logs/creator-tools.txt
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
           echo "Creator Tools exit code: $code"
           exit 0
@@ -111,7 +111,7 @@ jobs:
           path: /tmp/teardrop/logs
           if-no-files-found: error
 
-      - name: Report official static gate result
+      - name: Fail if official validation rejected the add-on
         if: steps.mctvalidate.outputs.exit_code != '0'
         run: |
           echo "Official Minecraft Creator Tools rejected the add-on."
