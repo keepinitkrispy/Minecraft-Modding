@@ -1,0 +1,16 @@
+{
+  "status": "failed",
+  "entity_identifier": "junkbunch:leafy",
+  "geometry_identifier": "geometry.leafy.main",
+  "creator_approved": false,
+  "source_fidelity_checked": false,
+  "scale_checked": false,
+  "material_read_checked": false,
+  "views": {},
+  "failure_reasons": [
+    "Current geometry must not be treated as visually approved merely because the pack/entity files are valid.",
+    "Known later visual/rig revisions had limb segmentation/placement defects.",
+    "A fresh front/side/back/three-quarter review of the exact current geometry is required before packaging."
+  ],
+  "next_gate": "Rebuild/fix geometry, render the actual Bedrock geometry from all required views, compare at player scale, then record creator approval bound to the geometry SHA-256."
+}
