@@ -1,198 +1,111 @@
-# Junk Bunch AI Adventure
+# Minecraft-Modding
 
-Turn your child's drawings into playable Minecraft Bedrock characters in 1-2 hours, then build episodes and challenges around them.
+An open-method effort to make Minecraft Bedrock creation feel like an AI creation tool: give the system art, an idea, or a plain-language description and get back a finished, testable `.mcaddon` with as little manual translation as possible.
 
----
+The methodology is documented in [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md). Model-neutral agent rules live in [`AGENTS.md`](AGENTS.md).
 
-## Quick Start
+## Product principle
 
-### For Creating Characters
+**Service is convenience, not captivity.**
 
-1. **Prepare a character concept:**
-   - Photo of your son's drawing
-   - Character name (e.g., "Rusty", "Sparkle")
-   - 3-5 personality traits (e.g., "sneaky, helpful, loyal")
-   - Special ability in 1-2 sentences
-   - Summon item (crafted, found, or creative)
+People who want to run or fork the process themselves should be able to inspect the methodology, schemas, validation rules, quality gates, failure modes, and learning system. People who want us to do the work for them can pay a small convenience/execution fee instead.
 
-2. **Send to Claude Code:**
-   - Upload the image
-   - Provide the details above
-   - I'll create the full entity, textures, animations, and recipes
+The economic target is tool-like pricing rather than consulting-style pricing: ordinary runs should ideally cost only a few dollars or less if the underlying economics allow it.
 
-3. **Download & Test:**
-   - Get the updated pack files
-   - Download on your phone
-   - Upload to Realm via Minecraft Mobile
-   - PS5 auto-downloads when joining
-   - Test with the summon item in-world
+> The repository is public, but an explicit reuse license has not yet been selected. Do not describe the methodology as legally open-source/open-use until a license is added.
 
-### For Uploading to Realm
+## North-star pipeline
 
-See `/packs/README.md` for detailed upload instructions.
+`intent / art → structured spec → assets + behavior → validation → Bedrock runtime test → packaged .mcaddon → learned improvement`
 
----
+The goal is not “files were generated.” The goal is a playable result verified at the strongest level available.
 
-## Build
+## Bedrock validation ladder
 
-The importable add-on is `JunkBunch.mcaddon` at the repository root.
+1. Structural/package check
+2. Schema/static validation
+3. Import test
+4. Spawn/placement test
+5. Behavior test
+6. Visual test
+7. Regression test
+
+Never claim a higher level than was actually tested.
+
+## Current build
+
+The importable Junk Bunch add-on is `JunkBunch.mcaddon` at the repository root.
 
 ```bash
-# validate the packs only (no build)
+# validate source packs
 python3 scripts/validate_packs.py
 
 # validate, then build JunkBunch.mcaddon
 python3 scripts/build_mcaddon.py
 ```
 
-`build_mcaddon.py` refuses to package anything that fails validation, so a broken
-pack is caught here instead of failing to import on a console.
+`build_mcaddon.py` refuses to package a pack that fails the validator.
 
-**What the validator checks** — every JSON file parses; both manifests have a
-`header.uuid`, `header.version`, `min_engine_version` and a valid module `type`;
-all UUIDs are well-formed and unique; every dependency resolves to a real pack in
-this add-on and there is no circular BP↔RP dependency; every referenced geometry,
-texture, animation, animation controller, render controller and entity actually
-exists on disk; no invalid entity-event responses or legacy item components; pack
-folder names are recognised Bedrock folders.
+The built archive should contain exactly:
 
-**Archive layout** — the built `.mcaddon` contains exactly two entries at its root:
-
-```
+```text
 JunkBunch_BP/
 JunkBunch_RP/
 ```
 
-No `packs/` prefix, no repo root folder, no extra nesting, no `.gitkeep`, and no
-`_*` template files.
+with no repo-root nesting or extra `packs/` prefix.
 
-### Adding a new character
+## Character workflow
 
-1. Add the behavior files under `packs/JunkBunch_BP/` and the assets under
-   `packs/JunkBunch_RP/`.
-2. Run `python3 scripts/validate_packs.py` and fix anything it reports.
-3. Run `python3 scripts/build_mcaddon.py` to regenerate `JunkBunch.mcaddon`.
-4. Commit the rebuilt archive along with the source files.
+A new character may begin with only a drawing/reference and intent. Extra fields such as personality, special ability, or summon item are useful when the creator has opinions, but they are not mandatory prerequisites for starting.
 
----
+The system should infer reasonable defaults, surface only genuinely important creative choices, build the artifact, validate it, and then use Bedrock testing to decide what is actually learned.
 
-## Workflow Documentation
+See [`docs/WORKFLOW.md`](docs/WORKFLOW.md).
 
-- **`/docs/WORKFLOW.md`** — How to create a character step-by-step
-- **`/docs/PS5_CONTROLS.md`** — Button mapping and control scheme
-- **`/CLAUDE.md`** — Project philosophy and engineering standards
+## Platform target
 
----
+- Minecraft Bedrock Edition
+- Android/mobile-first authoring and transfer
+- Realms deployment
+- PlayStation 5 play/testing
+- Desktop tools are optional accelerators, not hidden hard dependencies
 
-## File Structure
+## Knowledge model
 
-```
-Junk Bunch/
-├── CLAUDE.md                 # Project guidance for Claude Code
-├── README.md                 # This file
-├── packs/
-│   ├── JunkBunch_BP/         # Behavior Pack
-│   │   ├── manifest.json
-│   │   ├── entities/         # Character entity files
-│   │   ├── animation_controllers/
-│   │   ├── functions/
-│   │   ├── recipes/
-│   │   └── loot_tables/
-│   │
-│   ├── JunkBunch_RP/         # Resource Pack
-│   │   ├── manifest.json
-│   │   ├── textures/
-│   │   │   ├── entity/characters/
-│   │   │   └── items/
-│   │   ├── models/entity/
-│   │   └── animations/
-│   │
-│   └── README.md             # Pack upload & troubleshooting
-│
-├── characters/
-│   ├── ROSTER.md             # Track all created characters
-│   └── [character_name].json # Individual character data
-│
-└── docs/
-    ├── WORKFLOW.md           # Character creation workflow
-    ├── PS5_CONTROLS.md       # Control scheme & implementation
-    └── (future: challenge docs, episode docs, etc.)
+Project experience is split conceptually into:
+
+- current state
+- per-project state
+- reusable verified Bedrock knowledge
+- evidence/history
+
+Reusable rules are promoted only after evidence supports them. Unknowns stay unknown; obsolete rules are marked superseded.
+
+## Repository map
+
+```text
+AGENTS.md                  model-neutral agent rules
+CLAUDE.md                  thin Claude-specific adapter
+docs/METHODOLOGY.md        open methodology / product constitution
+docs/WORKFLOW.md           character build/test workflow
+docs/PS5_CONTROLS.md       PS5 interaction notes
+packs/                     Bedrock behavior/resource packs
+characters/                character state/data
+scripts/                   validation/build automation
+templates/                 reusable scaffolding
 ```
 
----
+## Long-term direction
 
-## Character Pipeline
+The end state should feel less like hiring a coder and more like using Meshy for Minecraft Bedrock:
 
-Each character follows this process:
+1. provide art or intent
+2. system retrieves relevant verified experience
+3. system builds the content and mechanics
+4. automated validation catches structural defects
+5. Bedrock runtime/visual tests determine what actually works
+6. successful patterns improve future runs
+7. user receives an importable, understandable, editable result
 
-1. 📸 Photograph artwork
-2. 🧠 Analyze drawing → concept
-3. 🎨 Create textures faithful to drawing
-4. 🤖 Build entity (behavior, animations, models)
-5. 🎬 Add animations (idle, walk, run, special move)
-6. 💡 Define personality & behaviors
-7. 🔗 Add summon item & recipe
-8. 🎮 Spawn into Realm
-9. ✅ Ready for episodes/challenges
-
-**Target time: ≤ 2 hours per character**
-
----
-
-## Controls (PS5 Bedrock)
-
-| Action | Button |
-|--------|--------|
-| Summon character | Aim at ground, hold **L2** with summon item |
-| Bond so it follows | Hold **L2** on the character with the summon item |
-| Special ability | Automatic (passive) |
-
-Full details: `/docs/PS5_CONTROLS.md`
-
----
-
-## Compatibility
-
-- **Edition**: Minecraft Bedrock (PlayStation 5 primary)
-- **Version**: 1.20.0+
-- **Workflow**: PC development → phone download → Realm upload → PS5 play
-- **Tools**: Blockbench (for modeling/animations), Realm with upload access
-
----
-
-## Character Status Tracking
-
-Each character in `/characters/ROSTER.md`:
-
-- **draft** — Being designed
-- **ready** — Tested in Realm
-- **stable** — Ready for challenges
-- **archived** — Retired
-
----
-
-## Next Steps
-
-1. Create the first character (send photo + name + traits + ability + item)
-2. Download and test in Realm
-3. Iterate on feedback
-4. Once 3-5 characters are stable, start building challenges
-5. Design episode narratives and arenas
-
----
-
-## Support
-
-- **How do I create a character?** → See `/docs/WORKFLOW.md`
-- **How do controls work on PS5?** → See `/docs/PS5_CONTROLS.md`
-- **How do I upload to my Realm?** → See `/packs/README.md`
-- **Project philosophy?** → See `CLAUDE.md`
-
----
-
-## Credits
-
-- **Creative Director**: Your son's drawings & ideas
-- **Manager/Producer**: You
-- **Development Team**: Claude (all entity, texture, animation, and scripting work)
-- **Platform**: Minecraft Bedrock Edition, PlayStation 5, Realm hosting
+The tool should get better because it has built and tested more things—not because users are forced into a proprietary black box.
