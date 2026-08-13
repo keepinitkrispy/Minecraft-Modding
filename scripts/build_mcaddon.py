@@ -2,7 +2,11 @@
 """
 Build JunkBunch.mcaddon.
 
-Validates the packs, then writes an archive whose ROOT contains exactly:
+Hard rule: a character may not be packaged until the visual-fidelity gate passes
+for the exact geometry bytes being built. This prevents schema-valid but ugly or
+stale geometry from advancing merely because technical validation succeeds.
+
+Then validates the packs and writes an archive whose ROOT contains exactly:
 
     JunkBunch_BP/
     JunkBunch_RP/
@@ -26,6 +30,22 @@ OUT = os.path.join(REPO, "JunkBunch.mcaddon")
 PACK_DIRS = ["JunkBunch_BP", "JunkBunch_RP"]
 BP_MANIFEST = os.path.join(SRC, "JunkBunch_BP", "manifest.json")
 RP_MANIFEST = os.path.join(SRC, "JunkBunch_RP", "manifest.json")
+
+
+def run_visual_gate():
+    """Refuse to package characters without current visual approval."""
+    print("Checking visual-fidelity gates before any build mutation...")
+    result = subprocess.run(
+        [sys.executable, os.path.join(REPO, "scripts", "check_visual_gates.py"), REPO]
+    )
+    if result.returncode != 0:
+        print(
+            "\nBuild aborted: visual-fidelity gate failed. "
+            "Do not spend more engineering effort or package this character until "
+            "the exact geometry has been rendered and approved."
+        )
+        sys.exit(1)
+    print()
 
 
 def bump_versions():
@@ -60,6 +80,7 @@ def bump_versions():
         fh.write("\n")
     print(f"Version bumped to {new[0]}.{new[1]}.{new[2]} (UUIDs unchanged)\n")
     return new
+
 
 EXCLUDE_NAMES = {
     ".gitkeep",
@@ -129,6 +150,8 @@ def build():
 
 
 if __name__ == "__main__":
+    # Critical order: do not even bump versions if visual approval is missing/stale.
+    run_visual_gate()
     bump_versions()
     validate()
     build()
