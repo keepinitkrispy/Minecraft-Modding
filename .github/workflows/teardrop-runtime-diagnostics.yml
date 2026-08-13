@@ -99,29 +99,31 @@ jobs:
           sed -i 's/^allow-cheats=.*/allow-cheats=true/' "$BDS/server.properties"
           sed -i 's/^content-log-console-output-enabled=.*/content-log-console-output-enabled=true/' "$BDS/server.properties"
 
-      - name: Bisect Teardrop spawn state in real Bedrock
+      - name: Bisect Teardrop spawn state in real Bedrock with loaded chunks
         shell: bash
         run: |
           set -euo pipefail
           cd /tmp/teardrop/bds
           {
             sleep 8
+            echo 'tickingarea add circle 0 80 0 1 teardrop_ci true'
+            sleep 5
+            echo 'tickingarea list'
+            sleep 1
             for id in td_diag_min td_diag_base td_diag_group_only td_diag_spawn_wild td_diag_tame_base teardrop; do
-              echo "say === DIAG_BEGIN junk_bunch:$id ==="
               echo "summon junk_bunch:$id 0 80 0"
               sleep 1
               echo "testfor @e[type=junk_bunch:$id]"
               sleep 1
-              echo "say === DIAG_END junk_bunch:$id ==="
             done
             echo 'stop'
-          } | timeout --signal=INT --kill-after=5s 45s env LD_LIBRARY_PATH=. ./bedrock_server 2>&1 \
+          } | timeout --signal=INT --kill-after=5s 50s env LD_LIBRARY_PATH=. ./bedrock_server 2>&1 \
             | tee /tmp/teardrop/logs/bds-spawn-bisect.txt || code=$?
           code=${code:-0}
           echo "BDS process exit code: $code" | tee -a /tmp/teardrop/logs/bds-spawn-bisect.txt
           grep -F 'Junk Bunch - Teardrop BP' /tmp/teardrop/logs/bds-spawn-bisect.txt
           grep -F 'Server started.' /tmp/teardrop/logs/bds-spawn-bisect.txt
-          grep -E 'DIAG_|Successfully summoned|Unable to summon object|No targets matched selector|Found ' \
+          grep -E 'ticking area|Successfully summoned|Unable to summon object|No targets matched selector|Found ' \
             /tmp/teardrop/logs/bds-spawn-bisect.txt \
             | tee /tmp/teardrop/logs/spawn-bisect-summary.txt || true
 
