@@ -1,187 +1,158 @@
-# Junk Bunch Character Creation Workflow
+# Character Creation Workflow
 
-## Overview
+This workflow implements the open methodology in `docs/METHODOLOGY.md` for Minecraft Bedrock characters and companions.
 
-This is the pipeline for creating a new Junk Bunch character from concept to in-game.
+## Input contract
 
-**Timeline**: ~1-2 hours per character from image upload to ready-to-test.
+The minimum useful input is:
 
----
+- a drawing/reference image, **or**
+- a plain-language concept
 
-## What You Provide
+Optional creator choices may include:
 
-When creating a new character, send me:
+- name
+- personality
+- special ability
+- summon/tame item
+- backstory
+- desired size/style
 
-1. **Photo of the drawing**
-   - Upload as image file from your phone
-   - Shows your son's character design
-   - I'll analyze the style, colors, proportions, and personality from the artwork
+Do **not** force the creator to fill every field before work can start. Infer safe, reversible defaults and ask only when a missing choice materially changes the creative result.
 
-2. **Character name**
-   - What the character is called
-   - Example: "Rusty", "Sparkle", "Chomper"
+## Build loop
 
-3. **Personality traits** (3-5 words)
-   - How the character behaves
-   - Example: "sneaky, mischievous, loyal"
-   - Example: "happy, clumsy, helpful"
-   - I use this to determine animations and idle behaviors
+1. **Interpret intent**
+   - identify recognizable silhouette, proportions, palette, personality cues, and gameplay intent
+   - separate direct creator requirements from inferred defaults
 
-4. **Special ability** (1-2 sentences)
-   - What makes this character unique
-   - Example: "Can climb walls and crawl on ceilings"
-   - Example: "Glows brightly in the dark and lights up dark areas"
-   - I turn this into an animation and mechanics
+2. **Retrieve relevant verified knowledge**
+   - reuse known-good Bedrock patterns for packaging, geometry, UVs, rigging, animation, AI, interactions, scripts, and platform constraints
+   - do not treat untested project code as a verified reusable rule
 
-5. **Summon item** (1-2 words)
-   - What item summons/directs this character
-   - Example: "Wooden sword", "Pumpkin", "Music disc"
-   - Can be crafted, found, or taken from creative mode
-   - I'll design the recipe and textures
+3. **Create a structured character spec**
+   - entity identity/namespace
+   - geometry and scale
+   - materials/textures
+   - animation set
+   - behavior contract
+   - special move
+   - interaction/tame/summon path
+   - survival/creative access where appropriate
 
----
+4. **Build the artifact**
+   - behavior-pack files
+   - resource-pack files
+   - geometry
+   - textures/UVs
+   - animation/controller files
+   - items/recipes/loot/functions/scripts as needed
+   - character tracking data
 
-## What I Create & Deliver
+5. **Validate statically**
+   - JSON parse
+   - manifest/dependencies
+   - references resolve
+   - known Bedrock schema/legacy problems
+   - archive layout
+   - run repository validators/build scripts where applicable
 
-For each character, I generate:
+6. **Package**
+   - produce an importable `.mcaddon`
+   - bump versions when needed to avoid Realm/cache confusion
 
-### Model authoring (Blockbench MCP)
-- Models, textures, and animations are authored in Blockbench, which Claude can
-  drive directly via the Blockbench MCP plugin. See `docs/BLOCKBENCH_MCP.md` for
-  setup. When Blockbench isn't running (e.g. a cloud session), the offline
-  fallback is `scripts/build_leafy_assets.py`. Either way the output must pass
-  `scripts/validate_packs.py` before it ships.
+7. **Runtime test in Bedrock**
+   - import/load
+   - spawn/summon
+   - movement/follow/sit/stay/attack as applicable
+   - special move
+   - visual/UV/animation/pivot check
+   - target-platform interaction check
+   - regression check against prior working content
 
-### Entity Files
-- Behavior component (personality, follow system, ability trigger)
-- Geometry model (based on your son's drawing style)
-- Animation controller (idle, walk, run, special ability, interact)
+8. **Record evidence**
+   - what actually worked
+   - what failed
+   - exact observed symptoms
+   - suspected cause versus established cause
+   - fix applied
+   - retest result
 
-### Textures & Models
-- Character texture (faithful to the drawing)
-- Summon item texture
-- Spawn egg variant
+9. **Promote reusable learning**
+   - only after evidence supports it
+   - promote the smallest useful rule
+   - mark conflicting older rules SUPERSEDED
+   - apply the new rule automatically to future relevant builds
 
-### Item & Crafting
-- Summon item definition with PS5-compatible controls
-- Crafting recipe (or creative/survival spawn method)
-- Loot table entries if applicable
+## Companion baseline
 
-### Documentation
-- Animation reference (what triggers what)
-- Behavior file with personality implementation
-- Integration notes (where files go in the packs)
+Unless the concept calls for something else, a polished companion should have a coherent subset of:
 
-### Character Data File
-- Stored at `/characters/[character_name].json`
-- Contains all properties for tracking and future updates
-- Used by scripts if challenge system is added later
+- recognizable source-art silhouette
+- idle + locomotion animation
+- tame/bond interaction
+- follow
+- sit/stay
+- attack/defend behavior where appropriate
+- one distinctive special move
+- spawn egg or creative access
+- survival-accessible summon/tame path where appropriate
+- clear player feedback
 
----
+This is a quality floor, not a requirement to force identical mechanics onto every character.
 
-## PS5 Control System
+## Geometry / asset authoring
 
-**Summoning the character (L2):**
-- Have the summon item in your hand (main or off-hand)
-- Hold **L2** (left trigger)
-- Character appears at your crosshair location
-- Release L2 when done
+Use the best available method for the environment.
 
-**Follow / bond (L2 on the character):**
-- With the summon item in hand, hold **L2** on the character to bond with it
-- Once bonded it follows you like a tamed pet and stays loaded (persistent)
+Desktop tools such as Blockbench may be useful accelerators, but they are **not** a required dependency for the project. Offline/generated geometry, image-assisted workflows, scripts, or future model-generation tools are acceptable if the output is valid and passes visual/runtime checks.
 
-**Special ability (passive):**
-- Abilities are automatic — no button press
-- R1/L1 are intentionally unused because they scroll the hotbar on PS5
+The target workflow remains Android/mobile-first with Realm → PS5 deployment.
 
-**Mining (R2):**
-- Normal Minecraft mining works unchanged; summoning only fires when the
-  summon item is in hand
+## Validation ladder
 
----
+Report the highest level actually reached:
 
-## Workflow Steps
+1. structural/package
+2. schema/static
+3. import
+4. spawn/placement
+5. behavior
+6. visual
+7. regression
 
-1. **You send**: Photo + Name + Traits + Ability + Summon Item
-2. **I analyze** the photo and design the entity
-3. **I create**:
-   - Entity JSON files
-   - Texture from drawing inspiration
-   - Animations (idle, walk, run, ability)
-   - Summon item + recipe
-   - Character data file
-4. **You receive**: All pack files ready to upload
-5. **You download** on your phone, upload to Realm via Minecraft mobile
-6. **PS5 joins** Realm, auto-downloads packs
-7. **Test in world**: Summon item exists, character spawns, can direct and use ability
-8. **If good**: Mark character as "ready"; if issues, describe and I iterate
+A static PASS does not mean runtime VERIFIED.
 
----
+## Character state
 
-## File Structure
+Track each character with a status that reflects evidence, not optimism. Suggested states:
 
-After I create a character, files go here:
+- `draft` — being authored
+- `static_valid` — source/package checks pass, runtime untested
+- `runtime_testing` — imported/spawned, behavior/visual testing incomplete
+- `ready` — intended core behavior verified in Bedrock
+- `stable` — repeated/regression testing passed
+- `archived` — superseded/retired
 
-```
-packs/JunkBunch_BP/
-  entities/[character_name].json
-  animation_controllers/[character_name].json
-  functions/characters/[character_name]/
+Record known defects and next test separately from the status.
 
-packs/JunkBunch_RP/
-  textures/entity/characters/[character_name].png
-  textures/items/summon_[character_name].png
-  models/entity/[character_name].geo.json
-  animations/[character_name].animation.json
+## Platform test path
 
-characters/
-  [character_name].json  (data file for tracking)
-```
+Typical target path:
 
----
+1. build/package the `.mcaddon`
+2. import on Android Bedrock
+3. apply/upload through Realm
+4. join from PS5 and accept pack download
+5. perform targeted in-world tests
+6. report exact observations back into project evidence
 
-## Example: Creating "Rusty"
+## Iteration rule
 
-**You send:**
-- Photo of a red-brown robot-like creature drawing
-- Name: "Rusty"
-- Traits: "loyal, curious, clumsy"
-- Ability: "Can emit sparks when jumping"
-- Summon Item: "Wrench"
+Do not rebuild from scratch merely because one thing is wrong. Preserve known-good behavior, make the smallest correct change, retest the affected feature, then regression-test what previously worked.
 
-**I create:**
-- Entity that follows player (loyal)
-- Walks with a stumbling animation (clumsy)
-- Spark particle effect on jump (ability)
-- Wrench item with crafting recipe
-- All textures matching the robot aesthetic
+## Definition of done
 
-**You get:**
-- Updated packs ready to upload
-- Rusty spawns with wrench in survival
-- Summon with L2; bond with L2 to have him follow
-- Passive ability always on
+The character is not done because files exist.
 
----
-
-## Iteration
-
-If something needs tweaking:
-- "Make Rusty faster"
-- "Add a different color variant"
-- "Change the ability to glow instead"
-
-Just tell me and I update and redeliver the files. No re-upload needed if it's just an entity file change; you can test locally first.
-
----
-
-## Character Status Tracking
-
-Each character lives in `/characters/[name].json` with a status field:
-- `draft` — being designed, not finalized
-- `ready` — tested and working in Realm
-- `stable` — multiple tests passed, ready for challenges
-- `archived` — old version, replaced by new one
-
-This helps track what's ready for the reality show challenges later.
+It is done when the requested result exists at the strongest verification level available, with remaining untestable boundaries stated explicitly.
