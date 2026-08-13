@@ -24,22 +24,35 @@ jobs:
           unzip -q /tmp/teardrop/Teardrop_v1.2.0.mcaddon -d /tmp/teardrop/outer
           unzip -q /tmp/teardrop/outer/Teardrop_BP.mcpack -d /tmp/teardrop/project/BP
           unzip -q /tmp/teardrop/outer/Teardrop_RP.mcpack -d /tmp/teardrop/project/RP
-          unzip -t /tmp/teardrop/Teardrop_v1.2.0.mcaddon | tee /tmp/teardrop/logs/archive.txt
+          unzip -t /tmp/teardrop/Teardrop_v1.2.0.mcaddon | tee /tmp/teardrop/logs/v1.2.0-archive.txt
+
+      - name: Build v1.2.1 candidate from exact failing fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/build_teardrop_v121.py /tmp/teardrop/project /tmp/teardrop/Teardrop_v1.2.1.mcaddon
+          unzip -t /tmp/teardrop/Teardrop_v1.2.1.mcaddon | tee /tmp/teardrop/logs/v1.2.1-archive.txt
+          sha256sum /tmp/teardrop/Teardrop_v1.2.1.mcaddon | tee /tmp/teardrop/logs/v1.2.1-sha256.txt
 
       - name: Install Mojang Minecraft Creator Tools
         run: npm install -g @minecraft/creator-tools
 
-      - name: Official Creator Tools all-suite validation
-        id: mctvalidate
+      - name: Fail-closed official Creator Tools validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          mct version | tee /tmp/teardrop/logs/mct-version.txt
+          python scripts/validate_with_creator_tools.py /tmp/teardrop/project \
+            --suite all --fail-on-warnings --log /tmp/teardrop/logs/creator-tools-all.txt
+
+      - name: Dedicated Add-On relationship diagnostics
         shell: bash
         run: |
           set +e
-          mct version 2>&1 | tee /tmp/teardrop/logs/mct-version.txt
-          mct validate all -i /tmp/teardrop/project --single --verbose --json 2>&1 | tee /tmp/teardrop/logs/creator-tools.json
-          code=${PIPESTATUS[0]}
-          mct validate all -i /tmp/teardrop/project --single --verbose 2>&1 | tee /tmp/teardrop/logs/creator-tools.txt
-          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
-          echo "Creator Tools exit code: $code"
+          python scripts/validate_with_creator_tools.py /tmp/teardrop/project \
+            --suite addon --log /tmp/teardrop/logs/creator-tools-addon.txt
+          code=$?
+          echo "addon_suite_exit_code=$code" | tee /tmp/teardrop/logs/addon-suite-exit.txt
           exit 0
 
       - name: Download current official Bedrock Dedicated Server
@@ -57,7 +70,7 @@ jobs:
           unzip -q bedrock-server.zip -d bds
           test -x bds/bedrock_server
 
-      - name: Configure isolated Bedrock world with Teardrop packs
+      - name: Configure isolated Bedrock world with v1.2.1 packs
         shell: bash
         run: |
           set -euo pipefail
@@ -68,12 +81,12 @@ jobs:
           cp -a /tmp/teardrop/project/RP/. "$BDS/resource_packs/Teardrop_RP/"
           cat > "$WORLD/world_behavior_packs.json" <<'JSON'
           [
-            {"pack_id":"c9e00f9a-25b3-4f6d-b239-d5465e0b5d22","version":[1,2,0]}
+            {"pack_id":"c9e00f9a-25b3-4f6d-b239-d5465e0b5d22","version":[1,2,1]}
           ]
           JSON
           cat > "$WORLD/world_resource_packs.json" <<'JSON'
           [
-            {"pack_id":"3418d8d9-321a-4de3-9182-c363ce8ec8c5","version":[1,2,0]}
+            {"pack_id":"3418d8d9-321a-4de3-9182-c363ce8ec8c5","version":[1,2,1]}
           ]
           JSON
           sed -i 's/^level-name=.*/level-name=TeardropLoadTest/' "$BDS/server.properties"
@@ -83,36 +96,50 @@ jobs:
           sed -i 's/^content-log-console-output-enabled=.*/content-log-console-output-enabled=true/' "$BDS/server.properties"
           grep -E '^(level-name|online-mode|allow-list|allow-cheats|content-log-console-output-enabled)=' "$BDS/server.properties" | tee /tmp/teardrop/logs/server-properties.txt
 
-      - name: Boot real Bedrock Dedicated Server and capture content load
-        id: bdsboot
+      - name: Boot real Bedrock server and summon actual Teardrop entity
         shell: bash
         run: |
-          set +e
+          set -euo pipefail
           cd /tmp/teardrop/bds
-          timeout --signal=INT --kill-after=5s 35s env LD_LIBRARY_PATH=. ./bedrock_server 2>&1 | tee /tmp/teardrop/logs/bds.txt
-          code=${PIPESTATUS[0]}
-          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
-          echo "BDS process exit code: $code (124/130 after timeout is expected once startup has been observed)" | tee -a /tmp/teardrop/logs/bds.txt
-          exit 0
+          {
+            sleep 9
+            echo 'summon junk_bunch:teardrop 0 80 0'
+            sleep 3
+            echo 'testfor @e[type=junk_bunch:teardrop]'
+            sleep 2
+            echo 'stop'
+          } | timeout --signal=INT --kill-after=5s 40s env LD_LIBRARY_PATH=. ./bedrock_server 2>&1 | tee /tmp/teardrop/logs/bds.txt || code=$?
+          code=${code:-0}
+          echo "BDS process exit code: $code" | tee -a /tmp/teardrop/logs/bds.txt
+          grep -F 'Junk Bunch - Teardrop BP' /tmp/teardrop/logs/bds.txt
+          grep -F 'version: 1.2.1' /tmp/teardrop/logs/bds.txt
+          grep -F 'Server started.' /tmp/teardrop/logs/bds.txt
+          if grep -Ei '(^|[^a-z])(error|failed|invalid|exception)([^a-z]|$)' /tmp/teardrop/logs/bds.txt | grep -v 'Xbox Live'; then
+            echo 'Bedrock server emitted a content/runtime error.'
+            exit 1
+          fi
 
-      - name: Extract Bedrock load errors
+      - name: Extract Bedrock pack/script lines
+        if: always()
         shell: bash
         run: |
           set +e
-          log=/tmp/teardrop/logs/bds.txt
-          grep -Ei 'error|failed|invalid|exception|warning|content log|pack|script' "$log" > /tmp/teardrop/logs/bds-errors-and-pack-lines.txt
-          cat /tmp/teardrop/logs/bds-errors-and-pack-lines.txt
+          grep -Ei 'pack|script|summon|testfor|error|failed|invalid|exception|warning' /tmp/teardrop/logs/bds.txt \
+            > /tmp/teardrop/logs/bds-diagnostics.txt
+          cat /tmp/teardrop/logs/bds-diagnostics.txt
           exit 0
 
-      - name: Upload diagnostics
+      - name: Upload tested v1.2.1 add-on
         uses: actions/upload-artifact@v4
         with:
-          name: teardrop-v1.2.0-bedrock-diagnostics
-          path: /tmp/teardrop/logs
+          name: Teardrop-v1.2.1-tested
+          path: /tmp/teardrop/Teardrop_v1.2.1.mcaddon
           if-no-files-found: error
 
-      - name: Fail if official validation rejected the add-on
-        if: steps.mctvalidate.outputs.exit_code != '0'
-        run: |
-          echo "Official Minecraft Creator Tools rejected the add-on."
-          exit 1
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: teardrop-v1.2.1-bedrock-diagnostics
+          path: /tmp/teardrop/logs
+          if-no-files-found: error
