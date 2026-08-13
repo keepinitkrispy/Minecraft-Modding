@@ -1,0 +1,57 @@
+name: Teardrop Bedrock Diagnostics
+
+on:
+  push:
+    branches: [teardrop-load-fix]
+  workflow_dispatch:
+
+jobs:
+  creator-tools:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Reconstruct reported failing v1.2.0
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/teardrop/project/BP /tmp/teardrop/project/RP /tmp/teardrop/logs
+          cat ci/teardrop_v1.2.0.part*.b64 | base64 -d > /tmp/teardrop/Teardrop_v1.2.0.mcaddon
+          unzip -q /tmp/teardrop/Teardrop_v1.2.0.mcaddon -d /tmp/teardrop/outer
+          unzip -q /tmp/teardrop/outer/Teardrop_BP.mcpack -d /tmp/teardrop/project/BP
+          unzip -q /tmp/teardrop/outer/Teardrop_RP.mcpack -d /tmp/teardrop/project/RP
+          unzip -t /tmp/teardrop/Teardrop_v1.2.0.mcaddon | tee /tmp/teardrop/logs/archive.txt
+      - name: Install Mojang Minecraft Creator Tools
+        run: npm install -g @minecraft/creator-tools
+      - name: Show tool version
+        run: mct version | tee /tmp/teardrop/logs/mct-version.txt
+      - name: Official Creator Tools addon validation
+        id: mctvalidate
+        shell: bash
+        run: |
+          set +e
+          mct validate addon -i /tmp/teardrop/project -v --json 2>&1 | tee /tmp/teardrop/logs/creator-tools.json
+          code=${PIPESTATUS[0]}
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          echo "Creator Tools exit code: $code"
+          exit 0
+      - name: Human-readable validation
+        shell: bash
+        run: |
+          set +e
+          mct validate addon -i /tmp/teardrop/project -v 2>&1 | tee /tmp/teardrop/logs/creator-tools.txt
+          exit 0
+      - name: Upload diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: teardrop-v1.2.0-creator-tools-diagnostics
+          path: /tmp/teardrop/logs
+          if-no-files-found: error
+      - name: Fail if official validator failed
+        if: steps.mctvalidate.outputs.exit_code != '0'
+        run: |
+          echo "Official Minecraft Creator Tools rejected the add-on."
+          exit 1
