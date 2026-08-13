@@ -1,0 +1,35 @@
+# Repository Licensing Policy
+
+This repository uses different licensing rules for different kinds of material.
+
+## 1. Code, tooling, schemas, templates, and configuration
+
+Unless a file says otherwise, reusable software source code and tool-facing technical material in locations such as `scripts/`, reusable templates, schemas, validators, build tooling, configuration, and comparable implementation files are licensed under the Apache License 2.0. See `LICENSE-CODE`.
+
+## 2. Public documentation and published methodology
+
+Unless a document says otherwise, public documentation in files such as `README.md`, `AGENTS.md`, `CLAUDE.md`, and `docs/*.md` is licensed under Creative Commons Attribution 4.0 International (CC BY 4.0). See `LICENSE-DOCS`.
+
+This grants rights to use, share, and adapt the material that is actually published here. It does not obligate the project to publish additional internal materials.
+
+## 3. Private orchestration and operational know-how
+
+The public licenses above do not grant rights to materials that are not included in this repository. In particular, the project's private end-to-end orchestration layer may include internal state stores, routing logic, retrieval strategy, model/tool choreography, prompts, evaluation procedures, service infrastructure, and other operational know-how that makes the public pieces work together as a production system.
+
+High-level architecture may be described publicly. The exact private integration recipe is not part of the licensed public package unless it is intentionally published and marked as licensed.
+
+## 4. Original character art and creative assets
+
+Original drawings, character artwork, textures, models, audio, story material, branding, and generated assets derived from private or family-created source art are NOT automatically covered by the Apache-2.0 or CC BY 4.0 grants merely because they appear in the same repository or in a packaged `.mcaddon`.
+
+Such assets remain under their respective copyright unless a specific file, directory, or accompanying notice explicitly grants a license.
+
+## 5. Third-party material
+
+Minecraft, Bedrock, Mojang, Microsoft, and other third-party names, trademarks, assets, APIs, libraries, and materials remain subject to their respective owners' terms and licenses. Nothing in this repository grants rights the project does not own.
+
+## Plain-language intent
+
+We want people to be able to use the public pieces, learn from them, modify them, and build their own systems. The paid service is for convenience and execution. The exact private orchestration that combines those pieces into our end-to-end service is not promised as part of the open package.
+
+If a file-specific license conflicts with this scope document, the file-specific license controls for that file.
