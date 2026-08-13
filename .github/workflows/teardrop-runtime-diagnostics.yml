@@ -45,15 +45,19 @@ jobs:
           python scripts/validate_with_creator_tools.py /tmp/teardrop/project \
             --suite all --fail-on-warnings --log /tmp/teardrop/logs/creator-tools-all.txt
 
-      - name: Dedicated Add-On relationship diagnostics
+      - name: Dedicated Add-On relationship validation
         shell: bash
         run: |
-          set +e
+          set -euo pipefail
           python scripts/validate_with_creator_tools.py /tmp/teardrop/project \
-            --suite addon --log /tmp/teardrop/logs/creator-tools-addon.txt
-          code=$?
-          echo "addon_suite_exit_code=$code" | tee /tmp/teardrop/logs/addon-suite-exit.txt
-          exit 0
+            --suite addon --fail-on-warnings --log /tmp/teardrop/logs/creator-tools-addon.txt
+
+      - name: Add temporary spawn-bisect entities after release artifact is sealed
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/make_teardrop_spawn_diagnostics.py /tmp/teardrop/project \
+            | tee /tmp/teardrop/logs/spawn-diagnostic-variants.txt
 
       - name: Download current official Bedrock Dedicated Server
         shell: bash
@@ -70,7 +74,7 @@ jobs:
           unzip -q bedrock-server.zip -d bds
           test -x bds/bedrock_server
 
-      - name: Configure isolated Bedrock world with v1.2.1 packs
+      - name: Configure isolated Bedrock world with diagnostic BP
         shell: bash
         run: |
           set -euo pipefail
@@ -94,52 +98,37 @@ jobs:
           sed -i 's/^allow-list=.*/allow-list=false/' "$BDS/server.properties"
           sed -i 's/^allow-cheats=.*/allow-cheats=true/' "$BDS/server.properties"
           sed -i 's/^content-log-console-output-enabled=.*/content-log-console-output-enabled=true/' "$BDS/server.properties"
-          grep -E '^(level-name|online-mode|allow-list|allow-cheats|content-log-console-output-enabled)=' "$BDS/server.properties" | tee /tmp/teardrop/logs/server-properties.txt
 
-      - name: Boot real Bedrock server and summon actual Teardrop entity
+      - name: Bisect Teardrop spawn state in real Bedrock
         shell: bash
         run: |
           set -euo pipefail
           cd /tmp/teardrop/bds
           {
-            sleep 9
-            echo 'summon junk_bunch:teardrop 0 80 0'
-            sleep 3
-            echo 'testfor @e[type=junk_bunch:teardrop]'
-            sleep 2
+            sleep 8
+            for id in td_diag_min td_diag_base td_diag_group_only td_diag_spawn_wild td_diag_tame_base teardrop; do
+              echo "say === DIAG_BEGIN junk_bunch:$id ==="
+              echo "summon junk_bunch:$id 0 80 0"
+              sleep 1
+              echo "testfor @e[type=junk_bunch:$id]"
+              sleep 1
+              echo "say === DIAG_END junk_bunch:$id ==="
+            done
             echo 'stop'
-          } | timeout --signal=INT --kill-after=5s 40s env LD_LIBRARY_PATH=. ./bedrock_server 2>&1 | tee /tmp/teardrop/logs/bds.txt || code=$?
+          } | timeout --signal=INT --kill-after=5s 45s env LD_LIBRARY_PATH=. ./bedrock_server 2>&1 \
+            | tee /tmp/teardrop/logs/bds-spawn-bisect.txt || code=$?
           code=${code:-0}
-          echo "BDS process exit code: $code" | tee -a /tmp/teardrop/logs/bds.txt
-          grep -F 'Junk Bunch - Teardrop BP' /tmp/teardrop/logs/bds.txt
-          grep -F 'version: 1.2.1' /tmp/teardrop/logs/bds.txt
-          grep -F 'Server started.' /tmp/teardrop/logs/bds.txt
-          if grep -Ei '(^|[^a-z])(error|failed|invalid|exception)([^a-z]|$)' /tmp/teardrop/logs/bds.txt | grep -v 'Xbox Live'; then
-            echo 'Bedrock server emitted a content/runtime error.'
-            exit 1
-          fi
-
-      - name: Extract Bedrock pack/script lines
-        if: always()
-        shell: bash
-        run: |
-          set +e
-          grep -Ei 'pack|script|summon|testfor|error|failed|invalid|exception|warning' /tmp/teardrop/logs/bds.txt \
-            > /tmp/teardrop/logs/bds-diagnostics.txt
-          cat /tmp/teardrop/logs/bds-diagnostics.txt
-          exit 0
-
-      - name: Upload tested v1.2.1 add-on
-        uses: actions/upload-artifact@v4
-        with:
-          name: Teardrop-v1.2.1-tested
-          path: /tmp/teardrop/Teardrop_v1.2.1.mcaddon
-          if-no-files-found: error
+          echo "BDS process exit code: $code" | tee -a /tmp/teardrop/logs/bds-spawn-bisect.txt
+          grep -F 'Junk Bunch - Teardrop BP' /tmp/teardrop/logs/bds-spawn-bisect.txt
+          grep -F 'Server started.' /tmp/teardrop/logs/bds-spawn-bisect.txt
+          grep -E 'DIAG_|Successfully summoned|Unable to summon object|No targets matched selector|Found ' \
+            /tmp/teardrop/logs/bds-spawn-bisect.txt \
+            | tee /tmp/teardrop/logs/spawn-bisect-summary.txt || true
 
       - name: Upload diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: teardrop-v1.2.1-bedrock-diagnostics
+          name: teardrop-v1.2.1-spawn-bisect
           path: /tmp/teardrop/logs
           if-no-files-found: error
