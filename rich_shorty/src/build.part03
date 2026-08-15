@@ -1,0 +1,90 @@
+CHAR_MODELS = [model_rich(), model_shorty(), model_shorty(True), model_bess(), model_gerry(), model_sundae(), model_bird_dude(), model_scronchy(), model_needs_it(), model_professor_poop()]
+DISPLAY_NAMES = {
+ 'rich':'Rich','shorty':'Shorty','evil_shorty':'Evil Shorty','bess':'Bess','gerry':'Gerry','sundae':'Sundae',
+ 'bird_dude':'Bird Dude','scronchy':'Scronchy','mr_needs_it':'Mr. Needs-It','professor_poop':'Professor Poop'
+}
+
+
+def behavior_entity(name:str,boss=False,friendly=True):
+    groups={}
+    comps={
+      'minecraft:type_family':{'family':['rs_cast','mob'] + (['monster'] if boss else [])},
+      'minecraft:health':{'value':240 if boss else 30,'max':240 if boss else 30},
+      'minecraft:movement':{'value':0.27 if not boss else 0.32},
+      'minecraft:movement.basic':{},'minecraft:navigation.walk':{'can_path_over_water':True,'avoid_damage_blocks':True},
+      'minecraft:physics':{},'minecraft:pushable':{'is_pushable':True,'is_pushable_by_piston':True},
+      'minecraft:collision_box':{'width':0.7 if name!='rich' else 0.78,'height':1.9 if name=='rich' else 1.65},
+      'minecraft:behavior.look_at_player':{'priority':6,'look_distance':8,'probability':0.08},
+      'minecraft:behavior.random_look_around':{'priority':7},'minecraft:behavior.random_stroll':{'priority':8,'speed_multiplier':0.7},
+      'minecraft:interact':{'interactions':[{'on_interact':{'event':'rs:talk','target':'self'},'interact_text':'Talk'}]},
+    }
+    events={'rs:talk':{}}
+    if boss:
+      comps.update({
+        'minecraft:attack':{'damage':12},'minecraft:behavior.nearest_attackable_target':{'priority':2,'must_see':True,'entity_types':[{'filters':{'test':'is_family','subject':'other','value':'player'},'max_dist':32}]},
+        'minecraft:behavior.melee_attack':{'priority':3,'speed_multiplier':1.2,'track_target':True},
+        'minecraft:knockback_resistance':{'value':0.7},'minecraft:boss':{'should_darken_sky':True,'hud_range':45,'name':'Evil Shorty'}
+      })
+    else:
+      comps['minecraft:behavior.avoid_mob_type']={'priority':3,'entity_types':[{'filters':{'test':'is_family','subject':'other','value':'monster'},'max_dist':8,'walk_speed_multiplier':1.1,'sprint_speed_multiplier':1.35}]}
+    return {'format_version':'1.20.80','minecraft:entity':{'description':{'identifier':f'{NS}:{name}','is_spawnable':True,'is_summonable':True,'is_experimental':False,'spawn_egg':{'base_color':'#5aa6b5','overlay_color':'#ece0c8'}},'component_groups':groups,'components':comps,'events':events}}
+
+
+def client_entity(name:str):
+    return {'format_version':'1.10.0','minecraft:client_entity':{'description':{
+      'identifier':f'{NS}:{name}','materials':{'default':'entity_alphatest'},'textures':{'default':f'textures/entity/rs/{name}'},
+      'geometry':{'default':f'geometry.rs.{name}'},'animations':{'walk':f'animation.rs.{name}.walk','idle':f'animation.rs.{name}.idle','talk':f'animation.rs.{name}.talk'},
+      'scripts':{'animate':['idle',{'walk':'query.modified_move_speed > 0.02'}]},'render_controllers':['controller.render.rs_default']
+    }}}
+
+
+def animations(name:str):
+    return {'format_version':'1.8.0','animations':{
+      f'animation.rs.{name}.idle':{'loop':True,'animation_length':2.4,'bones':{'body':{'rotation':{'0.0':[0,0,0],'1.2':[1.5,0,0],'2.4':[0,0,0]}},'head':{'rotation':{'0.0':[0,-2,0],'1.2':[0,2,0],'2.4':[0,-2,0]}}}},
+      f'animation.rs.{name}.walk':{'loop':True,'animation_length':1.0,'bones':{
+        'left_upper_leg':{'rotation':{'0.0':[28,0,0],'0.5':[-28,0,0],'1.0':[28,0,0]}},'right_upper_leg':{'rotation':{'0.0':[-28,0,0],'0.5':[28,0,0],'1.0':[-28,0,0]}},
+        'left_upper_arm':{'rotation':{'0.0':[-24,0,0],'0.5':[24,0,0],'1.0':[-24,0,0]}},'right_upper_arm':{'rotation':{'0.0':[24,0,0],'0.5':[-24,0,0],'1.0':[24,0,0]}}}},
+      f'animation.rs.{name}.talk':{'loop':True,'animation_length':1.1,'bones':{'head':{'rotation':{'0.0':[0,-8,0],'0.55':[3,8,0],'1.1':[0,-8,0]}},'right_lower_arm':{'rotation':{'0.0':[-15,0,-25],'0.55':[-50,0,-55],'1.1':[-15,0,-25]}}}}
+    }}
+
+
+def item_json(identifier,name,icon,component=None,stack=64):
+    comps={'minecraft:icon':icon,'minecraft:display_name':{'value':name},'minecraft:max_stack_size':stack}
+    if component: comps[component]={}
+    return {'format_version':'1.21.90','minecraft:item':{'description':{'identifier':identifier,'menu_category':{'category':'items'}},'components':comps}}
+
+
+def block_json(identifier, texture, destroy=2.0, component=None, loot=None, light=0):
+    comps={
+      'minecraft:geometry':'minecraft:geometry.full_block',
+      'minecraft:material_instances':{'*':{'texture':texture,'render_method':'opaque'}},
+      'minecraft:destructible_by_mining':{'seconds_to_destroy':destroy},
+      'minecraft:destructible_by_explosion':{'explosion_resistance':6.0},
+    }
+    if component: comps[component]={}
+    if loot: comps['minecraft:loot']=loot
+    if light: comps['minecraft:light_emission']=light
+    return {'format_version':'1.21.90','minecraft:block':{'description':{'identifier':identifier,'menu_category':{'category':'construction'}},'components':comps}}
+
+
+def loot_table(item):
+    return {'pools':[{'rolls':1,'entries':[{'type':'item','name':item,'weight':1,'functions':[{'function':'set_count','count':{'min':1,'max':3}}]}]}]}
+
+SCRIPT = r'''import { world, system, ItemStack } from "@minecraft/server";
+import { ActionFormData } from "@minecraft/server-ui";
+
+const NS = "rs:";
+const RESOURCES = ["rs:glorp_crystal","rs:fizzium","rs:chronodust","rs:scrap_fragment"];
+const TOOL_POOL = [
+  ["rs:gravity_spanner","Gravity Spanner"], ["rs:phase_pick","Phase Pick"],
+  ["rs:freeze_ray","Freeze Ray"], ["rs:time_skip_watch","Time-Skip Watch"],
+  ["rs:scaffold_printer","Scaffold Printer"], ["rs:matter_swap_glove","Matter-Swap Glove"],
+  ["rs:pocket_black_hole","Pocket Black Hole"], ["rs:chaos_bonker","Chaos Bonker"]
+];
+const ZONES = {
+  glorp: { label:"Glorp-9", pos:{x:10040,y:84,z:10040}, resource:"rs:glorp_ore", floor:"minecraft:moss_block" },
+  fizz: { label:"Fizz Desert", pos:{x:12040,y:84,z:12040}, resource:"rs:fizzium_ore", floor:"minecraft:red_sand" },
+  chrono:{ label:"Chrono Shelf", pos:{x:14040,y:84,z:14040}, resource:"rs:chronodust_cluster", floor:"minecraft:packed_ice" },
+  scrap:{ label:"Scrap Moon", pos:{x:16040,y:84,z:16040}, resource:"rs:scrap_node", floor:"minecraft:tuff" },
+  citadel:{ label:"The Citadel-ish", pos:{x:20040,y:105,z:20040}, resource:null, floor:"minecraft:polished_deepslate" }
+};
