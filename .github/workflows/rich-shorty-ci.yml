@@ -1,0 +1,56 @@
+name: Rich & Shorty release gates
+
+on:
+  push:
+    branches: [gpt/rich-and-shorty]
+    paths:
+      - 'rich_shorty/**'
+      - '.github/workflows/rich-shorty-ci.yml'
+  workflow_dispatch:
+
+jobs:
+  build-and-validate:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build exact release artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check pillow
+          python rich_shorty/build.py
+          node --check rich_shorty/dist/RichShorty_BP/scripts/main.js
+          unzip -t rich_shorty/dist/Rich_and_Shorty_v0.1.0.mcaddon
+          mkdir -p /tmp/rich-shorty-project
+          cp -R rich_shorty/dist/RichShorty_BP /tmp/rich-shorty-project/BP
+          cp -R rich_shorty/dist/RichShorty_RP /tmp/rich-shorty-project/RP
+
+      - name: Install Mojang Minecraft Creator Tools
+        run: npm install -g @minecraft/creator-tools
+
+      - name: Fail-closed Mojang validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          mct version
+          python rich_shorty/validate_with_creator_tools.py /tmp/rich-shorty-project --suite all --fail-on-warnings --log rich_shorty/dist/mct-all.log
+          python rich_shorty/validate_with_creator_tools.py /tmp/rich-shorty-project --suite addon --fail-on-warnings --log rich_shorty/dist/mct-addon.log
+
+      - name: Upload tested add-on and reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: Rich-and-Shorty-v0.1.0-tested
+          path: |
+            rich_shorty/dist/Rich_and_Shorty_v0.1.0.mcaddon
+            rich_shorty/dist/validation_report.json
+            rich_shorty/dist/story_bible.json
+            rich_shorty/dist/mct-*.log
+          if-no-files-found: error
