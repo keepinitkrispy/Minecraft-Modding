@@ -1,0 +1,111 @@
+
+# ---------------------------------------------------------------------------
+# RETAIL CAST REBUILD
+# Android TEST 58 proved the part23 fine-voxel quantity strategy renders as
+# visible ribs/plates. Keep articulated bones and identity-specific details,
+# but make each limb segment a connected mass and rebuild CHAR_MODELS after the
+# retail-clean head/body helpers from part32 are active.
+# ---------------------------------------------------------------------------
+_retail_cast_previous_validate = validate
+
+
+def _sculpt_limbs(m,shirt,pants='pants_dark',skin='skin_shorty',coat=False,child=False,wing=False):
+    armshirt='coat' if coat else shirt
+    armshadow='coat_shadow' if coat else {
+      'shirt_teal':'teal_shadow','shirt_amber':'amber_shadow','shirt_black':'black',
+      'red':'red','green':'green','purple':'purple','blue':'blue'
+    }.get(shirt,shirt)
+    span=4.45 if child else 5.0
+
+    for side in (-1,1):
+        x=-span if side<0 else span
+        un='left_upper_arm' if side<0 else 'right_upper_arm'
+        ln='left_lower_arm' if side<0 else 'right_lower_arm'
+        ua=m.bone(un,(x,11.55,0),'body')
+        if wing:
+            ox=x-2.0 if side<0 else x-.15
+            _c(ua,(ox,8.1,-1.35),(2.15,3.45,2.7),'feather')
+            _c(ua,(ox-.45 if side<0 else ox+.45,10.55,-1.1),(1.55,2.55,2.2),'feather')
+            _c(ua,(ox-.8 if side<0 else ox+.8,7.0,-.9),(1.25,2.1,1.8),'feather')
+        else:
+            ox=x-1.58 if side<0 else x-.02
+            _c(ua,(ox,8.95,-1.45),(1.65,3.5,2.9),armshirt)
+            _c(ua,(ox+.12,7.95,-1.30),(1.42,1.35,2.6),armshadow)
+
+        la=m.bone(ln,(x,8.0,0),un)
+        ox=x-1.37 if side<0 else x+.03
+        if wing:
+            _c(la,(ox-.35 if side<0 else ox,4.75,-1.05),(1.95,3.2,2.1),'feather')
+            _c(la,(ox-.8 if side<0 else ox+.45,3.55,-.75),(1.2,2.15,1.5),'feather')
+        else:
+            _c(la,(ox,5.0,-1.18),(1.36,2.8,2.36),_mat(skin+'_shadow','skin_shadow'))
+            _c(la,(ox+.06,3.15,-1.10),(1.24,2.2,2.20),skin)
+            _c(la,(ox-.15,2.25,-1.32),(1.66,1.2,2.64),skin)
+            thumb_x=ox-.48 if side<0 else ox+1.02
+            _c(la,(thumb_x,2.48,-1.50),(.58,.92,1.25),_mat(skin+'_light','skin_light'))
+
+    for side in (-1,1):
+        x=-2.75 if side<0 else .35
+        un='left_upper_leg' if side<0 else 'right_upper_leg'
+        ln='left_lower_leg' if side<0 else 'right_lower_leg'
+        ul=m.bone(un,((-1.75 if side<0 else 1.75),6.25,0),'body')
+        _c(ul,(x,3.45,-1.48),(2.55,3.35,2.96),pants)
+        _c(ul,(x+.14,2.55,-1.34),(2.27,1.18,2.68),_mat('navy_light',pants))
+        ll=m.bone(ln,((-1.75 if side<0 else 1.75),3.15,0),un)
+        _c(ll,(x+.18,.22,-1.28),(2.18,3.0,2.56),pants)
+        _c(ll,(x+.27,-.82,-1.15),(2.0,1.35,2.30),pants)
+        _c(ll,(x+.02,-1.45,-1.62),(2.45,.95,2.95),'shoe')
+        _c(ll,(x-.28,-1.58,-2.55),(3.05,.78,3.85),'shoe')
+
+
+# Part23 instantiated stale fine-sliced model objects. Rebuild the actual cast
+# now that part32's head/body and this file's limb helpers are in scope.
+CHAR_MODELS=[
+    hd_rich(),hd_shorty(False),hd_shorty(True),hd_bess(),hd_gerry(),hd_sundae(),
+    hd_bird_dude(),hd_scronchy(),hd_needs_it(),hd_professor_poop(),hd_captain_drizzle(),
+    hd_nightmare_larry(),hd_sprocket(),hd_consensus(),hd_cucumber(),hd_krombo(),
+    hd_shorty_jr(),hd_validator(),hd_franky(),hd_council_rich()
+]
+
+
+def _obsolete_quantity_gate_error(text):
+    return (
+      ('fine-voxel sculpt has only' in text and 'expected >=140' in text)
+      or ('fine-detail cubes; expected >=32' in text)
+      or ('visual regression:' in text and 'sculpted-cast floor is 80' in text)
+    )
+
+
+def validate(addon:Path):
+    report=_retail_cast_previous_validate(addon)
+    errors=[e for e in report.get('errors',[]) if not _obsolete_quantity_gate_error(str(e))]
+    checks=int(report.get('checks',0))
+    counts={}; rib_counts={}
+    for m in CHAR_MODELS:
+        cubes=[c for b in m.bones for c in b.cubes]
+        counts[m.name]=len(cubes)
+        ribs=0
+        for b in m.bones:
+            br=sum(1 for c in b.cubes if c.size[1]<=.90 and c.size[0]>=1.2 and c.size[2]>=1.2)
+            ribs+=br; checks+=1
+            if br>3:
+                errors.append(f'retail cast regression: {m.name}/{b.name} has {br} horizontal rib wafers (max 3)')
+        rib_counts[m.name]=ribs
+        checks+=1
+        if len(cubes)<38:
+            errors.append(f'retail cast regression: {m.name} lost too much identity geometry ({len(cubes)} cubes)')
+
+    report['checks']=checks
+    report['errors']=errors
+    report['status']='PASS' if not errors else 'FAIL'
+    report['visual_cube_counts']=counts
+    report['retail_rib_wafer_counts']=rib_counts
+    report['character_geometry_profile']='retail_clean_forms_v3'
+    report.pop('fine_detail_cube_counts',None)
+    gates=list(report.get('feature_regression_gates',[]))
+    gates=[g for g in gates if g!='sculpted_cast_min_80_cubes']
+    for g in ('retail_clean_character_forms','no_fine_voxel_quantity_gate','articulated_cast_preserved'):
+        if g not in gates: gates.append(g)
+    report['feature_regression_gates']=gates
+    jwrite(OUT/'validation_report.json',report)
+    return report
