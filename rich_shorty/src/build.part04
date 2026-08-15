@@ -1,0 +1,90 @@
+
+function inv(player){ return player.getComponent("minecraft:inventory")?.container; }
+function countItem(player,id){ const c=inv(player); if(!c) return 0; let n=0; for(let i=0;i<c.size;i++){const s=c.getItem(i);if(s?.typeId===id)n+=s.amount;} return n; }
+function takeItem(player,id,n){ const c=inv(player); if(!c) return false; if(countItem(player,id)<n)return false; let left=n; for(let i=0;i<c.size&&left>0;i++){const s=c.getItem(i);if(s?.typeId!==id)continue; const k=Math.min(left,s.amount); left-=k; if(k===s.amount)c.setItem(i); else {s.amount-=k;c.setItem(i,s);} } return left===0; }
+function give(player,id,n=1){ const c=inv(player); if(!c)return; const overflow=c.addItem(new ItemStack(id,n)); if(overflow) player.dimension.spawnItem(overflow,player.location); }
+function msg(p,t){p.sendMessage("§a[Rich & Shorty]§r "+t);}
+
+function buildZone(dim, zoneKey){
+  const z=ZONES[zoneKey]; const p=z.pos; const marker=dim.getBlock({x:p.x,y:p.y-2,z:p.z});
+  if(marker?.typeId==="rs:zone_anchor") return;
+  dim.runCommand(`fill ${p.x-24} ${p.y-3} ${p.z-24} ${p.x+24} ${p.y-1} ${p.z+24} ${z.floor}`);
+  dim.runCommand(`setblock ${p.x} ${p.y-2} ${p.z} rs:zone_anchor`);
+  dim.runCommand(`fill ${p.x-4} ${p.y} ${p.z-4} ${p.x+4} ${p.y} ${p.z+4} minecraft:smooth_stone`);
+  dim.runCommand(`setblock ${p.x} ${p.y+1} ${p.z} minecraft:lodestone`);
+  if(z.resource){
+    for(let i=0;i<34;i++){
+      const dx=((i*17)%41)-20, dz=((i*29)%41)-20, dy=(i%3);
+      dim.runCommand(`setblock ${p.x+dx} ${p.y+dy-1} ${p.z+dz} ${z.resource}`);
+    }
+  }
+  if(zoneKey==="glorp") dim.runCommand(`summon rs:sundae ${p.x+5} ${p.y+1} ${p.z+2}`);
+  if(zoneKey==="fizz") dim.runCommand(`summon rs:scronchy ${p.x+5} ${p.y+1} ${p.z+2}`);
+  if(zoneKey==="chrono") dim.runCommand(`summon rs:bird_dude ${p.x+5} ${p.y+1} ${p.z+2}`);
+  if(zoneKey==="scrap"){ dim.runCommand(`summon rs:mr_needs_it ${p.x+5} ${p.y+1} ${p.z+2}`); dim.runCommand(`summon rs:gerry ${p.x-5} ${p.y+1} ${p.z+2}`); }
+  if(zoneKey==="citadel") buildCitadel(dim,p);
+}
+function buildCitadel(dim,p){
+  // layered silhouette: plaza, central tower, side towers, bridges, council ring.
+  dim.runCommand(`fill ${p.x-30} ${p.y-3} ${p.z-30} ${p.x+30} ${p.y-1} ${p.z+30} minecraft:polished_deepslate`);
+  dim.runCommand(`fill ${p.x-10} ${p.y} ${p.z-10} ${p.x+10} ${p.y+42} ${p.z+10} minecraft:oxidized_cut_copper hollow`);
+  dim.runCommand(`fill ${p.x-7} ${p.y+3} ${p.z-7} ${p.x+7} ${p.y+38} ${p.z+7} minecraft:air`);
+  for(const [dx,dz] of [[-22,-22],[22,-22],[-22,22],[22,22]]){
+    dim.runCommand(`fill ${p.x+dx-5} ${p.y} ${p.z+dz-5} ${p.x+dx+5} ${p.y+27} ${p.z+dz+5} minecraft:dark_prismarine hollow`);
+    dim.runCommand(`fill ${p.x+Math.min(dx,0)} ${p.y+12} ${p.z+Math.min(dz,0)} ${p.x+Math.max(dx,0)} ${p.y+14} ${p.z+Math.max(dz,0)} minecraft:quartz_bricks`);
+  }
+  dim.runCommand(`fill ${p.x-16} ${p.y+40} ${p.z-16} ${p.x+16} ${p.y+43} ${p.z+16} minecraft:sea_lantern hollow`);
+  dim.runCommand(`summon rs:bess ${p.x-7} ${p.y+2} ${p.z-7}`);
+  dim.runCommand(`summon rs:professor_poop ${p.x+7} ${p.y+2} ${p.z-7}`);
+  dim.runCommand(`summon rs:evil_shorty ${p.x} ${p.y+4} ${p.z}`);
+}
+
+async function travelMenu(player){
+  const f=new ActionFormData().title("Busted Portal Remote").body("Pick a reality. Each one has abundant junk the Fabricator wants.");
+  for(const k of ["glorp","fizz","chrono","scrap","citadel"]) f.button(ZONES[k].label);
+  const r=await f.show(player); if(r.canceled||r.selection===undefined)return;
+  const key=["glorp","fizz","chrono","scrap","citadel"][r.selection];
+  if(key==="citadel" && countItem(player,"rs:citadel_token")<3){ msg(player,"Citadel-ish customs requires 3 Citadel Tokens. Apparently tyranny has a punch card."); return; }
+  const z=ZONES[key]; buildZone(player.dimension,key); player.teleport(z.pos,{dimension:player.dimension});
+  msg(player,`Portal stapled to ${z.label}. Try not to lick anything.`);
+}
+
+function fabricate(player){
+  const seed=(system.currentTick*1103515245 + player.name.length*7919 + Math.floor(player.location.x*31+player.location.z*17))>>>0;
+  const costs=RESOURCES.map((id,i)=>1+((seed >>> (i*3))%4));
+  let recipeKey=costs.join('-'); const lastRecipe=String(player.getDynamicProperty('rs:last_recipe')??'');
+  if(recipeKey===lastRecipe){ const j=(seed>>>13)%4; costs[j]=(costs[j]%4)+1; recipeKey=costs.join('-'); }
+  const missing=RESOURCES.filter((id,i)=>countItem(player,id)<costs[i]);
+  if(missing.length){
+    msg(player,"Fabricator refuses the pile. This run wants: "+RESOURCES.map((id,i)=>`${costs[i]} ${id.split(':')[1].replaceAll('_',' ')}`).join(", ")+"."); return;
+  }
+  RESOURCES.forEach((id,i)=>takeItem(player,id,costs[i]));
+  player.setDynamicProperty('rs:last_recipe',recipeKey);
+  let toolIndex=seed%TOOL_POOL.length; const lastTool=String(player.getDynamicProperty('rs:last_tool')??'');
+  if(TOOL_POOL[toolIndex][0]===lastTool) toolIndex=(toolIndex+1+((seed>>>9)%(TOOL_POOL.length-1)))%TOOL_POOL.length;
+  const pick=TOOL_POOL[toolIndex]; give(player,pick[0],1); player.setDynamicProperty('rs:last_tool',pick[0]);
+  player.addTag("rs_fabricated");
+  msg(player,`The machine coughs, screams briefly, and produces: §e${pick[1]}§r. Next recipe will be different.`);
+}
+
+function useTool(player,id,block){
+  const d=player.dimension, p=block?.location ?? player.location;
+  if(id==="rs:gravity_spanner"){ player.applyImpulse({x:0,y:1.25,z:0}); msg(player,"Local gravity has filed a complaint."); }
+  else if(id==="rs:phase_pick" && block){ d.runCommand(`fill ${p.x-1} ${p.y-1} ${p.z-1} ${p.x+1} ${p.y+1} ${p.z+1} air destroy`); }
+  else if(id==="rs:freeze_ray" && block){ d.runCommand(`fill ${p.x-3} ${p.y-2} ${p.z-3} ${p.x+3} ${p.y+2} ${p.z+3} ice replace water`); }
+  else if(id==="rs:time_skip_watch"){ d.runCommand(`time set ${((system.currentTick/20)|0)%2===0?'sunrise':'midnight'}`); d.runCommand('weather clear'); }
+  else if(id==="rs:scaffold_printer"){ const v=player.getViewDirection(); for(let i=1;i<=12;i++){ const x=Math.floor(player.location.x+v.x*i), z=Math.floor(player.location.z+v.z*i), y=Math.floor(player.location.y-1); d.runCommand(`setblock ${x} ${y} ${z} scaffolding keep`);} }
+  else if(id==="rs:matter_swap_glove" && block){ d.runCommand(`fill ${p.x-2} ${p.y-2} ${p.z-2} ${p.x+2} ${p.y+2} ${p.z+2} calcite replace stone`); d.runCommand(`fill ${p.x-2} ${p.y-2} ${p.z-2} ${p.x+2} ${p.y+2} ${p.z+2} moss_block replace dirt`); }
+  else if(id==="rs:pocket_black_hole"){ for(const e of d.getEntities({location:player.location,maxDistance:12,excludeTypes:['minecraft:player']})){ const dx=player.location.x-e.location.x,dy=player.location.y-e.location.y,dz=player.location.z-e.location.z; const m=Math.max(1,Math.hypot(dx,dy,dz)); try{e.applyImpulse({x:dx/m*.35,y:dy/m*.2,z:dz/m*.35});}catch{} } }
+  else if(id==="rs:chaos_bonker" && block){ const options=['gold_block','slime','honey_block','obsidian','sponge','bookshelf']; const b=options[(system.currentTick+Math.floor(p.x+p.z))%options.length]; d.runCommand(`setblock ${p.x} ${p.y} ${p.z} minecraft:${b}`); }
+}
+
+system.beforeEvents.startup.subscribe(ev=>{
+  ev.blockComponentRegistry.registerCustomComponent("rs:fabricator",{onPlayerInteract(e){ if(e.player) system.run(()=>fabricate(e.player)); }});
+  ev.itemComponentRegistry.registerCustomComponent("rs:portal_remote",{onUse(e){ system.run(()=>travelMenu(e.source)); }});
+  ev.itemComponentRegistry.registerCustomComponent("rs:world_tool",{onUse(e){ if(e.itemStack) system.run(()=>useTool(e.source,e.itemStack.typeId)); },onUseOn(e){ system.run(()=>useTool(e.source,e.itemStack.typeId,e.block)); }});
+});
+
+world.afterEvents.playerSpawn.subscribe(e=>{
+  if(!e.initialSpawn) return; const p=e.player;
+  if(!p.hasTag("rs_started")){
