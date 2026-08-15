@@ -1,0 +1,90 @@
+    p.addTag("rs_started"); give(p,"rs:busted_portal_remote",1); give(p,"rs:reality_fabricator",1);
+    system.runTimeout(()=>{ msg(p,"A busted portal remote and a Reality Fabricator have appeared in your pockets. Rich insists this counts as onboarding."); try{p.dimension.spawnEntity('rs:rich',{x:p.location.x+3,y:p.location.y,z:p.location.z+2});p.dimension.spawnEntity('rs:shorty',{x:p.location.x+5,y:p.location.y,z:p.location.z+2});}catch{} },20);
+  }
+});
+
+world.afterEvents.playerInteractWithEntity.subscribe(e=>{
+  const id=e.target.typeId, p=e.player;
+  if(id==="rs:rich") msg(p,p.hasTag('rs_fabricated')?"Rich: Great, you made one. Now make seven more and pretend this is character growth.":"Rich: Four realities. Four kinds of junk. Feed the machine whatever recipe it demands. The machine is smarter than Gerry.");
+  else if(id==="rs:shorty") msg(p,"Shorty: I don't think randomly rewriting matter is a progression system, Rich.");
+  else if(id==="rs:bess") msg(p,"Bess: If my dad gave you a glowing machine, maybe don't put it in the kitchen.");
+  else if(id==="rs:gerry") { msg(p,"Gerry: I need four of every reality resource to stabilize a shelf. A multiversal shelf."); if(!p.hasTag('rs_q_gerry')&&RESOURCES.every(x=>countItem(p,x)>=4)){RESOURCES.forEach(x=>takeItem(p,x,4));give(p,'rs:chaos_bonker',1);p.addTag('rs_q_gerry');msg(p,'Side quest complete: Gerry gives you the Chaos Bonker he was using as a level.');}}
+  else if(id==="rs:sundae") { msg(p,"Sundae: I need 8 Glorp Crystals and 8 Fizzium. Don't ask why. Asking why doubles the price."); if(!p.hasTag('rs_q_sundae')&&countItem(p,'rs:glorp_crystal')>=8&&countItem(p,'rs:fizzium')>=8){takeItem(p,'rs:glorp_crystal',8);takeItem(p,'rs:fizzium',8);give(p,'rs:citadel_token',1);p.addTag('rs_q_sundae');msg(p,'Side quest complete: Sundae hands over a Citadel Token.');}}
+  else if(id==="rs:bird_dude") { msg(p,"Bird Dude: Ten Chronodust would settle a ceremonial debt and a parking ticket."); if(!p.hasTag('rs_q_bird')&&countItem(p,'rs:chronodust')>=10){takeItem(p,'rs:chronodust',10);give(p,'rs:citadel_token',1);p.addTag('rs_q_bird');msg(p,'Side quest complete: Bird Dude gives you a Citadel Token.');}}
+  else if(id==="rs:scronchy") msg(p,"Scronchy: Scronch this whole quest log. The orange rocks are hot, by the way.");
+  else if(id==="rs:mr_needs_it") { msg(p,"Mr. Needs-It: I need you to bring me 12 scrap fragments. That's the entire emotional arc."); if(!p.hasTag('rs_q_needs')&&countItem(p,'rs:scrap_fragment')>=12){takeItem(p,'rs:scrap_fragment',12);give(p,'rs:citadel_token',1);p.addTag('rs_q_needs');msg(p,'Side quest complete: received a Citadel Token.');}}
+  else if(id==="rs:professor_poop") msg(p,"Professor Poop: Ooo-wee, that machine has absolutely no warranty!");
+});
+
+
+world.afterEvents.entityHurt.subscribe(e=>{
+  const t=e.hurtEntity; if(t.typeId!=='rs:evil_shorty') return;
+  const hp=t.getComponent('minecraft:health')?.currentValue ?? 999;
+  if(hp<160 && !t.hasTag('rs_phase2')){ t.addTag('rs_phase2'); t.addEffect('minecraft:speed',400,{amplifier:1}); for(let i=0;i<3;i++) t.dimension.spawnEntity('minecraft:vex',{x:t.location.x+(i-1)*2,y:t.location.y+2,z:t.location.z+3}); world.sendMessage('§3Evil Shorty: Randomness is just incompetence with branding.'); }
+  if(hp<80 && !t.hasTag('rs_phase3')){ t.addTag('rs_phase3'); t.addEffect('minecraft:resistance',300,{amplifier:1}); for(let i=0;i<4;i++) t.dimension.spawnEntity('minecraft:vex',{x:t.location.x+(i%2?3:-3),y:t.location.y+2,z:t.location.z+(i<2?3:-3)}); world.sendMessage('§3Evil Shorty: Fine. We do it the statistically violent way.'); }
+});
+
+world.afterEvents.entityDie.subscribe(e=>{
+  if(e.deadEntity.typeId==='rs:evil_shorty'){
+    const src=e.damageSource.damagingEntity; if(src?.typeId==='minecraft:player'){ give(src,'rs:citadel_token',4); msg(src,'Evil Shorty is down. The Citadel immediately forms three committees about it.'); }
+  }
+});
+'''
+
+
+
+def fabricator_geometry():
+    cubes=[]
+    def c(origin,size): cubes.append({'origin':list(origin),'size':list(size),'uv':[0,0]})
+    # broad pedestal, tapered reactor body, four pylons, crown, controls, coils.
+    c((-8,0,-8),(16,3,16)); c((-6,3,-6),(12,4,12)); c((-5,7,-5),(10,5,10));
+    c((-7,12,-7),(14,2,14)); c((-4,14,-4),(8,2,8));
+    for x,z in [(-7,-7),(5,-7),(-7,5),(5,5)]: c((x,3,z),(2,10,2))
+    c((-8,6,-3),(2,5,6)); c((6,6,-3),(2,5,6));
+    c((-3,6,-8),(6,5,2)); c((-3,6,6),(6,5,2));
+    # front console and raised readout
+    c((-4,5,-9),(8,4,2)); c((-3,9,-9.5),(6,3,1)); c((-1,12,-9.2),(2,2,1));
+    # top coil / portal throat silhouette
+    c((-6,16,-2),(2,6,4)); c((4,16,-2),(2,6,4)); c((-4,20,-2),(8,2,4));
+    c((-1,16,-3),(2,4,1)); c((-1,16,2),(2,4,1));
+    return {'format_version':'1.12.0','minecraft:geometry':[{'description':{'identifier':'geometry.rs.reality_fabricator','texture_width':64,'texture_height':64,'visible_bounds_width':2.5,'visible_bounds_height':3.0,'visible_bounds_offset':[0,1.0,0]},'bones':[{'name':'machine','pivot':[0,0,0],'cubes':cubes}]}]}
+
+def make_pack():
+    if OUT.exists(): shutil.rmtree(OUT)
+    BP.mkdir(parents=True); RP.mkdir(parents=True)
+
+    bp_manifest={'format_version':2,'header':{'name':'Rich & Shorty BP','description':'Parody multiverse adventure - behavior','uuid':UUIDS['bp_header'],'version':VERSION,'min_engine_version':MIN_ENGINE},'modules':[{'type':'data','uuid':UUIDS['bp_data'],'version':VERSION},{'type':'script','language':'javascript','uuid':UUIDS['bp_script'],'version':VERSION,'entry':'scripts/main.js'}],'dependencies':[{'uuid':UUIDS['rp_header'],'version':VERSION},{'module_name':'@minecraft/server','version':'2.0.0'},{'module_name':'@minecraft/server-ui','version':'2.0.0'}]}
+    rp_manifest={'format_version':2,'header':{'name':'Rich & Shorty RP','description':'Parody multiverse adventure - resources','uuid':UUIDS['rp_header'],'version':VERSION,'min_engine_version':MIN_ENGINE},'modules':[{'type':'resources','uuid':UUIDS['rp_resources'],'version':VERSION}]}
+    jwrite(BP/'manifest.json',bp_manifest); jwrite(RP/'manifest.json',rp_manifest)
+
+    # shared render controller
+    jwrite(RP/'render_controllers/rs.render_controllers.json',{'format_version':'1.10.0','render_controllers':{'controller.render.rs_default':{'geometry':'Geometry.default','materials':[{'*':'Material.default'}],'textures':['Texture.default']}}})
+
+    # entity geometry / client / behavior / textures / animations
+    for m in CHAR_MODELS:
+        jwrite(RP/f'models/entity/{m.name}.geo.json',m.geometry())
+        jwrite(RP/f'entity/{m.name}.entity.json',client_entity(m.name))
+        jwrite(RP/f'animations/{m.name}.animation.json',animations(m.name))
+        make_palette_texture(RP/f'textures/entity/rs/{m.name}.png')
+        jwrite(BP/f'entities/{m.name}.json',behavior_entity(m.name,boss=(m.name=='evil_shorty')))
+
+    # Items and resources
+    resources=[
+      ('glorp_crystal','Glorp Crystal','#69db74','#d2ffb3','crystal'),('fizzium','Fizzium','#e66b3f','#ffd563','crystal'),
+      ('chronodust','Chronodust','#77c9ef','#e7fbff','dust'),('scrap_fragment','Scrap Fragment','#777b82','#d2b37a','scrap'),('citadel_token','Citadel Token','#4f7f8a','#9ff1d7','token')]
+    texture_data={}
+    for iid,label,b,a,k in resources:
+      jwrite(BP/f'items/{iid}.json',item_json(f'rs:{iid}',label,iid)); make_item_icon(RP/f'textures/items/{iid}.png',b,a,k); texture_data[iid]={'textures':f'textures/items/{iid}'}
+
+    jwrite(BP/'items/busted_portal_remote.json',item_json('rs:busted_portal_remote','Busted Portal Remote','busted_portal_remote','rs:portal_remote',1)); make_item_icon(RP/'textures/items/busted_portal_remote.png','#263e4b','#75f0a6','remote'); texture_data['busted_portal_remote']={'textures':'textures/items/busted_portal_remote'}
+
+    tools=[('gravity_spanner','Gravity Spanner','#6f77a8','#aaf5ff'),('phase_pick','Phase Pick','#552f77','#d89cff'),('freeze_ray','Freeze Ray','#3d78b2','#d9fbff'),('time_skip_watch','Time-Skip Watch','#6f5432','#ffd36b'),('scaffold_printer','Scaffold Printer','#745f3b','#e1c083'),('matter_swap_glove','Matter-Swap Glove','#4e8452','#c1ff9e'),('pocket_black_hole','Pocket Black Hole','#1a1924','#b07cff'),('chaos_bonker','Chaos Bonker','#9a4c4c','#ffe46c')]
+    for iid,label,b,a in tools:
+      jwrite(BP/f'items/{iid}.json',item_json(f'rs:{iid}',label,iid,'rs:world_tool',1)); make_item_icon(RP/f'textures/items/{iid}.png',b,a,'tool'); texture_data[iid]={'textures':f'textures/items/{iid}'}
+    jwrite(RP/'textures/item_texture.json',{'resource_pack_name':'RichShorty','texture_name':'atlas.items','texture_data':texture_data})
+
+    # custom blocks and generated textures
+    blocks=[
+      ('reality_fabricator','reality_fabricator','#2e3d45','#73f0b2',8),('glorp_ore','glorp_ore','#506e42','#75e36b',3),('fizzium_ore','fizzium_ore','#7b4b32','#ef7d46',5),
+      ('chronodust_cluster','chronodust_cluster','#5b7181','#8edbff',7),('scrap_node','scrap_node','#555b60','#bd9b63',1),('zone_anchor','zone_anchor','#242a30','#79e8c1',10)]
+    terrain={}
