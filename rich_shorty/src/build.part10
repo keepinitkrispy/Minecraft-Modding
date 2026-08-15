@@ -53,7 +53,10 @@ function polishReality(dim,key,p){
       if(i%3===0) setb(dim,x,p.y+1,z,'minecraft:shroomlight');
     }
     fillb(dim,p.x-16,p.y,p.z+14,p.x+16,p.y,p.z+17,'minecraft:water');
-    for(let i=-14;i<=14;i+=4) setb(dim,p.x+i,p.y+1,p.z+15,'minecraft:lily_pad');
+    // Current BDS 1.26.44.3 rejects the old lily_pad command identifier.
+    // Glorp already uses slime as its visual language, so make the basin route
+    // chunky slime stepping pads instead of relying on a legacy block alias.
+    for(let i=-14;i<=14;i+=4) setb(dim,p.x+i,p.y+1,p.z+15,'minecraft:slime');
   }
   else if(key==='fizz'){
     // Caldera desert: terracotta shelves, basalt chimneys, magma fractures.
@@ -68,7 +71,9 @@ function polishReality(dim,key,p){
       if(i%6===0) setb(dim,p.x+i,p.y+1,p.z+10+((i*i)%7),'minecraft:fire');
     }
     fillb(dim,p.x-21,p.y,p.z-20,p.x-15,p.y+5,p.z-14,'minecraft:red_sandstone');
-    fillb(dim,p.x+15,p.y,p.z+14,p.x+21,p.y+7,p.z+20,'minecraft:terracotta');
+    // Generic terracotta is no longer accepted as a command block ID in the
+    // current BDS parser; orange_terracotta is current and already validated.
+    fillb(dim,p.x+15,p.y,p.z+14,p.x+21,p.y+7,p.z+20,'minecraft:orange_terracotta');
   }
   else if(key==='chrono'){
     // Fractured time shelf: ice terraces, amethyst clocks, suspended light markers.
