@@ -1,0 +1,90 @@
+    if skirt: body.cubes += [Cube((-4.2,6,-2.3),(8.4,3.2,4.6),'purple')]
+    add_face(model, 17.3, skin, hair, elder=elder, visor=visor)
+    # articulated limbs with upper/lower bones and distinct hands/feet
+    lua=model.bone('left_upper_arm',(-4.5,13.2,0),'body'); lua.cubes=[Cube((-6.4,8.5,-1.6),(2.4,5.1,3.2),torso)]
+    lla=model.bone('left_lower_arm',(-5.2,9.0,0),'left_upper_arm'); lla.cubes=[Cube((-6.1,4.7,-1.45),(2.0,4.4,2.9),skin),Cube((-6.35,3.4,-1.7),(2.5,1.8,3.4),skin)]
+    rua=model.bone('right_upper_arm',(4.5,13.2,0),'body'); rua.cubes=[Cube((4,8.5,-1.6),(2.4,5.1,3.2),torso)]
+    rla=model.bone('right_lower_arm',(5.2,9.0,0),'right_upper_arm'); rla.cubes=[Cube((4.1,4.7,-1.45),(2.0,4.4,2.9),skin),Cube((3.85,3.4,-1.7),(2.5,1.8,3.4),skin)]
+    lul=model.bone('left_upper_leg',(-2.1,7.3,0),'body'); lul.cubes=[Cube((-3.8,2.8,-1.7),(3.3,4.7,3.4),pants)]
+    lll=model.bone('left_lower_leg',(-2.1,3.1,0),'left_upper_leg'); lll.cubes=[Cube((-3.5,-1.1,-1.55),(2.7,4.3,3.1),pants),Cube((-3.8,-1.5,-3.0),(3.3,1.7,4.5),'shoe')]
+    rul=model.bone('right_upper_leg', (2.1,7.3,0),'body'); rul.cubes=[Cube((0.5,2.8,-1.7),(3.3,4.7,3.4),pants)]
+    rll=model.bone('right_lower_leg',(2.1,3.1,0),'right_upper_leg'); rll.cubes=[Cube((0.8,-1.1,-1.55),(2.7,4.3,3.1),pants),Cube((0.5,-1.5,-3.0),(3.3,1.7,4.5),'shoe')]
+
+
+
+def scale_model(m:Model, sx=1.0, sy=1.0, sz=1.0):
+    for bone in m.bones:
+        bone.pivot=(bone.pivot[0]*sx,bone.pivot[1]*sy,bone.pivot[2]*sz)
+        for c in bone.cubes:
+            c.origin=(c.origin[0]*sx,c.origin[1]*sy,c.origin[2]*sz)
+            c.size=(c.size[0]*sx,c.size[1]*sy,c.size[2]*sz)
+            if c.pivot is not None: c.pivot=(c.pivot[0]*sx,c.pivot[1]*sy,c.pivot[2]*sz)
+    return m
+
+def model_rich():
+    m=Model('rich',1.2,2.1); add_humanoid(m,skin='skin_rich',hair='hair_rich',torso='shirt_teal',pants='pants_tan',elder=True,coat=True)
+    body=next(x for x in m.bones if x.name=='body'); head=next(x for x in m.bones if x.name=='head')
+    body.cubes += [Cube((-1,12.8,-3.0),(2,3.2,0.7),'white'),Cube((-2,11.0,-3.0),(4,1,0.7),'visor_dark'),Cube((-4.2,9.2,-3.15),(2.8,1.0,0.65),'coat_shadow'),Cube((1.4,9.2,-3.15),(2.8,1.0,0.65),'coat_shadow')]
+    head.cubes += [Cube((-3.7,19.2,-4.2),(3.0,0.65,0.55),'hair_rich'),Cube((0.7,19.2,-4.2),(3.0,0.65,0.55),'hair_rich'),Cube((-2.0,15.0,-3.95),(4.0,0.55,0.5),'tooth')]
+    return scale_model(m,0.94,1.08,0.96)
+
+def model_shorty(evil=False):
+    m=Model('evil_shorty' if evil else 'shorty',1.1,1.8)
+    add_humanoid(m,skin='skin_shorty',hair='hair_shorty',torso='shirt_black' if evil else 'shirt_amber',pants='pants_dark',visor=evil)
+    head=next(x for x in m.bones if x.name=='head'); body=next(x for x in m.bones if x.name=='body')
+    head.cubes += [Cube((-3.6,19.2,-4.15),(2.6,0.55,0.5),'hair_shorty'),Cube((1.0,19.2,-4.15),(2.6,0.55,0.5),'hair_shorty')]
+    if evil:
+      body.cubes += [Cube((-5.0,6.2,1.0),(10,9,1.1),'darkgrey'),Cube((-1,12.0,-3.1),(2,2,0.8),'visor'),Cube((-4.8,13.6,-2.8),(9.6,1.2,5.6),'visor_dark'),Cube((-2.2,8.1,-3.0),(4.4,1.1,0.7),'visor')]
+      head.cubes += [Cube((-4.4,17.0,2.3),(8.8,7.5,1.0),'darkgrey')]
+    else:
+      body.cubes += [Cube((-3.3,10.0,-3.0),(6.6,1.0,0.65),'yellow')]
+    return scale_model(m,0.96,0.90,0.96)
+
+def model_bess():
+    m=Model('bess',1.1,1.85); add_humanoid(m,skin='skin_bess',hair='hair_bess',torso='red',pants='pants_dark',skirt=False)
+    head=next(x for x in m.bones if x.name=='head'); body=next(x for x in m.bones if x.name=='body')
+    head.cubes += [Cube((-5.0,14.0,1.8),(2.0,8.8,2.2),'hair_bess'),Cube((3.0,14.0,1.8),(2.0,8.8,2.2),'hair_bess'),Cube((-1.5,21.3,1.7),(3.0,3.4,3.0),'hair_bess')]
+    body.cubes += [Cube((-5.3,12.0,-2.3),(1.2,3.2,4.6),'darkgrey'),Cube((4.1,12.0,-2.3),(1.2,3.2,4.6),'darkgrey')]
+    return scale_model(m,0.96,0.98,0.96)
+
+def model_gerry():
+    m=Model('gerry',1.1,1.9); add_humanoid(m,skin='skin_gerry',hair='hair_gerry',torso='green',pants='pants_tan')
+    head=next(x for x in m.bones if x.name=='head'); body=next(x for x in m.bones if x.name=='body')
+    head.cubes += [Cube((-1.0,16.2,-4.5),(2.0,1.4,1.0),'skin_gerry'),Cube((-3.8,19.3,-4.05),(2.7,0.5,0.5),'hair_gerry'),Cube((1.1,19.3,-4.05),(2.7,0.5,0.5),'hair_gerry')]
+    body.cubes += [Cube((-4.0,9.0,-3.0),(8.0,1.1,0.65),'lightgrey'),Cube((-1.1,8.0,-3.0),(2.2,1.0,0.7),'red')]
+    return scale_model(m,0.98,1.0,0.96)
+
+def model_sundae():
+    m=Model('sundae',1.0,1.75); add_humanoid(m,skin='skin_sundae',hair='hair_sundae',torso='purple',pants='pants_dark')
+    head=next(x for x in m.bones if x.name=='head'); body=next(x for x in m.bones if x.name=='body')
+    head.cubes += [Cube((3.2,16.0,1.8),(2.4,7.0,2.2),'hair_sundae'),Cube((4.4,14.0,2.0),(1.8,4.5,1.8),'hair_sundae'),Cube((-4.9,20.5,-1.8),(2.0,2.4,3.6),'hair_sundae')]
+    body.cubes += [Cube((-6.0,9.8,-1.8),(1.2,3.0,3.6),'white'),Cube((4.8,9.8,-1.8),(1.2,3.0,3.6),'white')]
+    return scale_model(m,0.92,0.94,0.94)
+
+def model_bird_dude():
+    m=Model('bird_dude',1.2,2.0)
+    body=m.bone('body',(0,13,0)); body.cubes=[Cube((-4.5,8,-2.5),(9,8,5),'feather'),Cube((-5.1,11,-2.8),(10.2,3.2,5.6),'feather'),Cube((-3.8,6.8,-2.1),(7.6,2.2,4.2),'bird'),Cube((-6,10,0),(3,6,1.3),'bird'),Cube((3,10,0),(3,6,1.3),'bird'),Cube((-1.2,7.2,2.0),(2.4,5.2,1.3),'yellow')]
+    add_face(m,17.5,'bird','bird',bird=True)
+    lua=m.bone('left_upper_arm',(-4.5,13.5,0),'body'); lua.cubes=[Cube((-7,9,-1.2),(3,5,2.4),'feather')]
+    lla=m.bone('left_lower_arm',(-5.7,9.4,0),'left_upper_arm'); lla.cubes=[Cube((-8,5.5,-1),(2.6,4,2),'feather')]
+    rua=m.bone('right_upper_arm',(4.5,13.5,0),'body'); rua.cubes=[Cube((4,9,-1.2),(3,5,2.4),'feather')]
+    rla=m.bone('right_lower_arm',(5.7,9.4,0),'right_upper_arm'); rla.cubes=[Cube((5.4,5.5,-1),(2.6,4,2),'feather')]
+    for side,s in [('left',-1),('right',1)]:
+      u=m.bone(f'{side}_upper_leg',(2*s,8,0),'body'); u.cubes=[Cube(((0.5 if s>0 else -3.5),3,-1.4),(3,5,2.8),'bird')]
+      l=m.bone(f'{side}_lower_leg',(2*s,3.4,0),f'{side}_upper_leg'); l.cubes=[Cube(((0.8 if s>0 else -3.2),-1,-1.1),(2.4,4.2,2.2),'bird'),Cube(((0 if s>0 else -4),-1.6,-3),(4,1.3,4.2),'yellow')]
+    return m
+
+def model_scronchy():
+    m=Model('scronchy',1.2,1.6); add_humanoid(m,skin='scronch',hair='scronch',torso='orange',pants='darkgrey')
+    head=next(x for x in m.bones if x.name=='head'); head.cubes += [Cube((-5.5,18,-1.5),(2,5,3),'scronch'),Cube((3.5,18,-1.5),(2,5,3),'scronch')]
+    return m
+
+def model_needs_it():
+    m=Model('mr_needs_it',1.0,1.9); add_humanoid(m,skin='blue',hair='blue',torso='blue',pants='blue')
+    head=next(x for x in m.bones if x.name=='head'); head.cubes += [Cube((-4.8,18.5,-2.4),(9.6,1.2,4.8),'white')]
+    return m
+
+def model_professor_poop():
+    m=Model('professor_poop',1.0,1.5); add_humanoid(m,skin='poop',hair='poop',torso='yellow',pants='pants_dark')
+    return m
+
