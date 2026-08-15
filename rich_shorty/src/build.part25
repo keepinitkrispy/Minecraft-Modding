@@ -1,0 +1,132 @@
+
+# ---------------------------------------------------------------------------
+# MOBILE TEST IMPORT ISOLATION
+# During client iteration, Bedrock should keep previous test packs installed
+# instead of treating every new .mcaddon as the same RP/BP pair. Derive a
+# deterministic identity from the complete builder source: same source = same
+# UUIDs/build label, any source change = a new coexisting test-pack pair.
+# Final release can disable TEST_IMPORT_ISOLATION to return to stable UUIDs.
+# ---------------------------------------------------------------------------
+
+TEST_IMPORT_ISOLATION = True
+
+
+def _test_build_identity():
+    # build.py writes the concatenated source to __file__ before invoking us,
+    # so this fingerprint includes every source part and is reproducible in CI.
+    source_bytes = Path(__file__).read_bytes()
+    fingerprint = hashlib.sha256(source_bytes).hexdigest()
+    return fingerprint[:8].upper(), fingerprint
+
+
+def _test_uuid(build_tag: str, role: str) -> str:
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f'rich-shorty/test/{build_tag}/{role}'))
+
+
+_import_isolation_make_pack = make_pack
+_import_isolation_validate = validate
+
+
+def make_pack():
+    addon = _import_isolation_make_pack()
+    if not TEST_IMPORT_ISOLATION:
+        return addon
+
+    build_tag, source_fingerprint = _test_build_identity()
+    bp_manifest_path = BP/'manifest.json'
+    rp_manifest_path = RP/'manifest.json'
+    bp = json.loads(bp_manifest_path.read_text(encoding='utf-8'))
+    rp = json.loads(rp_manifest_path.read_text(encoding='utf-8'))
+
+    ids = {
+      'bp_header': _test_uuid(build_tag,'bp/header'),
+      'bp_data': _test_uuid(build_tag,'bp/data'),
+      'bp_script': _test_uuid(build_tag,'bp/script'),
+      'rp_header': _test_uuid(build_tag,'rp/header'),
+      'rp_resources': _test_uuid(build_tag,'rp/resources')
+    }
+
+    # Visible labels make it obvious which matching RP/BP pair belongs together
+    # in Bedrock's storage and world pack selectors.
+    bp['header']['name'] = f'Rich & Shorty BP [TEST {build_tag}]'
+    bp['header']['description'] = f'Rich & Shorty mobile test build {build_tag} — behavior'
+    bp['header']['uuid'] = ids['bp_header']
+    rp['header']['name'] = f'Rich & Shorty RP [TEST {build_tag}]'
+    rp['header']['description'] = f'Rich & Shorty mobile test build {build_tag} — resources'
+    rp['header']['uuid'] = ids['rp_header']
+
+    # Module UUIDs must move with the pack identity as well.
+    for module in bp.get('modules',[]):
+        if module.get('type') == 'data': module['uuid'] = ids['bp_data']
+        elif module.get('type') == 'script': module['uuid'] = ids['bp_script']
+    for module in rp.get('modules',[]):
+        if module.get('type') == 'resources': module['uuid'] = ids['rp_resources']
+
+    # Keep the BP -> RP dependency paired to this exact test build. Module-name
+    # dependencies (@minecraft/server etc.) are left untouched.
+    for dep in bp.get('dependencies',[]):
+        if isinstance(dep,dict) and 'uuid' in dep:
+            dep['uuid'] = ids['rp_header']
+
+    # Record the label in metadata for validation/artifact inspection without
+    # changing gameplay identifiers. Old test packs can coexist in storage; only
+    # one matching pair should be active in a world at a time.
+    bp['metadata'] = dict(bp.get('metadata',{}), keepinitkrispy_test_build=build_tag,
+                          keepinitkrispy_source_sha256=source_fingerprint)
+    rp['metadata'] = dict(rp.get('metadata',{}), keepinitkrispy_test_build=build_tag,
+                          keepinitkrispy_source_sha256=source_fingerprint)
+
+    jwrite(bp_manifest_path,bp); jwrite(rp_manifest_path,rp)
+
+    # The previous make_pack already sealed the archive; reseal with the new
+    # manifests so the actual imported artifact carries the isolated identities.
+    if addon.exists(): addon.unlink()
+    with zipfile.ZipFile(addon,'w',zipfile.ZIP_DEFLATED) as zf:
+        for pack in (BP,RP):
+            for f in pack.rglob('*'):
+                if f.is_file(): zf.write(f,f.relative_to(OUT))
+    return addon
+
+
+def validate(addon:Path):
+    report = _import_isolation_validate(addon)
+    errors = list(report.get('errors',[])); checks = int(report.get('checks',0))
+    build_tag, source_fingerprint = _test_build_identity()
+
+    if TEST_IMPORT_ISOLATION:
+        bp = json.loads((BP/'manifest.json').read_text(encoding='utf-8'))
+        rp = json.loads((RP/'manifest.json').read_text(encoding='utf-8'))
+        expected_bp = f'Rich & Shorty BP [TEST {build_tag}]'
+        expected_rp = f'Rich & Shorty RP [TEST {build_tag}]'
+
+        checks += 8
+        if bp.get('header',{}).get('name') != expected_bp:
+            errors.append('test import isolation: BP visible build label missing/wrong')
+        if rp.get('header',{}).get('name') != expected_rp:
+            errors.append('test import isolation: RP visible build label missing/wrong')
+        if bp.get('header',{}).get('uuid') != _test_uuid(build_tag,'bp/header'):
+            errors.append('test import isolation: BP header UUID is not build-specific')
+        if rp.get('header',{}).get('uuid') != _test_uuid(build_tag,'rp/header'):
+            errors.append('test import isolation: RP header UUID is not build-specific')
+        uuid_deps=[d.get('uuid') for d in bp.get('dependencies',[]) if isinstance(d,dict) and d.get('uuid')]
+        if _test_uuid(build_tag,'rp/header') not in uuid_deps:
+            errors.append('test import isolation: BP dependency does not target matching RP build')
+        if bp.get('metadata',{}).get('keepinitkrispy_source_sha256') != source_fingerprint:
+            errors.append('test import isolation: BP source fingerprint missing/wrong')
+        if rp.get('metadata',{}).get('keepinitkrispy_source_sha256') != source_fingerprint:
+            errors.append('test import isolation: RP source fingerprint missing/wrong')
+        if bp.get('header',{}).get('uuid') == UUIDS['bp_header'] or rp.get('header',{}).get('uuid') == UUIDS['rp_header']:
+            errors.append('test import isolation: stable release UUID survived in a test build')
+
+        report['test_import_build'] = build_tag
+        report['test_import_bp_name'] = expected_bp
+        report['test_import_rp_name'] = expected_rp
+        gates=list(report.get('feature_regression_gates',[]))
+        if 'coexisting_mobile_test_pack_identities' not in gates:
+            gates.append('coexisting_mobile_test_pack_identities')
+        report['feature_regression_gates']=gates
+
+    report['checks']=checks; report['errors']=errors
+    report['status']='PASS' if not errors else 'FAIL'
+    jwrite(OUT/'validation_report.json',report)
+    return report
