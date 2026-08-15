@@ -1,0 +1,90 @@
+    for bid,tex,b,a,light in blocks:
+      component='rs:fabricator' if bid=='reality_fabricator' else None
+      loot=None if bid in ('reality_fabricator','zone_anchor') else f'loot_tables/blocks/{bid}.json'
+      jwrite(BP/f'blocks/{bid}.json',block_json(f'rs:{bid}',tex,destroy=4 if 'ore' in bid else 2,component=component,loot=loot,light=light))
+      # 16x16 tile
+      (RP/f'textures/blocks/{tex}.png').parent.mkdir(parents=True, exist_ok=True)
+      im=Image.new('RGBA',(16,16),tuple(int(b[k:k+2],16) for k in (1,3,5))+(255,)); d=ImageDraw.Draw(im); ac=tuple(int(a[k:k+2],16) for k in (1,3,5))+(255,)
+      for i in range(7):
+        x=(i*5+3)%16;y=(i*9+2)%16;d.rectangle((x,y,min(15,x+2),min(15,y+2)),fill=ac)
+      im.save(RP/f'textures/blocks/{tex}.png'); terrain[tex]={'textures':f'textures/blocks/{tex}'}
+    # Reality Fabricator is a custom voxel machine, never a cube placeholder.
+    jwrite(RP/'models/blocks/reality_fabricator.geo.json',fabricator_geometry())
+    fab=block_json('rs:reality_fabricator','reality_fabricator',destroy=3,component='rs:fabricator',light=8)
+    fab['minecraft:block']['components']['minecraft:geometry']='geometry.rs.reality_fabricator'
+    jwrite(BP/'blocks/reality_fabricator.json',fab)
+    # Upscale the machine texture so its custom geometry has safe UV room.
+    fabtex=Image.new('RGBA',(64,64),(45,61,69,255)); fd=ImageDraw.Draw(fabtex)
+    for y in range(0,64,8): fd.line((0,y,63,y),fill=(56,79,83,255),width=1)
+    for x in range(4,64,12): fd.rectangle((x,4,x+2,60),fill=(115,240,178,255))
+    fd.rectangle((12,12,52,18),fill=(28,41,48,255)); fd.rectangle((18,13,46,17),fill=(115,240,178,255))
+    fabtex.save(RP/'textures/blocks/reality_fabricator.png')
+    jwrite(RP/'textures/terrain_texture.json',{'resource_pack_name':'RichShorty','texture_name':'atlas.terrain','padding':8,'num_mip_levels':4,'texture_data':terrain})
+    jwrite(RP/'blocks.json',{'format_version':[1,1,0]})
+    for bid,item in [('glorp_ore','rs:glorp_crystal'),('fizzium_ore','rs:fizzium'),('chronodust_cluster','rs:chronodust'),('scrap_node','rs:scrap_fragment')]: jwrite(BP/f'loot_tables/blocks/{bid}.json',loot_table(item))
+
+    twrite(BP/'scripts/main.js',SCRIPT)
+
+    # Localisation
+    lines=[]
+    for k,v in DISPLAY_NAMES.items(): lines.append(f'entity.rs:{k}.name={v}')
+    for iid,label,*_ in resources: lines.append(f'item.rs:{iid}.name={label}')
+    lines += ['item.rs:busted_portal_remote.name=Busted Portal Remote']
+    for iid,label,*_ in tools: lines.append(f'item.rs:{iid}.name={label}')
+    lines += ['tile.rs:reality_fabricator.name=Reality Fabricator','tile.rs:glorp_ore.name=Glorp Ore','tile.rs:fizzium_ore.name=Fizzium Ore','tile.rs:chronodust_cluster.name=Chronodust Cluster','tile.rs:scrap_node.name=Scrap Node','tile.rs:zone_anchor.name=Reality Anchor']
+    twrite(RP/'texts/en_US.lang','\n'.join(lines)+'\n'); twrite(RP/'texts/languages.json','["en_US"]\n')
+
+    # pack icons
+    for pack in (BP,RP):
+      im=Image.new('RGBA',(256,256),(26,34,41,255)); d=ImageDraw.Draw(im); d.ellipse((38,38,218,218),fill=(67,126,138,255),outline=(117,240,166,255),width=14); d.ellipse((82,82,174,174),fill=(16,23,28,255),outline=(234,229,198,255),width=9); d.line((64,192,192,64),fill=(117,240,166,255),width=16); im.save(pack/'pack_icon.png')
+
+    # Story / quality gates included in source artifact.
+    story={
+      'title':'Rich & Shorty: Infinite Liability','tone':'fast sci-fi parody; ridiculous consequences played straight; kid-readable surface jokes with adult subtext',
+      'core_loop':['Use Busted Portal Remote','Harvest abundant reality-specific resources','Return to Reality Fabricator','Fabricator rolls a new random recipe every activation','Receive one random world-manipulation tool','Use tools to solve traversal/combat/side-quest problems','Unlock Citadel-ish arc and Evil Shorty fight'],
+      'acts':[
+        {'act':1,'name':'Warranty Void','beats':['Rich gives you a broken portal remote and machine','Shorty questions the premise','First resource run teaches four realities','First fabricated tool demonstrates world manipulation']},
+        {'act':2,'name':'Side Effects','beats':['Cast side quests reward Citadel Tokens','Tools make shortcuts but also create messes','Citadel-ish agents begin appearing','Clues point to Evil Shorty gaming the Fabricator probability table']},
+        {'act':3,'name':'The Least Democratic Citadel','beats':['Reach Citadel-ish hub','Council satire and fetch-quest bureaucracy','Evil Shorty reveals he wants deterministic control over all random outcomes','Boss fight rewards tokens and leaves machine randomness intact']}
+      ],
+      'cast':DISPLAY_NAMES,
+      'side_quests':[{'giver':'Mr. Needs-It','ask':'12 Scrap Fragments','reward':'1 Citadel Token'},{'giver':'Bird Dude','ask':'10 Chronodust','reward':'1 Citadel Token'},{'giver':'Sundae','ask':'8 Glorp Crystals + 8 Fizzium','reward':'1 Citadel Token'},{'giver':'Gerry','ask':'4 of every reality resource','reward':'Chaos Bonker'}],
+      'boss':'Evil Shorty',
+      'visual_gate':'Every cast member has multi-cube sculpted head silhouette, separate facial voxel features, articulated upper/lower limbs, and identity-specific silhouette details. Generic single-box humanoids are forbidden.'
+    }
+    jwrite(OUT/'story_bible.json',story)
+
+    # Package .mcaddon with two packs at root.
+    addon=OUT/'Rich_and_Shorty_v0.1.0.mcaddon'
+    with zipfile.ZipFile(addon,'w',zipfile.ZIP_DEFLATED) as z:
+      for pack in (BP,RP):
+        for f in pack.rglob('*'):
+          if f.is_file(): z.write(f, f.relative_to(OUT))
+    return addon
+
+
+def validate(addon:Path):
+    errors=[]; checks=0
+    # JSON parse
+    for f in list(BP.rglob('*.json'))+list(RP.rglob('*.json')):
+      checks+=1
+      try: json.loads(f.read_text())
+      except Exception as e: errors.append(f'{f}: {e}')
+    # image integrity / opaque entity skins
+    for f in RP.rglob('*.png'):
+      checks+=1
+      try:
+        im=Image.open(f); im.verify()
+      except Exception as e: errors.append(f'{f}: bad png {e}')
+    for f in (RP/'textures/entity/rs').glob('*.png'):
+      checks+=1
+      im=Image.open(f).convert('RGBA')
+      if any(a<255 for *_,a in im.getdata()): errors.append(f'{f}: transparent texels')
+    # entity pair symmetry
+    for m in CHAR_MODELS:
+      checks+=4
+      for f in [BP/f'entities/{m.name}.json',RP/f'entity/{m.name}.entity.json',RP/f'models/entity/{m.name}.geo.json',RP/f'animations/{m.name}.animation.json']:
+        if not f.exists(): errors.append(f'missing {f}')
+      # visual gate: min cubes and articulated bones
+      geo=json.loads((RP/f'models/entity/{m.name}.geo.json').read_text())['minecraft:geometry'][0]
+      cube_count=sum(len(b.get('cubes',[])) for b in geo['bones'])
