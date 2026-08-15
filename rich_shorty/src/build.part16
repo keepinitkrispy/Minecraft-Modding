@@ -1,0 +1,75 @@
+
+# ---------------------------------------------------------------------------
+# CORE LOOP CORRECTION
+# A random recipe should change between completed fabrications, not while the
+# player is away gathering it. Persist one active recipe per player until it is
+# fulfilled, then guarantee the next completed recipe differs.
+# ---------------------------------------------------------------------------
+
+SCRIPT = SCRIPT.replace(
+    'ev.blockComponentRegistry.registerCustomComponent("rs:fabricator",{onPlayerInteract(e){ if(e.player) system.run(()=>fabricate(e.player)); }});',
+    'ev.blockComponentRegistry.registerCustomComponent("rs:fabricator",{onPlayerInteract(e){ if(e.player) system.run(()=>fabricateLocked(e.player)); }});'
+)
+
+SCRIPT += r'''
+
+function makeLockedRecipe(player){
+  const seed=(system.currentTick*1664525 + player.name.length*1013904223 + Math.floor(player.location.x*37+player.location.z*19))>>>0;
+  let costs=RESOURCES.map((id,i)=>((seed >>> (i*4))%5)); // 0..4 per resource
+  // Every recipe uses at least two realities, and no ingredient line is zero once selected.
+  let active=costs.filter(n=>n>0).length;
+  if(active<2){
+    const a=seed%RESOURCES.length, b=(a+1+((seed>>>7)%(RESOURCES.length-1)))%RESOURCES.length;
+    costs[a]=1+((seed>>>11)%4); costs[b]=1+((seed>>>15)%4);
+  }
+  let key=costs.join('-');
+  const last=String(player.getDynamicProperty('rs:last_recipe')??'');
+  if(key===last){
+    const j=(seed>>>19)%RESOURCES.length;
+    costs[j]=costs[j]===0 ? 1+((seed>>>23)%4) : (costs[j]%4)+1;
+    // If a mutation somehow collapsed to fewer than two active dimensions, force a neighbor.
+    if(costs.filter(n=>n>0).length<2) costs[(j+1)%RESOURCES.length]=1;
+    key=costs.join('-');
+  }
+  player.setDynamicProperty('rs:active_recipe',key);
+  return costs;
+}
+
+function readLockedRecipe(player){
+  const raw=String(player.getDynamicProperty('rs:active_recipe')??'');
+  const parts=raw.split('-').map(Number);
+  if(parts.length===RESOURCES.length && parts.every(n=>Number.isInteger(n)&&n>=0&&n<=4) && parts.filter(n=>n>0).length>=2) return parts;
+  return makeLockedRecipe(player);
+}
+
+function recipeText(costs){
+  return RESOURCES.map((id,i)=>[id,costs[i]]).filter(([,n])=>n>0).map(([id,n])=>`${n} ${id.split(':')[1].replaceAll('_',' ')}`).join(', ');
+}
+
+function fabricateLocked(player){
+  const costs=readLockedRecipe(player);
+  const key=costs.join('-');
+  const missing=RESOURCES.filter((id,i)=>costs[i]>0 && countItem(player,id)<costs[i]);
+  if(missing.length){
+    msg(player,`§eCURRENT FABRICATOR RECIPE§r: ${recipeText(costs)}. It stays locked until you build it, so go rob the appropriate realities.`);
+    return;
+  }
+
+  RESOURCES.forEach((id,i)=>{ if(costs[i]>0) takeItem(player,id,costs[i]); });
+  player.setDynamicProperty('rs:last_recipe',key);
+  player.setDynamicProperty('rs:active_recipe',undefined);
+
+  const seed=(system.currentTick*1103515245 + key.split('-').reduce((a,n,i)=>a+(Number(n)+1)*(i+17)*7919,0) + player.name.length*97)>>>0;
+  let toolIndex=seed%TOOL_POOL.length;
+  const lastTool=String(player.getDynamicProperty('rs:last_tool')??'');
+  if(TOOL_POOL[toolIndex][0]===lastTool) toolIndex=(toolIndex+1+((seed>>>9)%(TOOL_POOL.length-1)))%TOOL_POOL.length;
+  const pick=TOOL_POOL[toolIndex];
+  give(player,pick[0],1);
+  player.setDynamicProperty('rs:last_tool',pick[0]);
+  player.addTag('rs_fabricated');
+
+  // Pre-roll the next recipe now so repeat interaction immediately shows a new, stable target.
+  const next=makeLockedRecipe(player);
+  msg(player,`The machine digests ${recipeText(costs)}, makes a noise Rich refuses to explain, and produces §e${pick[1]}§r. Next locked recipe: ${recipeText(next)}.`);
+}
+'''
