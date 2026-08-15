@@ -1,0 +1,102 @@
+
+# ---------------------------------------------------------------------------
+# QUEST CONSEQUENCE PASS
+# The Liability Ledger already records side-quest completion. This layer makes
+# those completions visible in the authored realities so quests change the world,
+# not only a tag/menu line. Effects are persistent, one-shot, and deliberately
+# use the same server-smoked vanilla construction palette as the reality builder.
+# ---------------------------------------------------------------------------
+
+SCRIPT += r'''
+
+function questWorldConsequence(player, quest){
+  const d=player.dimension;
+  if(quest==='sundae'){
+    const p=ZONES.glorp.pos;
+    // A luminous coolant garden beside the Glorp landing pad.
+    for(let a=0;a<12;a++){
+      const r=a*Math.PI/6;
+      const x=Math.round(p.x+8*Math.cos(r)), z=Math.round(p.z+8*Math.sin(r));
+      setb(d,x,p.y+1,z,'minecraft:sea_lantern');
+      if(a%2===0) setb(d,x,p.y+2,z,'minecraft:warped_wart_block');
+    }
+    fillb(d,p.x-3,p.y,p.z+8,p.x+3,p.y,p.z+10,'minecraft:water');
+    msg(player,'§aWORLD CHANGE§r: Sundae dumps the payment into a glowing coolant garden. Glorp-9 now looks slightly more intentional.');
+  }
+  else if(quest==='bird'){
+    const p=ZONES.chrono.pos;
+    // Bird Dude's ceremonial time-roost makes the Chrono Shelf gain a landmark.
+    fillb(d,p.x-2,p.y,p.z+9,p.x+2,p.y+8,p.z+11,'minecraft:calcite');
+    fillb(d,p.x-4,p.y+8,p.z+8,p.x+4,p.y+9,p.z+12,'minecraft:amethyst_block');
+    setb(d,p.x,p.y+10,p.z+10,'minecraft:end_rod');
+    setb(d,p.x-3,p.y+10,p.z+10,'minecraft:end_rod');
+    setb(d,p.x+3,p.y+10,p.z+10,'minecraft:end_rod');
+    msg(player,'§aWORLD CHANGE§r: Bird Dude finishes a ceremonial time-roost. It is legally a clock because he says so.');
+  }
+  else if(quest==='needs'){
+    const p=ZONES.scrap.pos;
+    // The twelve fragments become the receiver tower Needs-It refused to explain.
+    fillb(d,p.x+11,p.y,p.z-4,p.x+13,p.y+10,p.z-2,'minecraft:iron_block');
+    fillb(d,p.x+9,p.y+9,p.z-4,p.x+15,p.y+10,p.z-2,'minecraft:cut_copper');
+    setb(d,p.x+12,p.y+11,p.z-3,'minecraft:sea_lantern');
+    for(let y=2;y<=8;y+=2) setb(d,p.x+10,p.y+y,p.z-3,'minecraft:redstone_lamp');
+    msg(player,'§aWORLD CHANGE§r: Mr. Needs-It turns the scrap into a receiver tower. He immediately needs something else but is choosing personal growth.');
+  }
+  else if(quest==='gerry'){
+    const p=ZONES.scrap.pos;
+    // Gerry's multiversal shelf: improbable, ugly, and visibly functional.
+    fillb(d,p.x-14,p.y,p.z+8,p.x-7,p.y+1,p.z+9,'minecraft:cut_copper');
+    for(const x of [p.x-14,p.x-7]) fillb(d,x,p.y+2,p.z+8,x,p.y+6,p.z+9,'minecraft:iron_block');
+    for(const y of [2,4,6]) fillb(d,p.x-14,p.y+y,p.z+8,p.x-7,p.y+y,p.z+9,'minecraft:bookshelf');
+    msg(player,'§aWORLD CHANGE§r: Gerry actually stabilizes the multiversal shelf. Against every prediction, it holds.');
+  }
+}
+
+// Run one tick after the existing quest turn-in handler so a quest completed by
+// this interaction is already tagged. The dynamic property prevents rebuilding
+// the landmark or replaying the completion beat on later conversations.
+world.afterEvents.playerInteractWithEntity.subscribe(e=>{
+  const p=e.player;
+  const q={
+    'rs:sundae':['rs_q_sundae','rs:quest_fx_sundae','sundae'],
+    'rs:bird_dude':['rs_q_bird','rs:quest_fx_bird','bird'],
+    'rs:mr_needs_it':['rs_q_needs','rs:quest_fx_needs','needs'],
+    'rs:gerry':['rs_q_gerry','rs:quest_fx_gerry','gerry']
+  }[e.target.typeId];
+  if(!q) return;
+  system.run(()=>{
+    if(!p.hasTag(q[0]) || Boolean(p.getDynamicProperty(q[1])??false)) return;
+    p.setDynamicProperty(q[1],true);
+    questWorldConsequence(p,q[2]);
+  });
+});
+'''
+
+
+_quest_consequence_validate = validate
+
+def validate(addon:Path):
+    report=_quest_consequence_validate(addon)
+    errors=list(report.get('errors',[])); checks=int(report.get('checks',0))
+    script=(BP/'scripts/main.js').read_text(encoding='utf-8')
+
+    required={
+      'quest world-consequence dispatcher':'function questWorldConsequence(player, quest)',
+      'persistent quest effect state':'quest_fx_sundae',
+      'Glorp quest landmark':'glowing coolant garden',
+      'Chrono quest landmark':'ceremonial time-roost',
+      'Scrap quest landmark':'receiver tower',
+      'Gerry shelf consequence':'multiversal shelf'
+    }
+    for label,needle in required.items():
+        checks+=1
+        if needle not in script: errors.append(f'quest consequence regression: missing {label} ({needle!r})')
+
+    report['checks']=checks
+    report['errors']=errors
+    report['status']='PASS' if not errors else 'FAIL'
+    gates=list(report.get('feature_regression_gates',[]))
+    if 'persistent_sidequest_world_changes' not in gates: gates.append('persistent_sidequest_world_changes')
+    report['feature_regression_gates']=gates
+    jwrite(OUT/'validation_report.json',report)
+    return report
