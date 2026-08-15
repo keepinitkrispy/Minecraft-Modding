@@ -1,0 +1,33 @@
+
+# ---------------------------------------------------------------------------
+# RUNTIME REGRESSION GATES
+# Mojang Creator Tools can validate schema shape while a real Bedrock runtime
+# still rejects removed components. Encode every runtime-only incompatibility we
+# discover here so it becomes impossible to regress silently.
+# ---------------------------------------------------------------------------
+_runtime_gate_validate = validate
+
+
+def validate(addon:Path):
+    report = _runtime_gate_validate(addon)
+    errors = list(report.get('errors', []))
+    checks = int(report.get('checks', 0))
+
+    for entity_file in sorted((BP/'entities').glob('*.json')):
+        checks += 3
+        obj = json.loads(entity_file.read_text(encoding='utf-8'))
+        comps = obj.get('minecraft:entity', {}).get('components', {})
+        fmt = str(obj.get('format_version', ''))
+        if 'minecraft:pushable' in comps:
+            errors.append(f'{entity_file}: legacy minecraft:pushable is runtime-invalid at format >=1.26.10')
+        if 'minecraft:pushable_by_block' not in comps:
+            errors.append(f'{entity_file}: missing minecraft:pushable_by_block')
+        if 'minecraft:pushable_by_entity' not in comps:
+            errors.append(f'{entity_file}: missing minecraft:pushable_by_entity')
+
+    report['checks'] = checks
+    report['errors'] = errors
+    report['status'] = 'PASS' if not errors else 'FAIL'
+    report['runtime_regression_gates'] = ['1.26.10_pushable_split']
+    jwrite(OUT/'validation_report.json', report)
+    return report
