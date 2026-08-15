@@ -1,0 +1,118 @@
+
+# ---------------------------------------------------------------------------
+# ENVIRONMENT ART PASS
+# Pocket realities remain stable/Realm-safe, but they should read as authored
+# destinations rather than flat test pads. This late script layer adds distinct
+# silhouettes, traversal shapes, lighting landmarks, and environmental jokes.
+# ---------------------------------------------------------------------------
+
+SCRIPT = SCRIPT.replace(
+    'if(zoneKey==="citadel") buildCitadel(dim,p);',
+    'if(zoneKey==="citadel") buildCitadel(dim,p); polishReality(dim,zoneKey,p);'
+)
+SCRIPT += r'''
+
+function setb(dim,x,y,z,b){ try{dim.runCommand(`setblock ${x} ${y} ${z} ${b}`);}catch{} }
+function fillb(dim,x1,y1,z1,x2,y2,z2,b){ try{dim.runCommand(`fill ${x1} ${y1} ${z1} ${x2} ${y2} ${z2} ${b}`);}catch{} }
+
+function glorpStalk(dim,x,y,z,h){
+  fillb(dim,x,y,z,x+1,y+h,z+1,'minecraft:warped_stem');
+  fillb(dim,x-2,y+h-1,z-2,x+3,y+h+1,z+3,'minecraft:warped_wart_block');
+  setb(dim,x,y+h+2,z,'minecraft:shroomlight');
+}
+function chronoPillar(dim,x,y,z,h){
+  fillb(dim,x,y,z,x+1,y+h,z+1,'minecraft:packed_ice');
+  setb(dim,x,y+h+1,z,'minecraft:amethyst_block');
+  setb(dim,x+1,y+h+1,z+1,'minecraft:sea_lantern');
+}
+function scrapCrane(dim,x,y,z,s){
+  fillb(dim,x,y,z,x+1,y+10,z+1,'minecraft:iron_block');
+  fillb(dim,x,y+9,z,x+s,y+10,z+1,'minecraft:cut_copper');
+  fillb(dim,x+s,y+7,z,x+s,y+9,z,'minecraft:chain');
+}
+
+function polishReality(dim,key,p){
+  // Portal landmark shared language: four pylons and a lit throat, varied by world.
+  const portalMat = key==='citadel' ? 'minecraft:sea_lantern' : 'minecraft:crying_obsidian';
+  for(const dx of [-5,5]){
+    fillb(dim,p.x+dx,p.y,p.z-5,p.x+dx,p.y+6,p.z-5,portalMat);
+    setb(dim,p.x+dx,p.y+7,p.z-5,'minecraft:end_rod');
+  }
+  fillb(dim,p.x-5,p.y+6,p.z-5,p.x+5,p.y+7,p.z-5,portalMat);
+
+  if(key==='glorp'){
+    // Goo basin, oversized fungal canopy, slime stepping route, luminous roots.
+    fillb(dim,p.x-22,p.y-1,p.z-22,p.x+22,p.y-1,p.z+22,'minecraft:moss_block');
+    for(let i=0;i<11;i++){
+      const x=p.x-18+((i*11)%37), z=p.z-17+((i*17)%35), h=5+(i%5)*2;
+      glorpStalk(dim,x,p.y,z,h);
+    }
+    for(let i=0;i<14;i++){
+      const x=p.x-20+((i*7)%41), z=p.z-20+((i*13)%41);
+      setb(dim,x,p.y,z,'minecraft:slime');
+      if(i%3===0) setb(dim,x,p.y+1,z,'minecraft:shroomlight');
+    }
+    fillb(dim,p.x-16,p.y,p.z+14,p.x+16,p.y,p.z+17,'minecraft:water');
+    for(let i=-14;i<=14;i+=4) setb(dim,p.x+i,p.y+1,p.z+15,'minecraft:lily_pad');
+  }
+  else if(key==='fizz'){
+    // Caldera desert: terracotta shelves, basalt chimneys, magma fractures.
+    fillb(dim,p.x-22,p.y-1,p.z-22,p.x+22,p.y-1,p.z+22,'minecraft:red_sand');
+    for(let i=0;i<12;i++){
+      const x=p.x-19+((i*9)%39), z=p.z-18+((i*15)%37), h=3+(i%6)*2;
+      fillb(dim,x,p.y,z,x+2,p.y+h,z+2,i%2?'minecraft:basalt':'minecraft:orange_terracotta');
+      setb(dim,x+1,p.y+h+1,z+1,'minecraft:magma');
+    }
+    for(let i=-18;i<=18;i+=3){
+      setb(dim,p.x+i,p.y,p.z+10+((i*i)%7),'minecraft:magma');
+      if(i%6===0) setb(dim,p.x+i,p.y+1,p.z+10+((i*i)%7),'minecraft:fire');
+    }
+    fillb(dim,p.x-21,p.y,p.z-20,p.x-15,p.y+5,p.z-14,'minecraft:red_sandstone');
+    fillb(dim,p.x+15,p.y,p.z+14,p.x+21,p.y+7,p.z+20,'minecraft:terracotta');
+  }
+  else if(key==='chrono'){
+    // Fractured time shelf: ice terraces, amethyst clocks, suspended light markers.
+    fillb(dim,p.x-22,p.y-1,p.z-22,p.x+22,p.y-1,p.z+22,'minecraft:packed_ice');
+    fillb(dim,p.x-20,p.y,p.z-20,p.x-6,p.y+2,p.z-8,'minecraft:blue_ice');
+    fillb(dim,p.x+7,p.y,p.z+8,p.x+20,p.y+4,p.z+20,'minecraft:calcite');
+    for(let i=0;i<10;i++){
+      const x=p.x-18+((i*13)%37), z=p.z-18+((i*19)%37);
+      chronoPillar(dim,x,p.y,z,4+(i%5)*2);
+    }
+    // A broken 'clock face' on the ground around the landing point.
+    for(let a=0;a<12;a++){
+      const rad=a*Math.PI/6, x=Math.round(p.x+12*Math.cos(rad)), z=Math.round(p.z+12*Math.sin(rad));
+      setb(dim,x,p.y,z,'minecraft:amethyst_block'); setb(dim,x,p.y+1,z,'minecraft:end_rod');
+    }
+  }
+  else if(key==='scrap'){
+    // Salvage moon: cratered tuff, gantries, copper carcasses, dangling cranes.
+    fillb(dim,p.x-22,p.y-1,p.z-22,p.x+22,p.y-1,p.z+22,'minecraft:tuff');
+    for(let i=0;i<9;i++){
+      const x=p.x-18+((i*11)%37), z=p.z-17+((i*23)%35);
+      fillb(dim,x,p.y,z,x+4,p.y+2+(i%4),z+3,i%2?'minecraft:exposed_cut_copper':'minecraft:iron_block');
+      setb(dim,x+1,p.y+3+(i%4),z+1,'minecraft:redstone_lamp');
+    }
+    scrapCrane(dim,p.x-19,p.y,p.z-15,10); scrapCrane(dim,p.x+8,p.y,p.z+13,9);
+    fillb(dim,p.x-8,p.y,p.z+14,p.x+8,p.y+2,p.z+18,'minecraft:deepslate_tiles');
+    fillb(dim,p.x-5,p.y+3,p.z+15,p.x+5,p.y+4,p.z+17,'minecraft:iron_bars');
+    for(let i=-17;i<=17;i+=5) setb(dim,p.x+i,p.y,p.z-12+(Math.abs(i)%5),'minecraft:rail');
+  }
+  else if(key==='citadel'){
+    // Give the hub a readable civic hierarchy: ring road, portal customs, council dais.
+    fillb(dim,p.x-27,p.y,p.z-3,p.x+27,p.y,p.z+3,'minecraft:smooth_quartz');
+    fillb(dim,p.x-3,p.y,p.z-27,p.x+3,p.y,p.z+27,'minecraft:smooth_quartz');
+    for(const r of [14,22]){
+      for(let a=0;a<32;a++){
+        const rad=a*Math.PI/16, x=Math.round(p.x+r*Math.cos(rad)), z=Math.round(p.z+r*Math.sin(rad));
+        setb(dim,x,p.y,z,a%2?'minecraft:oxidized_cut_copper':'minecraft:sea_lantern');
+      }
+    }
+    fillb(dim,p.x-8,p.y+1,p.z-19,p.x+8,p.y+5,p.z-15,'minecraft:dark_prismarine');
+    fillb(dim,p.x-6,p.y+2,p.z-20,p.x+6,p.y+4,p.z-20,'minecraft:iron_bars');
+    setb(dim,p.x,p.y+5,p.z-20,'minecraft:sea_lantern');
+    fillb(dim,p.x-7,p.y+1,p.z+14,p.x+7,p.y+2,p.z+20,'minecraft:quartz_bricks');
+    for(let x=-5;x<=5;x+=2) setb(dim,p.x+x,p.y+3,p.z+17,'minecraft:end_rod');
+  }
+}
+'''
