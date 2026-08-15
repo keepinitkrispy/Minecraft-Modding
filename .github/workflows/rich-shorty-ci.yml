@@ -99,16 +99,16 @@ jobs:
             sleep 10
             echo 'tickingarea add circle 0 80 0 2 rs_release_ci true'
             sleep 5
-            echo 'setblock 0 80 5 rs:reality_fabricator'
-            echo 'testforblock 0 80 5 rs:reality_fabricator'
-            echo 'setblock 2 80 5 rs:glorp_ore'
-            echo 'setblock 4 80 5 rs:fizzium_ore'
-            echo 'setblock 6 80 5 rs:chronodust_cluster'
-            echo 'setblock 8 80 5 rs:scrap_node'
+            echo 'setblock 0 80 5 keepinitkrispy_rs:reality_fabricator'
+            echo 'testforblock 0 80 5 keepinitkrispy_rs:reality_fabricator'
+            echo 'setblock 2 80 5 keepinitkrispy_rs:glorp_ore'
+            echo 'setblock 4 80 5 keepinitkrispy_rs:fizzium_ore'
+            echo 'setblock 6 80 5 keepinitkrispy_rs:chronodust_cluster'
+            echo 'setblock 8 80 5 keepinitkrispy_rs:scrap_node'
             for id in rich shorty evil_shorty bess gerry sundae bird_dude scronchy mr_needs_it professor_poop captain_drizzle nightmare_larry sprocket_face consensus cucumber_rich killer_krombo shorty_jr validator_prime franky_lincolnstein council_rich; do
-              echo "summon rs:$id 0 80 0"
+              echo "summon keepinitkrispy_rs:$id 0 80 0"
               sleep 0.4
-              echo "testfor @e[type=rs:$id]"
+              echo "testfor @e[type=keepinitkrispy_rs:$id]"
               sleep 0.2
             done
             sleep 2
@@ -135,7 +135,7 @@ jobs:
             echo 'FAIL: Bedrock script runtime emitted an error.'
             exit 1
           fi
-          if ! grep -E 'Successfully set the block|Block placed|Found.*rs:reality_fabricator|testforblock' /tmp/rich-shorty-bds.log >/dev/null; then
+          if ! grep -E 'Successfully set the block|Block placed|Found.*keepinitkrispy_rs:reality_fabricator|testforblock' /tmp/rich-shorty-bds.log >/dev/null; then
             echo 'FAIL: custom Reality Fabricator registry test produced no success evidence.'
             exit 1
           fi
@@ -157,6 +157,7 @@ jobs:
             grep -m1 'Version:' rich_shorty/dist/bds-runtime.log || true
             echo '20/20 featured cast entities: summon-tested'
             echo 'Reality Fabricator registry: server-tested'
+            echo 'Namespace: keepinitkrispy_rs'
             echo 'Archive CRC: PASS'
             cat rich_shorty/dist/sha256.txt
             echo
