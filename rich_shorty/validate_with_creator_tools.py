@@ -104,6 +104,7 @@ def main() -> int:
     parser.add_argument("project", type=Path)
     parser.add_argument("--suite", choices=("all", "addon", "main", "currentplatform"), default="all")
     parser.add_argument("--fail-on-warnings", action="store_true")
+    parser.add_argument("--allow-beta-version-parser-bug", action="store_true")
     parser.add_argument("--log", type=Path)
     args = parser.parse_args()
 
@@ -146,7 +147,10 @@ def main() -> int:
     recommendations = int(payload["recommendations"])
     print(f"MCT VERIFIED PAYLOAD: requested_suite={args.suite} projects={len(projects)} test_items={generated_items} errors={errors} warnings={warnings} recommendations={recommendations}")
 
-    allowed_beta_bug = exact_beta_parser_bug_only(payload, args.project)
+    allowed_beta_bug = (
+        args.allow_beta_version_parser_bug
+        and exact_beta_parser_bug_only(payload, args.project)
+    )
     if allowed_beta_bug:
         print(
             "MCT KNOWN-BUG ALLOWLIST: accepted only CHKMANIF Unable To Parse Version(beta); "
