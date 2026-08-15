@@ -1,0 +1,92 @@
+
+# ---------------------------------------------------------------------------
+# CITADEL ENCOUNTER STAGING
+# Citadel-ish is a story hub, not a spawn-camp. Do not auto-summon Evil Shorty
+# under the arriving player. The Council interaction starts the final hearing,
+# which gives the player agency and preserves the hub NPCs as actual story beats.
+# ---------------------------------------------------------------------------
+
+# Remove the automatic boss summon that was originally part of buildCitadel().
+SCRIPT = SCRIPT.replace(
+    "dim.runCommand(`summon rs:evil_shorty ${p.x} ${p.y+4} ${p.z}`);",
+    "/* Evil Shorty is intentionally staged by the Council hearing interaction. */"
+)
+
+# The earlier flavor-only Council Rich line would double-message with the actual
+# encounter handler below, so retire it in favor of one authoritative interaction.
+SCRIPT = SCRIPT.replace(
+    'else if(id==="rs:council_rich") msg(p,"Council Rich: The Council has reviewed your complaint and promoted it to a committee that does not exist.");',
+    'else if(id==="rs:council_rich") { /* handled by staged Council hearing below */ }'
+)
+
+SCRIPT += r'''
+
+world.afterEvents.playerInteractWithEntity.subscribe(e=>{
+  if(e.target.typeId!=='rs:council_rich') return;
+  const p=e.player;
+  const center=ZONES.citadel.pos;
+
+  if(Boolean(p.getDynamicProperty('rs:boss_defeated')??false)){
+    msg(p,'Council Rich: The hearing is adjourned. Evil Shorty lost, which means the Council is now taking applications for somebody else to blame.');
+    return;
+  }
+  if(!Boolean(p.getDynamicProperty('rs:citadel_unlocked')??false) && countItem(p,'rs:citadel_token')<3){
+    msg(p,'Council Rich: You appear to have entered without the correct punch-card tyranny credentials. Impressive, but procedurally upsetting.');
+    return;
+  }
+
+  let existing=[];
+  try{
+    existing=e.target.dimension.getEntities({type:'rs:evil_shorty',location:center,maxDistance:80});
+  }catch{}
+  if(existing.length){
+    msg(p,'Council Rich: The hearing is already in session. The defendant is the one currently trying to kill you.');
+    return;
+  }
+
+  p.setDynamicProperty('rs:citadel_unlocked',true);
+  msg(p,'§6COUNCIL HEARING§r: Council Rich reluctantly recognizes your tokens, your complaints, and the alarming pile of reality tools in your pockets.');
+  msg(p,'Council Rich: Fine. You wanted the person rigging the Fabricator probabilities? Central chamber. Please destroy as little democracy as possible.');
+
+  system.runTimeout(()=>{
+    try{
+      const boss=e.target.dimension.spawnEntity('rs:evil_shorty',{x:center.x,y:center.y+4,z:center.z});
+      boss.addTag('keepinitkrispy_rs_council_hearing');
+      world.sendMessage('§3Evil Shorty: You crossed four realities because a machine asked for rocks. And you think I am the problem?');
+      msg(p,'§cFINAL LIABILITY§r: Defeat Evil Shorty. His health bar has three phases; the Citadel has already denied responsibility for all of them.');
+    }catch(err){
+      msg(p,`The Council tried to produce Evil Shorty and generated paperwork instead. Runtime detail: ${err}`);
+    }
+  },30);
+});
+'''
+
+
+_citadel_stage_validate = validate
+
+def validate(addon:Path):
+    report=_citadel_stage_validate(addon)
+    errors=list(report.get('errors',[])); checks=int(report.get('checks',0))
+    script=(BP/'scripts/main.js').read_text(encoding='utf-8')
+
+    checks+=1
+    if 'summon keepinitkrispy_rs:evil_shorty' in script:
+        errors.append('story regression: Evil Shorty is again auto-summoned by a command instead of being staged by the Council hearing')
+    checks+=1
+    if "spawnEntity('keepinitkrispy_rs:evil_shorty'" not in script:
+        errors.append('story regression: Council hearing no longer spawns Evil Shorty through the staged encounter')
+    checks+=1
+    if 'keepinitkrispy_rs_council_hearing' not in script:
+        errors.append('story regression: staged boss is missing the Council hearing marker')
+    checks+=1
+    if 'FINAL LIABILITY' not in script:
+        errors.append('story regression: final boss objective feedback is missing')
+
+    report['checks']=checks
+    report['errors']=errors
+    report['status']='PASS' if not errors else 'FAIL'
+    gates=list(report.get('feature_regression_gates',[]))
+    if 'staged_citadel_hearing_boss' not in gates: gates.append('staged_citadel_hearing_boss')
+    report['feature_regression_gates']=gates
+    jwrite(OUT/'validation_report.json',report)
+    return report
