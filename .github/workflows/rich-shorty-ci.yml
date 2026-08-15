@@ -74,16 +74,27 @@ jobs:
           mkdir -p "$BDS/behavior_packs/RichShorty_BP" "$BDS/resource_packs/RichShorty_RP" "$WORLD"
           cp -a /tmp/rich-shorty-project/BP/. "$BDS/behavior_packs/RichShorty_BP/"
           cp -a /tmp/rich-shorty-project/RP/. "$BDS/resource_packs/RichShorty_RP/"
-          cat > "$WORLD/world_behavior_packs.json" <<'JSON'
+
+          BP_UUID=$(jq -r '.header.uuid' /tmp/rich-shorty-project/BP/manifest.json)
+          RP_UUID=$(jq -r '.header.uuid' /tmp/rich-shorty-project/RP/manifest.json)
+          BP_VER=$(jq -c '.header.version' /tmp/rich-shorty-project/BP/manifest.json)
+          RP_VER=$(jq -c '.header.version' /tmp/rich-shorty-project/RP/manifest.json)
+          test -n "$BP_UUID" && test "$BP_UUID" != "null"
+          test -n "$RP_UUID" && test "$RP_UUID" != "null"
+          test "$BP_VER" != "null"
+          test "$RP_VER" != "null"
+
+          cat > "$WORLD/world_behavior_packs.json" <<JSON
           [
-            {"pack_id":"5ef1afb2-dd53-578c-9b79-15c1131f81b6","version":[0,1,0]}
+            {"pack_id":"$BP_UUID","version":$BP_VER}
           ]
           JSON
-          cat > "$WORLD/world_resource_packs.json" <<'JSON'
+          cat > "$WORLD/world_resource_packs.json" <<JSON
           [
-            {"pack_id":"bfc76487-f44c-5c28-8c0f-c99793542d96","version":[0,1,0]}
+            {"pack_id":"$RP_UUID","version":$RP_VER}
           ]
           JSON
+          echo "BDS gate configured BP $BP_UUID $BP_VER / RP $RP_UUID $RP_VER"
           sed -i 's/^level-name=.*/level-name=RichShortyReleaseGate/' "$BDS/server.properties"
           sed -i 's/^online-mode=.*/online-mode=false/' "$BDS/server.properties"
           sed -i 's/^allow-list=.*/allow-list=false/' "$BDS/server.properties"
