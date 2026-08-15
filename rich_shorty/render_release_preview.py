@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
 """Render the exact generated Bedrock voxel geometry into approval sheets.
 
-This is deliberately a dumb renderer: it reads the same .geo.json and PNG files
-that ship in the mcaddon. No concept art, no alternate model source.
+This renderer reads the same .geo.json and PNG files that ship in the mcaddon.
+No concept art and no alternate model source are involved.
 """
 from __future__ import annotations
 
 import json
 from pathlib import Path
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parent
 DIST = ROOT / "dist"
 RP = DIST / "RichShorty_RP"
 OUT = DIST / "previews"
 OUT.mkdir(parents=True, exist_ok=True)
+ENTITY_TEX = RP / "textures/entity/keepinitkrispy/rich_shorty"
+BLOCK_TEX = RP / "textures/blocks/keepinitkrispy/rich_shorty"
 
 NAMES = {
     "rich":"Rich", "shorty":"Shorty", "evil_shorty":"Evil Shorty", "bess":"Bess", "gerry":"Gerry",
@@ -56,7 +58,6 @@ def render_model(model_path: Path, texture_path: Path, size=(250, 280), pad=18):
     if not cubes:
         return Image.new("RGBA", size, (0,0,0,0))
 
-    # Determine a scale that fills the cell while preserving the exact model proportions.
     raw = [project(p, 1.0) for p in all_pts]
     minx=min(p[0] for p in raw); maxx=max(p[0] for p in raw)
     miny=min(p[1] for p in raw); maxy=max(p[1] for p in raw)
@@ -68,13 +69,11 @@ def render_model(model_path: Path, texture_path: Path, size=(250, 280), pad=18):
     offy=(size[1]-(maxy-miny))/2-miny
 
     im=Image.new("RGBA", size, (20,24,29,0)); d=ImageDraw.Draw(im)
-    # Camera looks down from +x,+z. Sort far/back cubes first.
     cubes.sort(key=lambda q: (q[1][0]+q[1][2]+q[1][1]))
     for c,(x,y,z),(sx,sy,sz) in cubes:
         col=cube_color(texture,c.get("uv",[0,0]))
         def P(v):
             px,py=project(v,scale); return (px+offx,py+offy)
-        # visible faces: top (+y), right (+x), left (+z)
         top=[P((x,y+sy,z)),P((x+sx,y+sy,z)),P((x+sx,y+sy,z+sz)),P((x,y+sy,z+sz))]
         right=[P((x+sx,y,z)),P((x+sx,y+sy,z)),P((x+sx,y+sy,z+sz)),P((x+sx,y,z+sz))]
         left=[P((x,y,z+sz)),P((x+sx,y,z+sz)),P((x+sx,y+sy,z+sz)),P((x,y+sy,z+sz))]
@@ -89,13 +88,12 @@ def sheet():
     cw, ch = 270, 340
     canvas=Image.new("RGB",(cols*cw,rows*ch+90),(18,22,27)); d=ImageDraw.Draw(canvas)
     d.text((32,22),"RICH & SHORTY — ACTUAL PACK GEOMETRY / VISUAL GATE",fill=(235,240,232))
-    d.text((32,50),"Rendered directly from the generated .geo.json + shipped entity textures",fill=(142,211,183))
-    order=list(NAMES)
-    for i,name in enumerate(order):
+    d.text((32,50),"Rendered directly from generated .geo.json + shipped namespaced textures",fill=(142,211,183))
+    for i,name in enumerate(NAMES):
         x=(i%cols)*cw; y=90+(i//cols)*ch
         d.rounded_rectangle((x+8,y+8,x+cw-8,y+ch-8),radius=12,fill=(28,34,40),outline=(61,75,82),width=2)
         model=RP/f"models/entity/{name}.geo.json"
-        tex=RP/f"textures/entity/rs/{name}.png"
+        tex=ENTITY_TEX/f"{name}.png"
         r=render_model(model,tex,(cw-28,ch-62),12)
         canvas.paste(r,(x+14,y+10),r)
         label=NAMES[name]
@@ -106,10 +104,10 @@ def sheet():
 
 def machine():
     model=RP/"models/blocks/reality_fabricator.geo.json"
-    tex=RP/"textures/blocks/reality_fabricator.png"
+    tex=BLOCK_TEX/"reality_fabricator.png"
     canvas=Image.new("RGB",(760,680),(17,21,26)); d=ImageDraw.Draw(canvas)
     d.text((28,24),"REALITY FABRICATOR — ACTUAL SHIPPING BLOCK GEOMETRY",fill=(235,240,232))
-    d.text((28,50),"Same custom voxel model and 64×64 material used by the add-on",fill=(142,211,183))
+    d.text((28,50),"Same custom voxel model and material used by the add-on",fill=(142,211,183))
     r=render_model(model,tex,(700,570),24); canvas.paste(r,(30,82),r)
     path=OUT/"fabricator_actual_geometry.png"; canvas.save(path,optimize=True); return path
 
