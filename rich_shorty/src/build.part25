@@ -1,66 +1,75 @@
 
 # ---------------------------------------------------------------------------
-# MOBILE IN-PLACE PACK UPDATES
-# Bedrock replaces an already imported pack when the UUID stays the same and
-# the incoming manifest version is higher. Keep the permanent Rich & Shorty
-# RP/BP UUIDs, but stamp every CI release-gate artifact with a monotonically
-# increasing test version so Ryan can import fixes over the current packs
-# without deleting them from Storage between mobile test iterations.
+# MOBILE TEST-BUILD IDENTITIES
+# Retail Android testing disproved reliable in-place replacement for our
+# side-loaded workflow even with stable UUIDs + higher manifest versions.
+# During active testing, make every CI artifact intentionally coexist instead:
+# each run gets a distinct RP/BP/module UUID set and a visible [TEST N] label.
+# Ryan only activates the newest matching pair; old imports can stay in Storage
+# until final cleanup. Final release identity is handled separately later.
 # ---------------------------------------------------------------------------
 
 
-def _mobile_update_version():
-    # GitHub Actions' run number increases for every run of this workflow.
-    # Release artifacts are produced by that workflow, so [0,2,run] is both
-    # monotonic and safely above the original [0,1,0] test packs.
+def _mobile_test_run():
     try:
-        run=max(1,int(os.environ.get('GITHUB_RUN_NUMBER','1')))
+        return max(1,int(os.environ.get('GITHUB_RUN_NUMBER','1')))
     except Exception:
-        run=1
-    return [0,2,run]
+        return 1
 
 
-_mobile_update_make_pack = make_pack
-_mobile_update_validate = validate
+def _mobile_test_uuid(run:int, name:str)->str:
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f'rich-shorty/mobile-test/{run}/{name}'))
+
+
+def _mobile_test_identity():
+    run=_mobile_test_run()
+    return {
+      'run':run,
+      'version':[0,3,run],
+      'bp_header':_mobile_test_uuid(run,'bp/header'),
+      'bp_data':_mobile_test_uuid(run,'bp/data'),
+      'bp_script':_mobile_test_uuid(run,'bp/script'),
+      'rp_header':_mobile_test_uuid(run,'rp/header'),
+      'rp_resources':_mobile_test_uuid(run,'rp/resources'),
+    }
+
+
+_mobile_test_make_pack = make_pack
+_mobile_test_validate = validate
 
 
 def make_pack():
-    addon = _mobile_update_make_pack()
-    ver = _mobile_update_version()
+    addon = _mobile_test_make_pack()
+    ident=_mobile_test_identity(); run=ident['run']; ver=ident['version']
 
     bp_path=BP/'manifest.json'; rp_path=RP/'manifest.json'
     bp=json.loads(bp_path.read_text(encoding='utf-8'))
     rp=json.loads(rp_path.read_text(encoding='utf-8'))
 
-    # Preserve the original pack identities so Bedrock recognizes these as
-    # updates to the packs already installed rather than additional packs.
-    bp['header']['uuid']=UUIDS['bp_header']
-    rp['header']['uuid']=UUIDS['rp_header']
+    bp['header']['uuid']=ident['bp_header']
+    rp['header']['uuid']=ident['rp_header']
     bp['header']['version']=ver
     rp['header']['version']=ver
 
     for module in bp.get('modules',[]):
         if module.get('type')=='data':
-            module['uuid']=UUIDS['bp_data']; module['version']=ver
+            module['uuid']=ident['bp_data']; module['version']=ver
         elif module.get('type')=='script':
-            module['uuid']=UUIDS['bp_script']; module['version']=ver
+            module['uuid']=ident['bp_script']; module['version']=ver
     for module in rp.get('modules',[]):
         if module.get('type')=='resources':
-            module['uuid']=UUIDS['rp_resources']; module['version']=ver
+            module['uuid']=ident['rp_resources']; module['version']=ver
 
-    # The BP dependency must request this exact RP version while retaining the
-    # RP's stable header UUID.
     for dep in bp.get('dependencies',[]):
         if isinstance(dep,dict) and 'uuid' in dep:
-            dep['uuid']=UUIDS['rp_header']
+            dep['uuid']=ident['rp_header']
             dep['version']=ver
 
-    # Keep names stable so the world continues showing one Rich & Shorty BP/RP.
-    # Put the iteration number in the description for troubleshooting only.
-    bp['header']['name']='Rich & Shorty BP'
-    rp['header']['name']='Rich & Shorty RP'
-    bp['header']['description']=f'Parody multiverse adventure — behavior — mobile build {ver[2]}'
-    rp['header']['description']=f'Parody multiverse adventure — resources — mobile build {ver[2]}'
+    # Make the currently active pair impossible to confuse with stale test packs.
+    bp['header']['name']=f'Rich & Shorty BP [TEST {run}]'
+    rp['header']['name']=f'Rich & Shorty RP [TEST {run}]'
+    bp['header']['description']=f'Parody multiverse adventure — behavior — mobile TEST {run}'
+    rp['header']['description']=f'Parody multiverse adventure — resources — mobile TEST {run}'
 
     jwrite(bp_path,bp); jwrite(rp_path,rp)
 
@@ -73,44 +82,49 @@ def make_pack():
 
 
 def validate(addon:Path):
-    report=_mobile_update_validate(addon)
+    report=_mobile_test_validate(addon)
     errors=list(report.get('errors',[])); checks=int(report.get('checks',0))
-    ver=_mobile_update_version()
+    ident=_mobile_test_identity(); run=ident['run']; ver=ident['version']
     bp=json.loads((BP/'manifest.json').read_text(encoding='utf-8'))
     rp=json.loads((RP/'manifest.json').read_text(encoding='utf-8'))
 
-    checks += 10
-    if bp.get('header',{}).get('uuid') != UUIDS['bp_header']:
-        errors.append('mobile update regression: BP header UUID changed; import would create a second pack')
-    if rp.get('header',{}).get('uuid') != UUIDS['rp_header']:
-        errors.append('mobile update regression: RP header UUID changed; import would create a second pack')
-    if bp.get('header',{}).get('version') != ver:
-        errors.append('mobile update regression: BP header version is not current CI build version')
-    if rp.get('header',{}).get('version') != ver:
-        errors.append('mobile update regression: RP header version is not current CI build version')
-    if tuple(ver) <= tuple(VERSION):
-        errors.append(f'mobile update regression: generated version {ver} is not higher than original {VERSION}')
+    checks += 12
+    if bp.get('header',{}).get('uuid') != ident['bp_header']:
+        errors.append('mobile test identity regression: BP header UUID is not build-specific')
+    if rp.get('header',{}).get('uuid') != ident['rp_header']:
+        errors.append('mobile test identity regression: RP header UUID is not build-specific')
+    if bp.get('header',{}).get('version') != ver or rp.get('header',{}).get('version') != ver:
+        errors.append('mobile test identity regression: BP/RP versions do not match current test run')
+    if bp.get('header',{}).get('name') != f'Rich & Shorty BP [TEST {run}]':
+        errors.append('mobile test identity regression: BP visible build label missing')
+    if rp.get('header',{}).get('name') != f'Rich & Shorty RP [TEST {run}]':
+        errors.append('mobile test identity regression: RP visible build label missing')
 
     bpmods={m.get('type'):m for m in bp.get('modules',[]) if isinstance(m,dict)}
     rpmods={m.get('type'):m for m in rp.get('modules',[]) if isinstance(m,dict)}
-    if bpmods.get('data',{}).get('uuid') != UUIDS['bp_data'] or bpmods.get('data',{}).get('version') != ver:
-        errors.append('mobile update regression: BP data module identity/version mismatch')
-    if bpmods.get('script',{}).get('uuid') != UUIDS['bp_script'] or bpmods.get('script',{}).get('version') != ver:
-        errors.append('mobile update regression: BP script module identity/version mismatch')
-    if rpmods.get('resources',{}).get('uuid') != UUIDS['rp_resources'] or rpmods.get('resources',{}).get('version') != ver:
-        errors.append('mobile update regression: RP resource module identity/version mismatch')
+    if bpmods.get('data',{}).get('uuid') != ident['bp_data'] or bpmods.get('data',{}).get('version') != ver:
+        errors.append('mobile test identity regression: BP data module mismatch')
+    if bpmods.get('script',{}).get('uuid') != ident['bp_script'] or bpmods.get('script',{}).get('version') != ver:
+        errors.append('mobile test identity regression: BP script module mismatch')
+    if rpmods.get('resources',{}).get('uuid') != ident['rp_resources'] or rpmods.get('resources',{}).get('version') != ver:
+        errors.append('mobile test identity regression: RP resource module mismatch')
 
     uuiddeps=[d for d in bp.get('dependencies',[]) if isinstance(d,dict) and d.get('uuid')]
-    if not any(d.get('uuid')==UUIDS['rp_header'] and d.get('version')==ver for d in uuiddeps):
-        errors.append('mobile update regression: BP dependency does not match current RP UUID/version')
-    if bp.get('header',{}).get('name')!='Rich & Shorty BP' or rp.get('header',{}).get('name')!='Rich & Shorty RP':
-        errors.append('mobile update regression: visible pack names changed instead of updating in place')
+    if not any(d.get('uuid')==ident['rp_header'] and d.get('version')==ver for d in uuiddeps):
+        errors.append('mobile test identity regression: BP dependency does not match current test RP')
 
-    report['mobile_import_strategy']='stable UUID + monotonically higher manifest version = replace existing pack'
+    # A build must not accidentally fall back to the original/final UUID set.
+    if bp.get('header',{}).get('uuid') == UUIDS['bp_header'] or rp.get('header',{}).get('uuid') == UUIDS['rp_header']:
+        errors.append('mobile test identity regression: test build reused final/stable pack identity')
+
+    report['mobile_import_strategy']='coexisting build-specific TEST identities; activate newest matching BP/RP pair'
     report['mobile_build_version']=ver
-    gates=list(report.get('feature_regression_gates',[]))
-    if 'mobile_in_place_pack_updates' not in gates:
-        gates.append('mobile_in_place_pack_updates')
+    report['mobile_test_run']=run
+    report['mobile_test_bp_uuid']=ident['bp_header']
+    report['mobile_test_rp_uuid']=ident['rp_header']
+    gates=[g for g in report.get('feature_regression_gates',[]) if g!='mobile_in_place_pack_updates']
+    if 'mobile_coexisting_test_builds' not in gates:
+        gates.append('mobile_coexisting_test_builds')
     report['feature_regression_gates']=gates
     report['checks']=checks; report['errors']=errors
     report['status']='PASS' if not errors else 'FAIL'
