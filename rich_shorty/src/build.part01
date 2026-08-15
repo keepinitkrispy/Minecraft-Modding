@@ -1,0 +1,90 @@
+        d.rounded_rectangle((8,3,24,29),radius=4,fill=b+(255,),outline=a+(255,),width=2); d.ellipse((12,7,20,15),fill=a+(255,)); d.rectangle((12,20,20,23),fill=a+(255,))
+    elif kind=='tool':
+        d.polygon([(4,22),(9,27),(27,9),(23,5)],fill=b+(255,),outline=a+(255,)); d.ellipse((19,3,29,13),outline=a+(255,),width=3)
+    elif kind=='token':
+        d.ellipse((4,4,28,28),fill=b+(255,),outline=a+(255,),width=3); d.rectangle((14,8,18,24),fill=a+(255,)); d.rectangle((10,13,22,18),fill=a+(255,))
+    im.save(path)
+
+@dataclass
+class Cube:
+    origin: Tuple[float,float,float]
+    size: Tuple[float,float,float]
+    mat: str
+    inflate: float = 0.0
+    rotation: Optional[Tuple[float,float,float]] = None
+    pivot: Optional[Tuple[float,float,float]] = None
+
+    def to_json(self):
+        o={'origin':list(self.origin),'size':list(self.size),'uv':list(SWATCH_UV[self.mat])}
+        if self.inflate: o['inflate']=self.inflate
+        if self.rotation is not None: o['rotation']=list(self.rotation)
+        if self.pivot is not None: o['pivot']=list(self.pivot)
+        return o
+
+@dataclass
+class Bone:
+    name: str
+    pivot: Tuple[float,float,float]=(0,0,0)
+    parent: Optional[str]=None
+    cubes: List[Cube]=field(default_factory=list)
+    rotation: Optional[Tuple[float,float,float]]=None
+
+    def to_json(self):
+        o={'name':self.name,'pivot':list(self.pivot)}
+        if self.parent: o['parent']=self.parent
+        if self.rotation: o['rotation']=list(self.rotation)
+        if self.cubes: o['cubes']=[c.to_json() for c in self.cubes]
+        return o
+
+class Model:
+    def __init__(self,name,w=1.0,h=2.0): self.name=name; self.bones=[]; self.width=w; self.height=h
+    def bone(self,*a,**kw):
+        b=Bone(*a,**kw); self.bones.append(b); return b
+    def geometry(self):
+        return {
+          'format_version':'1.12.0',
+          'minecraft:geometry':[{'description':{
+            'identifier':f'geometry.rs.{self.name}','texture_width':TEX_SIZE,'texture_height':TEX_SIZE,
+            'visible_bounds_width':3.0,'visible_bounds_height':3.8,'visible_bounds_offset':[0,1.4,0]
+          },'bones':[b.to_json() for b in self.bones]}]
+        }
+
+
+def add_face(model:Model, y:float, skin:str, hair:str, elder=False, visor=False, bird=False):
+    head=model.bone('head',(0,y,0),'body')
+    if bird:
+        head.cubes += [
+          Cube((-4,y-2.5,-3),(8,6,6),hair), Cube((-5,y-0.5,-2.5),(10,3,5),hair), Cube((-3.4,y+3.6,-2.2),(6.8,2.2,4.4),'feather'), Cube((-4.7,y+2.4,-1.7),(2.0,2.5,3.4),'feather'),
+          Cube((-1.5,y-0.2,-4.5),(3,2,2),'yellow'),
+          Cube((-3.2,y+0.4,-3.6),(2,2,1),'eye'), Cube((1.2,y+0.4,-3.6),(2,2,1),'eye'),
+          Cube((-2.6,y+0.8,-4.15),(1,1,1),'pupil'), Cube((1.6,y+0.8,-4.15),(1,1,1),'pupil')]
+        return
+    # sculpted head: forehead, cheeks, chin, nose, ears (not a single box)
+    head.cubes += [
+      Cube((-4,y-1.8,-3),(8,5.5,6),skin),
+      Cube((-5,y-0.6,-2.8),(10,3.1,5.6),skin),
+      Cube((-3.4,y-3.0,-2.6),(6.8,1.6,5.2),skin),
+      Cube((-1,y-0.7,-4.0),(2,2.2,1.4),skin),
+      Cube((-5.7,y-0.2,-1.2),(1.2,2.5,2.4),skin), Cube((4.5,y-0.2,-1.2),(1.2,2.5,2.4),skin),
+      Cube((-3.4,y+0.4,-3.6),(2.5,1.8,0.9),'eye'), Cube((0.9,y+0.4,-3.6),(2.5,1.8,0.9),'eye'),
+      Cube((-2.6,y+0.7,-4.0),(0.9,1,0.55),'pupil'), Cube((1.7,y+0.7,-4.0),(0.9,1,0.55),'pupil'),
+      Cube((-2.2,y-1.8,-3.45),(4.4,0.75,0.55),'mouth')]
+    if visor:
+        head.cubes += [Cube((-3.9,y+0.1,-4.15),(7.8,2.4,0.65),'visor'),Cube((3.5,y+0.2,-4.5),(1.3,1.3,0.9),'visor_dark')]
+    # hair as many stepped voxels for silhouette
+    if elder:
+        spikes=[(-5,y+2.8,-2,2,5,4),(-3,y+4.3,-2,2,5,4),(-1,y+5.2,-2,2,5,4),(1,y+4.5,-2,2,5,4),(3,y+3.2,-2,2,5,4),(-4,y+1.8,1,2,4,3),(2,y+1.8,1,2,4,3)]
+        for x,yy,z,sx,sy,sz in spikes: head.cubes.append(Cube((x,yy,z),(sx,sy,sz),hair))
+        head.cubes += [Cube((-4.6,y+2.2,-2.8),(9.2,2.1,5.6),hair),Cube((-4.2,y-2.7,-2.8),(1.2,1.4,0.7),hair),Cube((3,y-2.7,-2.8),(1.2,1.4,0.7),hair)]
+    else:
+        head.cubes += [Cube((-4.6,y+2.2,-2.5),(9.2,2.4,5),hair),Cube((-4,y+3.6,-1.8),(2.2,2.4,3.6),hair),Cube((-1.5,y+4.2,-1.7),(2.4,2.2,3.4),hair),Cube((1.4,y+3.7,-1.8),(2.2,2.5,3.6),hair)]
+
+
+def add_humanoid(model:Model, *, skin='skin_shorty', hair='hair_shorty', torso='shirt_amber', pants='pants_dark', elder=False, coat=False, visor=False, scale=1.0, skirt=False):
+    # root/body with tapered torso assembled from layers, not one rectangle.
+    body=model.bone('body',(0,13,0))
+    body.cubes += [
+      Cube((-4,10,-2.4),(8,5,4.8),torso), Cube((-4.7,12,-2.2),(9.4,2.8,4.4),torso), Cube((-3.5,8,-2.1),(7,2.5,4.2),torso),
+      Cube((-3.6,7.2,-2),(7.2,1.0,4),'darkgrey')]
+    if coat:
+      body.cubes += [Cube((-5,9.7,-2.7),(2,7.3,5.4),'coat'),Cube((3,9.7,-2.7),(2,7.3,5.4),'coat'),Cube((-3.5,8.2,1.6),(7,1.5,1),'coat_shadow'),Cube((-4,4.3,-2.2),(3.3,5,4.4),'coat'),Cube((0.7,4.3,-2.2),(3.3,5,4.4),'coat')]
