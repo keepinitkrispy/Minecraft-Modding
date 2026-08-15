@@ -5,6 +5,8 @@
 # rewrites the proven generated content before the archive is sealed, and moves
 # texture assets into creator/pack folders so unrelated Add-Ons cannot collide.
 # ---------------------------------------------------------------------------
+import re
+
 FINAL_NS = 'keepinitkrispy_rs'
 ASSET_CREATOR = 'keepinitkrispy'
 ASSET_PACK = 'rich_shorty'
@@ -116,13 +118,15 @@ def make_pack():
 def validate(addon:Path):
     report=_pre_hygiene_validate(addon)
     errors=list(report.get('errors',[])); checks=int(report.get('checks',0))
-    # Final namespace gate.
+    # Final namespace gate. The negative lookbehind prevents the trailing
+    # "rs:" inside keepinitkrispy_rs: from being mistaken for the legacy token.
+    legacy_ns = re.compile(r'(?<![A-Za-z0-9_])rs:')
     for root in (BP,RP):
         for f in root.rglob('*'):
             if f.is_file() and f.suffix.lower() in ('.json','.js','.lang'):
                 checks+=1; text=f.read_text(encoding='utf-8')
-                if 'rs:' in text:
-                    errors.append(f'{f}: legacy rs: namespace survived finalization')
+                if legacy_ns.search(text):
+                    errors.append(f'{f}: standalone legacy rs: namespace survived finalization')
     # Actual shipped entity textures must exist, be opaque, and live under creator/pack path.
     tex_dir=RP/f'textures/entity/{ASSET_CREATOR}/{ASSET_PACK}'
     for m in CHAR_MODELS:
