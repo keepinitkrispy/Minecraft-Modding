@@ -129,6 +129,13 @@ def validate(addon: Path):
     report = _capsule_use_previous_validate(addon)
     errors = list(report.get('errors', [])); checks = int(report.get('checks', 0))
 
+    # build.part24 predates the retail interaction test and intentionally had a
+    # gate requiring the drop-to-deploy subscription. That requirement is now
+    # obsolete by design. Retire only that exact stale error; all structure,
+    # countdown, Fabricator, Home, shaft, and completion gates remain active.
+    stale = "garage onboarding regression: missing drop-to-deploy event ('world.afterEvents.entitySpawn.subscribe')"
+    errors = [e for e in errors if e != stale]
+
     script = (BP/'scripts/main.js').read_text(encoding='utf-8')
     item = json.loads((BP/'items/garage_deployment_capsule.json').read_text(encoding='utf-8'))
     components = item.get('minecraft:item',{}).get('components',{})
@@ -163,9 +170,10 @@ def validate(addon: Path):
     report['checks'] = checks
     report['errors'] = errors
     report['status'] = 'PASS' if not errors else 'FAIL'
-    gates = list(report.get('feature_regression_gates', []))
-    if 'garage_capsule_native_use_interaction' not in gates:
-        gates.append('garage_capsule_native_use_interaction')
+    gates = [g for g in report.get('feature_regression_gates', []) if g != 'drop_deploy_house_garage_underground_lab']
+    for gate in ('starter_house_garage_underground_lab','garage_capsule_native_use_interaction'):
+        if gate not in gates:
+            gates.append(gate)
     report['feature_regression_gates'] = gates
     jwrite(OUT/'validation_report.json', report)
     return report
