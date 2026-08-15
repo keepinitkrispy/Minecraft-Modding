@@ -1,0 +1,88 @@
+
+# ---------------------------------------------------------------------------
+# PROGRESSION PERSISTENCE + TOOL FEEL
+# Citadel access is an earned story flag, not a fragile inventory check. World
+# tools use the current native Bedrock cooldown component so the deliberately
+# powerful effects have readable pacing instead of controller-spam behavior.
+# ---------------------------------------------------------------------------
+
+_toolfeel_item_json = item_json
+
+def item_json(identifier,name,icon,component=None,stack=64):
+    obj=_toolfeel_item_json(identifier,name,icon,component=component,stack=stack)
+    comps=obj['minecraft:item']['components']
+    if component=='rs:world_tool':
+        comps['minecraft:cooldown']={
+            'category':'keepinitkrispy_rich_shorty_world_tools',
+            'duration':1.15,
+            'type':'use'
+        }
+        comps['minecraft:hand_equipped']=True
+        comps['minecraft:interact_button']='Use Reality Tool'
+    elif component=='rs:portal_remote':
+        comps['minecraft:cooldown']={
+            'category':'keepinitkrispy_rich_shorty_portal_remote',
+            'duration':0.35,
+            'type':'use'
+        }
+        comps['minecraft:interact_button']='Open Portal Remote'
+    return obj
+
+
+# Side liabilities are Act II content. Players can meet the characters early,
+# but turning in their resource requests does not silently skip Act I.
+SCRIPT = SCRIPT.replace(
+    "if(!p.hasTag('rs_q_gerry')&&RESOURCES.every(x=>countItem(p,x)>=4))",
+    "if(Number(p.getDynamicProperty('rs:fabrications')??0)>=1&&!p.hasTag('rs_q_gerry')&&RESOURCES.every(x=>countItem(p,x)>=4))"
+)
+SCRIPT = SCRIPT.replace(
+    "if(!p.hasTag('rs_q_sundae')&&countItem(p,'rs:glorp_crystal')>=8&&countItem(p,'rs:fizzium')>=8)",
+    "if(Number(p.getDynamicProperty('rs:fabrications')??0)>=1&&!p.hasTag('rs_q_sundae')&&countItem(p,'rs:glorp_crystal')>=8&&countItem(p,'rs:fizzium')>=8)"
+)
+SCRIPT = SCRIPT.replace(
+    "if(!p.hasTag('rs_q_bird')&&countItem(p,'rs:chronodust')>=10)",
+    "if(Number(p.getDynamicProperty('rs:fabrications')??0)>=1&&!p.hasTag('rs_q_bird')&&countItem(p,'rs:chronodust')>=10)"
+)
+SCRIPT = SCRIPT.replace(
+    "if(!p.hasTag('rs_q_needs')&&countItem(p,'rs:scrap_fragment')>=12)",
+    "if(Number(p.getDynamicProperty('rs:fabrications')??0)>=1&&!p.hasTag('rs_q_needs')&&countItem(p,'rs:scrap_fragment')>=12)"
+)
+
+# Once the player has physically held the three required tokens, permanently
+# unlock the route. This survives later spending, death/drop loss, or storage.
+SCRIPT = SCRIPT.replace(
+    'if(key==="citadel" && countItem(player,"rs:citadel_token")<3){ msg(player,"Citadel-ish customs requires 3 Citadel Tokens. Apparently tyranny has a punch card."); return; }',
+    'if(key==="citadel" && countItem(player,"rs:citadel_token")>=3 && !Boolean(player.getDynamicProperty(\'rs:citadel_unlocked\')??false)){ player.setDynamicProperty(\'rs:citadel_unlocked\',true); msg(player,"§6ACT III UNLOCKED§r: Three tokens satisfy Citadel-ish customs. Your clearance is now permanent, because even evil bureaucracy eventually writes things down."); }\n  if(key==="citadel" && !Boolean(player.getDynamicProperty(\'rs:citadel_unlocked\')??false)){ msg(player,"Citadel-ish customs requires 3 Citadel Tokens. Apparently tyranny has a punch card."); return; }'
+)
+
+# The ledger reports the persistent unlock, not only whatever happens to be in
+# the inventory on this exact tick.
+SCRIPT = SCRIPT.replace(
+    "const bossDone=Boolean(player.getDynamicProperty('rs:boss_defeated')??false);",
+    "const bossDone=Boolean(player.getDynamicProperty('rs:boss_defeated')??false);\n  const citadelUnlocked=Boolean(player.getDynamicProperty('rs:citadel_unlocked')??false) || tokens>=3;"
+)
+SCRIPT = SCRIPT.replace(
+    "if(tokens>=3 && !bossDone){",
+    "if(citadelUnlocked && !bossDone){"
+)
+SCRIPT = SCRIPT.replace(
+    "`§eCitadel Tokens carried:§r ${tokens} / 3 needed`,",
+    "`§eCitadel Tokens carried:§r ${tokens} / 3 needed`,\n    `§eCitadel route:§r ${citadelUnlocked?'§aPERMANENTLY UNLOCKED§r':'§7LOCKED§r'}`,"
+)
+
+# Announce the unlock as soon as the third side-quest token lands rather than
+# making the player discover it only by opening the portal menu later.
+SCRIPT += r'''
+
+world.afterEvents.playerInteractWithEntity.subscribe(e=>{
+  const p=e.player;
+  if(!p) return;
+  system.run(()=>{
+    if(Number(p.getDynamicProperty('rs:fabrications')??0)<1) return;
+    if(countItem(p,'rs:citadel_token')>=3 && !Boolean(p.getDynamicProperty('rs:citadel_unlocked')??false)){
+      p.setDynamicProperty('rs:citadel_unlocked',true);
+      msg(p,'§6ACT III UNLOCKED — THE LEAST DEMOCRATIC CITADEL§r: Three tokens acquired. Citadel-ish is now permanently available on the Portal Remote.');
+    }
+  });
+});
+'''
