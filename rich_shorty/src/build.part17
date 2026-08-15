@@ -1,0 +1,85 @@
+
+# ---------------------------------------------------------------------------
+# PLAYER-FACING STORY / QUEST LEDGER
+# The add-on should never require an external wiki to understand the loop.
+# Portal Remote gets a Liability Ledger and a Current Recipe screen; acts are
+# derived from persistent player progress and Evil Shorty completion.
+# ---------------------------------------------------------------------------
+
+# Add two utility buttons to the existing portal remote menu.
+SCRIPT = SCRIPT.replace(
+    'for(const k of ["glorp","fizz","chrono","scrap","citadel"]) f.button(ZONES[k].label);',
+    'for(const k of ["glorp","fizz","chrono","scrap","citadel"]) f.button(ZONES[k].label);\n  f.button("Liability Ledger");\n  f.button("Current Fabricator Recipe");'
+)
+SCRIPT = SCRIPT.replace(
+    'const key=["home","glorp","fizz","chrono","scrap","citadel"][r.selection];',
+    'const key=["home","glorp","fizz","chrono","scrap","citadel","ledger","recipe"][r.selection];\n  if(key==="ledger"){ await questLedger(player); return; }\n  if(key==="recipe"){ const costs=readLockedRecipe(player); msg(player,`§eLOCKED RECIPE§r: ${recipeText(costs)}. It will not change until you fabricate it.`); return; }'
+)
+
+# Count successful fabrications and announce the Act I -> Act II transition.
+SCRIPT = SCRIPT.replace(
+    "player.addTag('rs_fabricated');\n\n  // Pre-roll the next recipe now so repeat interaction immediately shows a new, stable target.",
+    "player.addTag('rs_fabricated');\n  const fabricationCount=Number(player.getDynamicProperty('rs:fabrications')??0)+1;\n  player.setDynamicProperty('rs:fabrications',fabricationCount);\n  if(fabricationCount===1){\n    msg(player,'§6ACT II — SIDE EFFECTS§r: The machine works. That is unfortunately worse. Side characters across the realities now have problems that can earn Citadel Tokens.');\n  }\n\n  // Pre-roll the next recipe now so repeat interaction immediately shows a new, stable target."
+)
+
+# Evil Shorty death becomes persistent story completion instead of only a loot event.
+SCRIPT = SCRIPT.replace(
+    "if(src?.typeId==='minecraft:player'){ give(src,'rs:citadel_token',4); msg(src,'Evil Shorty is down. The Citadel immediately forms three committees about it.'); }",
+    "if(src?.typeId==='minecraft:player'){ give(src,'rs:citadel_token',4); src.setDynamicProperty('rs:boss_defeated',true); msg(src,'§bEPILOGUE — RANDOMNESS WINS§r: Evil Shorty is down. The Citadel immediately forms three committees about it. The Fabricator stays random, which is somehow the good ending.'); }"
+)
+
+SCRIPT += r'''
+
+function questStatus(player, tag, label, reward){
+  const done=player.hasTag(tag);
+  return `${done?'§aDONE§r':'§7OPEN§r'} — ${label}${done?` §8(${reward})§r`:''}`;
+}
+
+async function questLedger(player){
+  const fabrications=Number(player.getDynamicProperty('rs:fabrications')??0);
+  const tokens=countItem(player,'rs:citadel_token');
+  const bossDone=Boolean(player.getDynamicProperty('rs:boss_defeated')??false);
+  const recipe=readLockedRecipe(player);
+
+  let act='ACT I — WARRANTY VOID';
+  let objective='Harvest resources from at least two realities and complete your first locked Fabricator recipe.';
+  if(fabrications>=1){
+    act='ACT II — SIDE EFFECTS';
+    objective='Solve reality side quests and collect 3 Citadel Tokens. Keep fabricating tools; they are the point and also the problem.';
+  }
+  if(tokens>=3 && !bossDone){
+    act='ACT III — THE LEAST DEMOCRATIC CITADEL';
+    objective='The Citadel-ish route is unlocked. Use the Portal Remote, survive the bureaucracy, and stop Evil Shorty.';
+  }
+  if(bossDone){
+    act='EPILOGUE — RANDOMNESS WINS';
+    objective='Evil Shorty is beaten. The Fabricator loop remains endless: reality runs, new locked recipes, random world tools, and whatever mess you choose to make.';
+  }
+
+  const body=[
+    `§l${act}§r`,
+    '',
+    objective,
+    '',
+    `§eFabrications completed:§r ${fabrications}`,
+    `§eCitadel Tokens carried:§r ${tokens} / 3 needed`,
+    `§eCurrent locked recipe:§r ${recipeText(recipe)}`,
+    '',
+    '§lSIDE LIABILITIES§r',
+    questStatus(player,'rs_q_sundae','Sundae — 8 Glorp Crystals + 8 Fizzium','Citadel Token'),
+    questStatus(player,'rs_q_bird','Bird Dude — 10 Chronodust','Citadel Token'),
+    questStatus(player,'rs_q_needs','Mr. Needs-It — 12 Scrap Fragments','Citadel Token'),
+    questStatus(player,'rs_q_gerry','Gerry — 4 of every reality resource','Chaos Bonker'),
+    '',
+    bossDone?'§aEvil Shorty: DEFEATED§r':'§cEvil Shorty: still statistically annoying§r'
+  ].join('\n');
+
+  const form=new ActionFormData().title('Liability Ledger').body(body);
+  form.button('Back to Portal Remote');
+  form.button('Pin Current Recipe to Chat');
+  const result=await form.show(player);
+  if(result.canceled) return;
+  if(result.selection===0) await travelMenu(player);
+  if(result.selection===1) msg(player,`§eLOCKED RECIPE§r: ${recipeText(recipe)}.`);
+}
+'''
