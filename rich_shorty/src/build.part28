@@ -1,0 +1,171 @@
+
+# ---------------------------------------------------------------------------
+# GARAGE CAPSULE: NORMAL USE INTERACTION
+# Retail mobile testing showed that making the player physically drop the
+# deployment capsule is awkward and inconsistent with every other important
+# Rich & Shorty tool. Bedrock exposes minecraft:interact_button specifically to
+# surface a touch Use button, and our Portal Remote/world tools already use the
+# same custom-component pattern successfully. Convert the capsule to that model:
+# aim at the ground, tap "Deploy Garage", consume the selected capsule, then run
+# the existing five-second safety countdown. Dropping the item becomes inert.
+# ---------------------------------------------------------------------------
+import re as _capsule_use_re
+
+_capsule_use_previous_make_pack = make_pack
+_capsule_use_previous_validate = validate
+
+
+def _reseal_documented_composite(addon: Path):
+    # build.part27 owns the documented .mcaddon -> two .mcpack structure.
+    bp_mcpack = _zip_pack_dir(BP, OUT/'RichShorty_BP.mcpack')
+    rp_mcpack = _zip_pack_dir(RP, OUT/'RichShorty_RP.mcpack')
+    if addon.exists(): addon.unlink()
+    with zipfile.ZipFile(addon, 'w', zipfile.ZIP_DEFLATED) as outer:
+        outer.write(bp_mcpack, bp_mcpack.name)
+        outer.write(rp_mcpack, rp_mcpack.name)
+    return addon
+
+
+def make_pack():
+    addon = _capsule_use_previous_make_pack()
+
+    # The prior layers have already written the final-namespaced shipping JS.
+    # Remove only the old garage item-entity deployment subscription. Do this on
+    # generated output so there is no ambiguity around namespace transforms.
+    script_path = BP/'scripts/main.js'
+    script = script_path.read_text(encoding='utf-8')
+    drop_pattern = _capsule_use_re.compile(
+        r"\n// Dropping the custom capsule is the intentional deployment gesture\..*?"
+        r"world\.afterEvents\.entitySpawn\.subscribe\(e=>\{.*?\n\}\);\n",
+        _capsule_use_re.S,
+    )
+    script, removed = drop_pattern.subn('\n', script, count=1)
+    if removed != 1:
+        raise RuntimeError(f'expected to remove exactly one garage drop deployment handler, removed {removed}')
+
+    # Correct the first-run instruction at the same time. The player now aims at
+    # a ground block and taps the native touch/controller Use action.
+    script = script.replace(
+        'Drop the capsule where you want your permanent garage. When it starts counting down, back up.',
+        'Aim at the ground where you want your permanent garage and tap Deploy Garage. When it starts counting down, back up.'
+    )
+
+    script += r'''
+
+function consumeGarageDeploymentCapsule(player){
+  try{
+    const inventory=player.getComponent('minecraft:inventory')?.container;
+    if(!inventory) return false;
+    const slot=player.selectedSlotIndex;
+    const stack=inventory.getItem(slot);
+    if(stack?.typeId!=='keepinitkrispy_rs:garage_deployment_capsule') return false;
+    inventory.setItem(slot,undefined);
+    return true;
+  }catch{
+    return false;
+  }
+}
+
+function beginGarageDeploymentFromUse(player,block){
+  system.run(()=>{
+    if(Boolean(player.getDynamicProperty('keepinitkrispy_rs:base_deployed')??false)){
+      msg(player,'Your Garage Deployment Capsule refuses to create a second mortgage. This base is already deployed.');
+      return;
+    }
+    if(Boolean(player.getDynamicProperty('keepinitkrispy_rs:base_deploying')??false)) return;
+    if(!block){
+      msg(player,'§eGARAGE DEPLOYMENT§r: Aim at the ground where you want the garage, then tap Deploy Garage.');
+      return;
+    }
+
+    const anchor={x:Math.floor(block.location.x),y:Math.floor(block.location.y),z:Math.floor(block.location.z)};
+    if(!consumeGarageDeploymentCapsule(player)){
+      msg(player,'§cGARAGE DEPLOYMENT§r: The capsule is no longer in your selected hotbar slot.');
+      return;
+    }
+
+    player.setDynamicProperty('keepinitkrispy_rs:base_deploying',true);
+    msg(player,'§eDEPLOYMENT CAPSULE ARMED§r: Five seconds. Back up. The underground portion is not asking permission from the terrain.');
+    garageCountdown(player,anchor);
+  });
+}
+
+// Register through the same Script API v2 custom-item mechanism already used
+// by the Portal Remote and world tools. onUseOn gives an exact player-selected
+// ground block; onUse is the controller/touch fallback and raycasts the block
+// under the crosshair. The base_deploying flag makes the two paths idempotent
+// if a client happens to emit both callbacks for one press.
+system.beforeEvents.startup.subscribe(ev=>{
+  ev.itemComponentRegistry.registerCustomComponent('keepinitkrispy_rs:garage_deployer',{
+    onUseOn(e){ beginGarageDeploymentFromUse(e.source,e.block); },
+    onUse(e){
+      let hit;
+      try{ hit=e.source.getBlockFromViewDirection({maxDistance:12}); }catch{}
+      beginGarageDeploymentFromUse(e.source,hit?.block);
+    }
+  });
+});
+'''
+    twrite(script_path, script)
+
+    # Native touch UX. Selecting the capsule now exposes a dedicated button
+    # labelled "Deploy Garage" exactly like the Remote exposes its own action.
+    item_path = BP/'items/garage_deployment_capsule.json'
+    item = json.loads(item_path.read_text(encoding='utf-8'))
+    components = item['minecraft:item'].setdefault('components', {})
+    components['keepinitkrispy_rs:garage_deployer'] = {}
+    components['minecraft:interact_button'] = 'Deploy Garage'
+    components['minecraft:cooldown'] = {
+        'category':'keepinitkrispy_rich_shorty_garage_deploy',
+        'duration':0.5,
+        'type':'use'
+    }
+    jwrite(item_path, item)
+
+    return _reseal_documented_composite(addon)
+
+
+def validate(addon: Path):
+    report = _capsule_use_previous_validate(addon)
+    errors = list(report.get('errors', [])); checks = int(report.get('checks', 0))
+
+    script = (BP/'scripts/main.js').read_text(encoding='utf-8')
+    item = json.loads((BP/'items/garage_deployment_capsule.json').read_text(encoding='utf-8'))
+    components = item.get('minecraft:item',{}).get('components',{})
+
+    required_script = {
+        'garage custom-component registration': "registerCustomComponent('keepinitkrispy_rs:garage_deployer'",
+        'garage normal use callback':'onUse(e)',
+        'garage targeted use-on callback':'onUseOn(e)',
+        'garage target raycast':'getBlockFromViewDirection({maxDistance:12})',
+        'garage selected-slot consumption':'inventory.setItem(slot,undefined)',
+        'garage use deployment helper':'function beginGarageDeploymentFromUse(player,block)',
+        'mobile onboarding use instruction':'tap Deploy Garage'
+    }
+    for label, needle in required_script.items():
+        checks += 1
+        if needle not in script:
+            errors.append(f'garage use regression: missing {label} ({needle!r})')
+
+    checks += 1
+    if "ent.typeId!=='minecraft:item'" in script and 'garage_deployment_capsule' in script:
+        errors.append('garage use regression: old dropped-item deployment handler is still present')
+
+    checks += 3
+    if components.get('keepinitkrispy_rs:garage_deployer') != {}:
+        errors.append('garage use regression: capsule missing keepinitkrispy_rs:garage_deployer custom component')
+    if components.get('minecraft:interact_button') != 'Deploy Garage':
+        errors.append('garage use regression: capsule does not expose the Deploy Garage touch button')
+    cooldown = components.get('minecraft:cooldown')
+    if not isinstance(cooldown,dict) or cooldown.get('type')!='use':
+        errors.append('garage use regression: capsule missing native use cooldown')
+
+    report['checks'] = checks
+    report['errors'] = errors
+    report['status'] = 'PASS' if not errors else 'FAIL'
+    gates = list(report.get('feature_regression_gates', []))
+    if 'garage_capsule_native_use_interaction' not in gates:
+        gates.append('garage_capsule_native_use_interaction')
+    report['feature_regression_gates'] = gates
+    jwrite(OUT/'validation_report.json', report)
+    return report
