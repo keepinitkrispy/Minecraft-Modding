@@ -1,0 +1,37 @@
+
+# ---------------------------------------------------------------------------
+# CURRENT PATCH TARGET
+# MCT 0.17.7 / Bedrock 1.26.44.3 recommend 1.26.40 for current entity,
+# item, block, and client-entity definitions. Keep animation at the documented
+# 1.10.0 schema while moving all current-platform content to the N patch.
+# ---------------------------------------------------------------------------
+MIN_ENGINE = [1, 26, 40]
+
+_patch_behavior_entity = behavior_entity
+_patch_client_entity = client_entity
+_patch_item_json = item_json
+_patch_block_json = block_json
+
+
+def behavior_entity(name:str,boss=False,friendly=True):
+    obj = _patch_behavior_entity(name,boss=boss,friendly=friendly)
+    obj['format_version'] = '1.26.40'
+    return obj
+
+
+def client_entity(name:str):
+    obj = _patch_client_entity(name)
+    obj['format_version'] = '1.26.40'
+    return obj
+
+
+def item_json(identifier,name,icon,component=None,stack=64):
+    obj = _patch_item_json(identifier,name,icon,component=component,stack=stack)
+    obj['format_version'] = '1.26.40'
+    return obj
+
+
+def block_json(identifier, texture, destroy=2.0, component=None, loot=None, light=0):
+    obj = _patch_block_json(identifier,texture,destroy=destroy,component=component,loot=loot,light=light)
+    obj['format_version'] = '1.26.40'
+    return obj
