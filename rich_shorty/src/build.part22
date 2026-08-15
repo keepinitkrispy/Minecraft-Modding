@@ -1,0 +1,90 @@
+
+# ---------------------------------------------------------------------------
+# RECIPE PROGRESS UX
+# Mobile/controller play should not require mental subtraction between the
+# Fabricator recipe and inventory stacks. Surface have/need counts and the exact
+# realities containing the active ingredients everywhere the locked recipe is
+# shown, without changing any recipe/reroll behavior.
+# ---------------------------------------------------------------------------
+
+SCRIPT = SCRIPT.replace(
+    'if(key==="recipe"){ const costs=readLockedRecipe(player); msg(player,`§eLOCKED RECIPE§r: ${recipeText(costs)}. It will not change until you fabricate it.`); return; }',
+    'if(key==="recipe"){ const costs=readLockedRecipe(player); msg(player,`§eLOCKED RECIPE§r: ${recipeProgressText(player,costs)}. §bRoute:§r ${recipeRouteText(costs)}. It will not change until you fabricate it.`); return; }'
+)
+
+SCRIPT = SCRIPT.replace(
+    'msg(player,`§eCURRENT FABRICATOR RECIPE§r: ${recipeText(costs)}. It stays locked until you build it, so go rob the appropriate realities.`);',
+    'msg(player,`§eCURRENT FABRICATOR RECIPE§r: ${recipeProgressText(player,costs)}. §bRoute:§r ${recipeRouteText(costs)}. It stays locked until you build it.`);'
+)
+
+SCRIPT = SCRIPT.replace(
+    "`§eCurrent locked recipe:§r ${recipeText(recipe)}`,",
+    "`§eCurrent locked recipe:§r ${recipeText(recipe)}`,\n    `§eInventory progress:§r ${recipeProgressText(player,recipe)}`,\n    `§eSuggested route:§r ${recipeRouteText(recipe)}`,"
+)
+
+SCRIPT = SCRIPT.replace(
+    'if(result.selection===1) msg(player,`§eLOCKED RECIPE§r: ${recipeText(recipe)}.`);',
+    'if(result.selection===1) msg(player,`§eLOCKED RECIPE§r: ${recipeProgressText(player,recipe)}. §bRoute:§r ${recipeRouteText(recipe)}.`);'
+)
+
+SCRIPT += r'''
+
+const RESOURCE_ZONE = {
+  'rs:glorp_crystal':'Glorp-9',
+  'rs:fizzium':'Fizz Desert',
+  'rs:chronodust':'Chrono Shelf',
+  'rs:scrap_fragment':'Scrap Moon'
+};
+
+function resourceLabel(id){
+  return id.split(':')[1].replaceAll('_',' ');
+}
+
+function recipeProgressText(player,costs){
+  return RESOURCES.map((id,i)=>[id,costs[i]])
+    .filter(([,need])=>need>0)
+    .map(([id,need])=>{
+      const have=countItem(player,id);
+      const shown=Math.min(have,need);
+      return `${shown}/${need} ${resourceLabel(id)}${have>=need?' §a✓§r':''}`;
+    }).join(' · ');
+}
+
+function recipeRouteText(costs){
+  return RESOURCES.map((id,i)=>[id,costs[i]])
+    .filter(([,need])=>need>0)
+    .map(([id])=>RESOURCE_ZONE[id]??'Unknown Reality')
+    .join(' → ');
+}
+'''
+
+
+_recipe_ux_validate = validate
+
+def validate(addon:Path):
+    report=_recipe_ux_validate(addon)
+    errors=list(report.get('errors',[])); checks=int(report.get('checks',0))
+    script=(BP/'scripts/main.js').read_text(encoding='utf-8')
+
+    required={
+      'recipe inventory progress':'function recipeProgressText(player,costs)',
+      'recipe route helper':'function recipeRouteText(costs)',
+      'Glorp route label':'Glorp-9',
+      'Fizz route label':'Fizz Desert',
+      'Chrono route label':'Chrono Shelf',
+      'Scrap route label':'Scrap Moon',
+      'ledger inventory progress':'Inventory progress:',
+      'ledger suggested route':'Suggested route:'
+    }
+    for label,needle in required.items():
+        checks+=1
+        if needle not in script: errors.append(f'recipe UX regression: missing {label} ({needle!r})')
+
+    report['checks']=checks
+    report['errors']=errors
+    report['status']='PASS' if not errors else 'FAIL'
+    gates=list(report.get('feature_regression_gates',[]))
+    if 'recipe_have_need_and_route_ui' not in gates: gates.append('recipe_have_need_and_route_ui')
+    report['feature_regression_gates']=gates
+    jwrite(OUT/'validation_report.json',report)
+    return report
