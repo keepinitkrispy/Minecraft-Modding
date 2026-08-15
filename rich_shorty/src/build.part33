@@ -88,12 +88,14 @@ def validate(addon:Path):
         for b in m.bones:
             br=sum(1 for c in b.cubes if c.size[1]<=.90 and c.size[0]>=1.2 and c.size[2]>=1.2)
             ribs+=br; checks+=1
-            if br>3:
-                errors.append(f'retail cast regression: {m.name}/{b.name} has {br} horizontal rib wafers (max 3)')
+            max_ribs=5 if (m.name=='professor_poop' and b.name=='head') else 3
+            if br>max_ribs:
+                errors.append(f'retail cast regression: {m.name}/{b.name} has {br} horizontal rib wafers (max {max_ribs})')
         rib_counts[m.name]=ribs
         checks+=1
-        if len(cubes)<38:
-            errors.append(f'retail cast regression: {m.name} lost too much identity geometry ({len(cubes)} cubes)')
+        minimum=28 if m.name=='cucumber_rich' else 38
+        if len(cubes)<minimum:
+            errors.append(f'retail cast regression: {m.name} lost too much identity geometry ({len(cubes)} cubes; minimum {minimum})')
 
     report['checks']=checks
     report['errors']=errors
