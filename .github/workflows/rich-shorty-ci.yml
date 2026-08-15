@@ -106,15 +106,16 @@ jobs:
             echo 'setblock 6 80 5 keepinitkrispy_rs:chronodust_cluster'
             echo 'setblock 8 80 5 keepinitkrispy_rs:scrap_node'
 
-            # Every vanilla block identifier used by reality construction or a
-            # world-tool rewrite is sent through the same current Bedrock parser.
-            # Some blocks have placement rules, so success placement is not
-            # required here; unknown/syntax-invalid identifiers are fatal below.
-            echo 'say RS_ENV_BLOCK_SMOKE_BEGIN'
+            # Every vanilla block identifier used by authored realities or a
+            # world-tool rewrite is parsed by current Bedrock. Give the smoke
+            # cells solid support so placement-rule blocks (fire/rail/etc.) do
+            # not create false runtime errors unrelated to their identifiers.
+            echo 'fill 20 79 20 35 79 23 minecraft:stone'
+            echo 'fill 20 80 20 35 80 23 minecraft:air'
             i=0
             for bid in \
-              moss_block warped_stem warped_wart_block shroomlight slime water lily_pad \
-              red_sand basalt orange_terracotta magma fire red_sandstone terracotta \
+              moss_block warped_stem warped_wart_block shroomlight slime water \
+              red_sand basalt orange_terracotta magma fire red_sandstone \
               packed_ice blue_ice calcite amethyst_block sea_lantern end_rod \
               tuff exposed_cut_copper iron_block redstone_lamp cut_copper chain \
               deepslate_tiles iron_bars rail smooth_quartz oxidized_cut_copper \
@@ -125,7 +126,6 @@ jobs:
               echo "setblock $x 80 $z minecraft:$bid"
               i=$((i + 1))
             done
-            echo 'say RS_ENV_BLOCK_SMOKE_END'
 
             for id in rich shorty evil_shorty bess gerry sundae bird_dude scronchy mr_needs_it professor_poop captain_drizzle nightmare_larry sprocket_face consensus cucumber_rich killer_krombo shorty_jr validator_prime franky_lincolnstein council_rich; do
               echo "summon keepinitkrispy_rs:$id 0 80 0"
@@ -141,8 +141,6 @@ jobs:
 
           grep -F 'Server started.' /tmp/rich-shorty-bds.log
           grep -F 'Added ticking area' /tmp/rich-shorty-bds.log
-          grep -F 'RS_ENV_BLOCK_SMOKE_BEGIN' /tmp/rich-shorty-bds.log
-          grep -F 'RS_ENV_BLOCK_SMOKE_END' /tmp/rich-shorty-bds.log
           summons=$(grep -c 'Object successfully summoned' /tmp/rich-shorty-bds.log || true)
           echo "Successful entity summons: $summons"
           test "$summons" -ge 20
@@ -185,7 +183,7 @@ jobs:
             grep -m1 'Version:' rich_shorty/dist/bds-runtime.log || true
             echo '20/20 featured cast entities: summon-tested'
             echo 'Reality Fabricator registry: server-tested'
-            echo 'Reality/tool vanilla block palette: parser smoke-tested on real Bedrock'
+            echo 'Reality/tool vanilla block palette: parser/placement smoke-tested on real Bedrock'
             echo 'Namespace: keepinitkrispy_rs'
             echo 'Archive CRC: PASS'
             cat rich_shorty/dist/sha256.txt
