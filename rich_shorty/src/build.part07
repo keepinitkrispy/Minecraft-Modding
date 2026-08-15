@@ -1,0 +1,20 @@
+      bone_names={b['name'] for b in geo['bones']}
+      required={'head','body','left_upper_arm','left_lower_arm','right_upper_arm','right_lower_arm','left_upper_leg','left_lower_leg','right_upper_leg','right_lower_leg'}
+      checks+=2
+      if cube_count<25: errors.append(f'{m.name}: only {cube_count} cubes')
+      if not required.issubset(bone_names): errors.append(f'{m.name}: missing articulated bones {sorted(required-bone_names)}')
+    checks+=1
+    with zipfile.ZipFile(addon) as z:
+      bad=z.testzip()
+      if bad: errors.append(f'bad archive member {bad}')
+      roots={n.split('/')[0] for n in z.namelist() if '/' in n}
+      if roots != {'RichShorty_BP','RichShorty_RP'}: errors.append(f'bad archive roots {roots}')
+    sha=hashlib.sha256(addon.read_bytes()).hexdigest()
+    report={'checks':checks,'errors':errors,'sha256':sha,'addon_bytes':addon.stat().st_size,'characters':len(CHAR_MODELS),'tools':8,'resource_realities':4,'status':'PASS' if not errors else 'FAIL'}
+    jwrite(OUT/'validation_report.json',report)
+    return report
+
+if __name__=='__main__':
+    addon=make_pack(); report=validate(addon)
+    print(json.dumps(report,indent=2))
+    if report['errors']: raise SystemExit(1)
