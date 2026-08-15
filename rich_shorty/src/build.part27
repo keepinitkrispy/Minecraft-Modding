@@ -1,0 +1,128 @@
+
+# ---------------------------------------------------------------------------
+# DOCUMENTED MCADDON COMPOSITE PACKAGING
+# Microsoft documents .mcaddon as a ZIP containing .mcpack/.mcworld assets.
+# Earlier Rich & Shorty builds put raw BP/RP directories directly in the
+# .mcaddon. Bedrock accepted that, but Android retained successive imports as
+# duplicate UI entries even with stable UUIDs + a higher header version.
+# Package each generated pack as its own .mcpack and then put those two assets
+# inside the .mcaddon. Keep every previous source/content validator by running
+# it against an equivalent raw validation archive, then additionally validate
+# the exact composite artifact that is handed to the user.
+# ---------------------------------------------------------------------------
+import io as _composite_io
+
+_composite_previous_make_pack = make_pack
+_composite_previous_validate = validate
+
+
+def _zip_pack_dir(pack_dir: Path, output: Path):
+    if output.exists(): output.unlink()
+    with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for f in sorted(pack_dir.rglob('*')):
+            if f.is_file():
+                zf.write(f, f.relative_to(pack_dir))
+    return output
+
+
+def _write_raw_validation_archive(output: Path):
+    if output.exists(): output.unlink()
+    with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for pack in (BP, RP):
+            for f in sorted(pack.rglob('*')):
+                if f.is_file():
+                    zf.write(f, f.relative_to(OUT))
+    return output
+
+
+def make_pack():
+    addon = _composite_previous_make_pack()
+
+    # At this point all late retail fixes have already modified BP/RP on disk.
+    # Seal each pack independently, exactly as a distributable .mcpack.
+    bp_mcpack = _zip_pack_dir(BP, OUT/'RichShorty_BP.mcpack')
+    rp_mcpack = _zip_pack_dir(RP, OUT/'RichShorty_RP.mcpack')
+
+    # A .mcaddon is the composite container; only asset archives live at root.
+    if addon.exists(): addon.unlink()
+    with zipfile.ZipFile(addon, 'w', zipfile.ZIP_DEFLATED) as zf:
+        zf.write(bp_mcpack, bp_mcpack.name)
+        zf.write(rp_mcpack, rp_mcpack.name)
+    return addon
+
+
+def validate(addon: Path):
+    # Preserve all existing deterministic/content/retail regression gates. The
+    # legacy validators inspect raw BP/RP roots, so give them a temporary archive
+    # with the old layout while the actual user artifact stays documented.
+    raw = _write_raw_validation_archive(OUT/'_raw_validation_only.zip')
+    report = _composite_previous_validate(raw)
+    errors = list(report.get('errors', [])); checks = int(report.get('checks', 0))
+
+    checks += 1
+    try:
+        with zipfile.ZipFile(addon) as outer:
+            if outer.testzip():
+                errors.append('composite mcaddon CRC failure')
+            members = sorted(n for n in outer.namelist() if not n.endswith('/'))
+            expected = ['RichShorty_BP.mcpack', 'RichShorty_RP.mcpack']
+            if members != expected:
+                errors.append(f'composite mcaddon members {members!r}, expected {expected!r}')
+
+            parsed = {}
+            for member in expected:
+                checks += 1
+                if member not in members:
+                    continue
+                data = outer.read(member)
+                try:
+                    with zipfile.ZipFile(_composite_io.BytesIO(data)) as inner:
+                        if inner.testzip():
+                            errors.append(f'{member}: inner mcpack CRC failure')
+                            continue
+                        names = set(inner.namelist())
+                        if 'manifest.json' not in names:
+                            errors.append(f'{member}: manifest.json is not at mcpack root')
+                            continue
+                        manifest = json.loads(inner.read('manifest.json'))
+                        parsed[member] = manifest
+                        if manifest.get('format_version') != 2:
+                            errors.append(f'{member}: manifest format_version must be 2')
+                except Exception as exc:
+                    errors.append(f'{member}: invalid mcpack archive: {exc}')
+
+            bp_manifest = parsed.get('RichShorty_BP.mcpack')
+            rp_manifest = parsed.get('RichShorty_RP.mcpack')
+            if bp_manifest and rp_manifest:
+                checks += 4
+                bp_uuid = bp_manifest['header'].get('uuid')
+                rp_uuid = rp_manifest['header'].get('uuid')
+                bp_ver = bp_manifest['header'].get('version')
+                rp_ver = rp_manifest['header'].get('version')
+                if bp_uuid != '5ef1afb2-dd53-578c-9b79-15c1131f81b6':
+                    errors.append(f'BP stable update UUID changed: {bp_uuid}')
+                if rp_uuid != 'bfc76487-f44c-5c28-8c0f-c99793542d96':
+                    errors.append(f'RP stable update UUID changed: {rp_uuid}')
+                if bp_ver != rp_ver:
+                    errors.append(f'BP/RP versions differ: {bp_ver} vs {rp_ver}')
+                deps = [d for d in bp_manifest.get('dependencies', []) if d.get('uuid') == rp_uuid]
+                if not deps or deps[0].get('version') != rp_ver:
+                    errors.append('BP dependency does not exactly match packaged RP UUID/version')
+    except Exception as exc:
+        errors.append(f'composite mcaddon cannot be opened: {exc}')
+
+    # Report must describe the exact artifact delivered to the retail client,
+    # not the temporary raw archive used to preserve the older validators.
+    report['checks'] = checks
+    report['errors'] = errors
+    report['status'] = 'PASS' if not errors else 'FAIL'
+    report['sha256'] = hashlib.sha256(addon.read_bytes()).hexdigest()
+    report['addon_bytes'] = addon.stat().st_size
+    gates = list(report.get('feature_regression_gates', []))
+    for gate in ('documented_mcaddon_mcpack_composite','stable_pack_update_identity'):
+        if gate not in gates: gates.append(gate)
+    report['feature_regression_gates'] = gates
+    jwrite(OUT/'validation_report.json', report)
+    try: raw.unlink()
+    except FileNotFoundError: pass
+    return report
