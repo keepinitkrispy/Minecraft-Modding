@@ -16,6 +16,12 @@ _patch_block_json = block_json
 def behavior_entity(name:str,boss=False,friendly=True):
     obj = _patch_behavior_entity(name,boss=boss,friendly=friendly)
     obj['format_version'] = '1.26.40'
+    comps = obj['minecraft:entity'].setdefault('components', {})
+    # Bedrock 1.26.10 removed the legacy minecraft:pushable component and split
+    # it into two marker components. Keep both behaviors explicitly enabled.
+    comps.pop('minecraft:pushable', None)
+    comps['minecraft:pushable_by_block'] = {}
+    comps['minecraft:pushable_by_entity'] = {}
     return obj
 
 
