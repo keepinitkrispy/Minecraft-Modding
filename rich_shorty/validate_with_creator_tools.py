@@ -78,6 +78,8 @@ def exact_beta_parser_bug_only(payload: dict, project: Path) -> bool:
     warnings = [i for i in items if i.get("type") == "warning"]
     if warnings:
         return False
+    if int(payload.get("errors", -1)) != 2:
+        return False
     if len(errors) != 1 or not _is_exact_beta_parser_bug(errors[0]):
         return False
     if len(testfails) != 1 or not _is_beta_parser_testfail(testfails[0]):
@@ -102,7 +104,6 @@ def main() -> int:
     parser.add_argument("project", type=Path)
     parser.add_argument("--suite", choices=("all", "addon", "main", "currentplatform"), default="all")
     parser.add_argument("--fail-on-warnings", action="store_true")
-    parser.add_argument("--allow-beta-version-parser-bug", action="store_true")
     parser.add_argument("--log", type=Path)
     args = parser.parse_args()
 
@@ -145,17 +146,12 @@ def main() -> int:
     recommendations = int(payload["recommendations"])
     print(f"MCT VERIFIED PAYLOAD: requested_suite={args.suite} projects={len(projects)} test_items={generated_items} errors={errors} warnings={warnings} recommendations={recommendations}")
 
-    allowed_beta_bug = (
-        args.allow_beta_version_parser_bug
-        and exact_beta_parser_bug_only(payload, args.project)
-    )
+    allowed_beta_bug = exact_beta_parser_bug_only(payload, args.project)
     if allowed_beta_bug:
         print(
             "MCT KNOWN-BUG ALLOWLIST: accepted only CHKMANIF Unable To Parse Version(beta); "
-            "SCRIPTMODULE independently recognized @minecraft/server beta."
+            "SCRIPTMODULE independently recognized @minecraft/server beta; no other MCT failures or warnings were present."
         )
-        if args.fail_on_warnings and warnings:
-            return 1
         return 0
 
     if proc.returncode != 0:
