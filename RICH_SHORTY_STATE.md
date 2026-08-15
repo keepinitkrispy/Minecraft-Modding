@@ -12,17 +12,17 @@ The project is deliberately not using experimental custom dimensions. The four r
 
 ## VERIFIED — Current Client-Test Candidate
 
-The authoritative artifact approved to leave automated/server testing is the candidate built from branch commit `7a9ef901dc2bbe29bf7290b05936296f6dd99fb2`.
+The authoritative artifact approved to leave automated/server testing is the candidate built from branch commit `4c0b34571216379358e43bf3090241ac14df283c`.
 
 Exact tested add-on SHA-256:
 
-`637b8e07930f924e72bb9ca5483afd461efebc4a254d7dadf3d46cd9fa9a3bcf`
+`023690f494d859b96fb6136b75ed43833593a0294bbb72395d327ec6ec0aa977`
 
-Exact tested add-on size: **171,270 bytes**.
+Exact tested add-on size: **171,537 bytes**.
 
 Release-gate results for that exact artifact:
 
-- deterministic local validation: **537 checks PASS / 0 errors**
+- deterministic local validation: **545 checks PASS / 0 errors**
 - Mojang Minecraft Creator Tools full suite: **PASS / 0 errors / 0 warnings / 0 recommendations**
 - Mojang Minecraft Creator Tools Add-On suite: **PASS / 0 errors / 0 warnings / 0 recommendations**
 - real current Bedrock Dedicated Server **1.26.44.3** boot: PASS
@@ -115,15 +115,16 @@ The intent is obvious affectionate sci-fi-cartoon parody, not direct asset copyi
    - Scrap Moon — Scrap Fragment
 4. Reality Fabricator rolls one random recipe using at least two reality resources.
 5. **The recipe remains locked while the player travels and gathers it.** It does not reroll on every interaction.
-6. Completing the recipe consumes the materials and produces one random world-manipulation tool.
-7. The immediately previous tool is excluded so consecutive fabrication results do not repeat.
-8. A new different recipe is pre-rolled only after successful fabrication.
-9. Side liabilities reward Citadel Tokens / special tools and leave persistent physical consequences in their realities.
-10. Three tokens permanently unlock Citadel-ish.
-11. Citadel-ish is a story hub. Evil Shorty does **not** auto-spawn on arrival.
-12. Interacting with Council Rich begins the Council hearing and stages the Evil Shorty encounter in the central chamber.
-13. Evil Shorty has a multi-phase boss fight.
-14. Defeating Evil Shorty persists the epilogue state; the Fabricator loop remains replayable afterward.
+6. Current-recipe feedback shows **inventory have/need counts** and the **suggested reality route** so mobile/controller play does not require manual stack arithmetic.
+7. Completing the recipe consumes the materials and produces one random world-manipulation tool.
+8. The immediately previous tool is excluded so consecutive fabrication results do not repeat.
+9. A new different recipe is pre-rolled only after successful fabrication.
+10. Side liabilities reward Citadel Tokens / special tools and leave persistent physical consequences in their realities.
+11. Three tokens permanently unlock Citadel-ish.
+12. Citadel-ish is a story hub. Evil Shorty does **not** auto-spawn on arrival.
+13. Interacting with Council Rich begins the Council hearing and stages the Evil Shorty encounter in the central chamber.
+14. Evil Shorty has a multi-phase boss fight.
+15. Defeating Evil Shorty persists the epilogue state; the Fabricator loop remains replayable afterward.
 
 ## Reality Environments
 
@@ -139,7 +140,7 @@ The real-Bedrock release gate smoke-tests the full vanilla block palette used by
 
 ## Side-Quest World Consequences
 
-Completed side liabilities now leave one-shot persistent landmarks instead of existing only as tags/menu entries:
+Completed side liabilities leave one-shot persistent landmarks instead of existing only as tags/menu entries:
 
 - **Sundae:** Glorp-9 gains a luminous coolant garden beside the landing pad.
 - **Bird Dude:** Chrono Shelf gains a calcite/amethyst ceremonial time-roost.
@@ -196,10 +197,12 @@ The Portal Remote includes an in-world Liability Ledger. It reports:
 - Citadel token count
 - persistent Citadel unlock state
 - current locked Fabricator recipe
+- current recipe **have/need inventory progress**
+- current recipe **suggested reality route**
 - side-liability completion
 - Evil Shorty completion state
 
-The player should not need an external wiki to understand the main progression loop.
+The player should not need an external wiki or mental stack subtraction to understand the main progression loop.
 
 ## Hard Regression Gates
 
@@ -214,6 +217,7 @@ Current validation explicitly rejects regressions in:
 - `world_tool_native_cooldown`
 - `staged_citadel_hearing_boss`
 - `persistent_sidequest_world_changes`
+- `recipe_have_need_and_route_ui`
 - Bedrock 1.26.10 pushability component split
 
 ## Hard Quality Rules
@@ -232,7 +236,7 @@ Current validation explicitly rejects regressions in:
 
 **VERIFIED:** structure, schema, archive, script syntax, server pack loading, custom-block registration/placement, full authored vanilla block identifier palette on current real Bedrock, all custom-entity server registration/summoning, exact generated-geometry offline render review, and the hard gameplay/visual regression signatures listed above.
 
-**UNKNOWN until client/player test:** actual Bedrock retail-client rendering, animation playback in the retail client, controller/touch UI behavior, real player-driven Portal Remote interaction, real player-driven Fabricator custom component execution, full reality generation triggered through the UI, side-quest turn-ins and their persistent world changes under real play, staged Council hearing under real player interaction, and Realm → PS5 behavior.
+**UNKNOWN until client/player test:** actual Bedrock retail-client rendering, animation playback in the retail client, controller/touch UI behavior, real player-driven Portal Remote interaction including have/need route display, real player-driven Fabricator custom component execution, full reality generation triggered through the UI, side-quest turn-ins and their persistent world changes under real play, staged Council hearing under real player interaction, and Realm → PS5 behavior.
 
 Do not collapse UNKNOWN into PASS.
 
@@ -245,6 +249,7 @@ Do not collapse UNKNOWN into PASS.
    - Portal Remote ActionForms/controller interaction
    - home/reality travel
    - Reality Fabricator interaction and locked recipe persistence
+   - have/need inventory progress and suggested reality route display
    - one full resource → fabrication loop
    - Liability Ledger and Tool Manual
    - environment construction
