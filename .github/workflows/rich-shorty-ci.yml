@@ -8,6 +8,9 @@ on:
       - '.github/workflows/rich-shorty-ci.yml'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-and-validate:
     runs-on: ubuntu-22.04
@@ -21,12 +24,13 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Build exact release artifact
+      - name: Build exact release artifact and actual-geometry approval sheets
         shell: bash
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check pillow
           python rich_shorty/build.py
+          python rich_shorty/render_release_preview.py
           node --check rich_shorty/dist/RichShorty_BP/scripts/main.js
           unzip -t rich_shorty/dist/Rich_and_Shorty_v0.1.0.mcaddon | tee rich_shorty/dist/archive.log
           sha256sum rich_shorty/dist/Rich_and_Shorty_v0.1.0.mcaddon | tee rich_shorty/dist/sha256.txt
@@ -135,7 +139,7 @@ jobs:
             echo 'FAIL: custom Reality Fabricator registry test produced no success evidence.'
             exit 1
           fi
-          cp /tmp/rich-shorty-bds.log rich_shorty/dist/bds-runtime.log
+          cp /tmp/rich-shorty-bds.log "$GITHUB_WORKSPACE/rich_shorty/dist/bds-runtime.log"
 
       - name: Write sealed validation summary
         shell: bash
@@ -156,15 +160,31 @@ jobs:
             echo 'Archive CRC: PASS'
             cat rich_shorty/dist/sha256.txt
             echo
-            echo 'BOUNDARY: client-side RP rendering, controller UI interaction, and PS5/Realm behavior remain gated until the visual approval build is ready.'
+            echo 'BOUNDARY: PS5/Realm client interaction remains a later user gate; visual approval sheets are generated directly from shipping geometry before that test.'
           } | tee rich_shorty/dist/release-gate.txt
 
-      - name: Upload tested add-on and reports
+      - name: Publish exact visual approval sheets to branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p previews
+          cp rich_shorty/dist/previews/cast_actual_geometry.png previews/rich_shorty_cast_actual_geometry.png
+          cp rich_shorty/dist/previews/fabricator_actual_geometry.png previews/rich_shorty_fabricator_actual_geometry.png
+          git config user.name 'Rich Shorty Release Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add previews/rich_shorty_cast_actual_geometry.png previews/rich_shorty_fabricator_actual_geometry.png
+          if ! git diff --cached --quiet; then
+            git commit -m 'Update Rich & Shorty actual-geometry previews [skip ci]'
+            git push origin HEAD:gpt/rich-and-shorty
+          fi
+
+      - name: Upload tested add-on, approval sheets, and reports
         uses: actions/upload-artifact@v4
         with:
           name: Rich-and-Shorty-v0.1.0-tested
           path: |
             rich_shorty/dist/Rich_and_Shorty_v0.1.0.mcaddon
+            rich_shorty/dist/previews/*.png
             rich_shorty/dist/validation_report.json
             rich_shorty/dist/story_bible.json
             rich_shorty/dist/mct-*.log
