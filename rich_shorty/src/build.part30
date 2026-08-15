@@ -1,0 +1,237 @@
+
+# ---------------------------------------------------------------------------
+# TRUE CUSTOM DIMENSIONS — BETA API PATH
+# The user's actual deployment flow uses Realms only as a courier: build/test on
+# Android, upload the world, download it on PS5, then play the downloaded world
+# locally. That makes the experimental Custom Dimension Script API an acceptable
+# target. This layer replaces the fail-closed TEST 52 reality menu with five
+# genuinely separate void dimensions registered during system startup.
+# ---------------------------------------------------------------------------
+import re as _beta_dimension_re
+
+_beta_dimension_previous_make_pack = make_pack
+_beta_dimension_previous_validate = validate
+
+_BETA_REALITY_IDS = {
+    'glorp':'keepinitkrispy_rs:glorp_9',
+    'fizz':'keepinitkrispy_rs:fizz_desert',
+    'chrono':'keepinitkrispy_rs:chrono_shelf',
+    'scrap':'keepinitkrispy_rs:scrap_moon',
+    'citadel':'keepinitkrispy_rs:citadel_ish',
+}
+
+
+def _beta_dimension_reseal(addon: Path):
+    bp_mcpack = _zip_pack_dir(BP, OUT/'RichShorty_BP.mcpack')
+    rp_mcpack = _zip_pack_dir(RP, OUT/'RichShorty_RP.mcpack')
+    if addon.exists(): addon.unlink()
+    with zipfile.ZipFile(addon, 'w', zipfile.ZIP_DEFLATED) as outer:
+        outer.write(bp_mcpack, bp_mcpack.name)
+        outer.write(rp_mcpack, rp_mcpack.name)
+    return addon
+
+
+def make_pack():
+    addon = _beta_dimension_previous_make_pack()
+
+    # Microsoft Custom Dimension API requires the beta server module. Keep UI on
+    # the stable module; only the server dependency opts into the experiment.
+    manifest_path = BP/'manifest.json'
+    manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+    found_server = False
+    for dep in manifest.get('dependencies', []):
+        if isinstance(dep, dict) and dep.get('module_name') == '@minecraft/server':
+            dep['version'] = 'beta'
+            found_server = True
+    if not found_server:
+        raise RuntimeError('Rich & Shorty BP has no @minecraft/server dependency to switch to beta')
+    jwrite(manifest_path, manifest)
+
+    script_path = BP/'scripts/main.js'
+    script = script_path.read_text(encoding='utf-8')
+
+    # TEST 52 intentionally refused reality travel. Replace only that refusal;
+    # all progression, Citadel gating, ledger, recipe, tool manual, and Home
+    # behavior around it stay intact.
+    offline = '''const z=ZONES[key];\n  msg(player,`§cREALITY ROUTING OFFLINE§r: ${z.label} is disabled in this test build. The previous implementation only teleported inside the current vanilla dimension, so it has been removed rather than misrepresented as portal travel.`);'''
+    online = '''const z=ZONES[key];\n  await openTrueRealityPortal(player,key,z);'''
+    if offline not in script:
+        raise RuntimeError('TEST 52 fail-closed reality route was not found; refusing an ambiguous portal rewrite')
+    script = script.replace(offline, online, 1)
+
+    script += r'''
+
+// -------------------------------------------------------------------------
+// TRUE CUSTOM DIMENSION RUNTIME
+// registerCustomDimension(typeId) creates a separate void-generator dimension.
+// Destination chunks are explicitly loaded before any authored blocks are
+// placed or the player is teleported there.
+// -------------------------------------------------------------------------
+const RS_REALITY_DIMENSIONS={
+  glorp:'keepinitkrispy_rs:glorp_9',
+  fizz:'keepinitkrispy_rs:fizz_desert',
+  chrono:'keepinitkrispy_rs:chrono_shelf',
+  scrap:'keepinitkrispy_rs:scrap_moon',
+  citadel:'keepinitkrispy_rs:citadel_ish'
+};
+
+system.beforeEvents.startup.subscribe(event=>{
+  for(const id of Object.values(RS_REALITY_DIMENSIONS)){
+    event.dimensionRegistry.registerCustomDimension(id);
+  }
+});
+
+function rsPortalWait(ticks){
+  return new Promise(resolve=>system.runTimeout(resolve,ticks));
+}
+
+function rsRealityBuiltKey(key){
+  return `keepinitkrispy_rs:true_reality_built_${key}`;
+}
+
+async function ensureTrueRealityReady(key,z){
+  const dimensionId=RS_REALITY_DIMENSIONS[key];
+  if(!dimensionId) throw new Error(`No registered reality dimension for ${key}`);
+  const dimension=world.getDimension(dimensionId);
+  const tickingAreaId=`rs_${key}_portal`;
+
+  try{ world.tickingAreaManager.removeTickingArea(tickingAreaId); }catch{}
+  await world.tickingAreaManager.createTickingArea(tickingAreaId,{
+    dimension,
+    from:{x:z.pos.x-40,y:z.pos.y-32,z:z.pos.z-40},
+    to:{x:z.pos.x+40,y:z.pos.y+64,z:z.pos.z+40}
+  });
+
+  if(!Boolean(world.getDynamicProperty(rsRealityBuiltKey(key))??false)){
+    buildZone(dimension,key);
+    world.setDynamicProperty(rsRealityBuiltKey(key),true);
+    await rsPortalWait(4);
+  }
+  return {dimension,tickingAreaId};
+}
+
+function rsPortalParticles(player,phase){
+  const p=player.location;
+  const dim=player.dimension;
+  for(let i=0;i<14;i++){
+    const a=(Math.PI*2*i/14)+(phase*0.35);
+    const r=0.8+(phase*0.11);
+    try{
+      dim.spawnParticle('minecraft:basic_portal_particle',{
+        x:p.x+Math.cos(a)*r,
+        y:p.y+1.05+Math.sin(a)*1.15,
+        z:p.z+0.18
+      });
+    }catch{}
+  }
+}
+
+async function openTrueRealityPortal(player,key,z){
+  let prepared;
+  try{
+    prepared=await ensureTrueRealityReady(key,z);
+  }catch(err){
+    msg(player,`§cPORTAL FAILURE§r: ${z.label} did not initialize as a custom dimension. ${err}`);
+    return;
+  }
+
+  msg(player,`§bREMOTE LOCK§r: ${z.label}. Charging aperture…`);
+  try{ player.playSound('portal.trigger',{volume:0.8,pitch:0.8}); }catch{}
+  for(let phase=0;phase<6;phase++){
+    rsPortalParticles(player,phase);
+    await rsPortalWait(3);
+  }
+  try{
+    player.camera.fade({
+      fadeColor:{red:0.02,green:0.32,blue:0.20},
+      fadeTime:{fadeInTime:0.25,holdTime:0.35,fadeOutTime:0.45}
+    });
+  }catch{}
+  await rsPortalWait(7);
+
+  try{
+    player.teleport(
+      {x:z.pos.x+0.5,y:z.pos.y+1,z:z.pos.z+0.5},
+      {dimension:prepared.dimension}
+    );
+    try{ player.playSound('portal.travel',{volume:0.9,pitch:1.05}); }catch{}
+    await rsPortalWait(4);
+    rsPortalParticles(player,2);
+    msg(player,`§aREALITY LOCKED§r: ${z.label}. Dimension ID: ${prepared.dimension.id}`);
+  }finally{
+    try{ world.tickingAreaManager.removeTickingArea(prepared.tickingAreaId); }catch{}
+  }
+}
+'''
+    twrite(script_path, script)
+    return _beta_dimension_reseal(addon)
+
+
+def validate(addon: Path):
+    report = _beta_dimension_previous_validate(addon)
+    errors = list(report.get('errors', [])); checks = int(report.get('checks', 0))
+
+    # TEST 52 deliberately required travel to stay offline and forbade experimental
+    # registration. Those two failures are obsolete only in this explicitly
+    # Beta-API build; every other prior regression gate remains in force.
+    stale_exact = {
+        "portal fail-closed regression: missing fail-closed reality response ('§cREALITY ROUTING OFFLINE§r')",
+        'portal integrity regression: experimental custom-dimension registration leaked into stable build',
+    }
+    errors = [e for e in errors if e not in stale_exact]
+
+    manifest = json.loads((BP/'manifest.json').read_text(encoding='utf-8'))
+    script = (BP/'scripts/main.js').read_text(encoding='utf-8')
+    server_deps = [d for d in manifest.get('dependencies',[]) if isinstance(d,dict) and d.get('module_name')=='@minecraft/server']
+
+    checks += 1
+    if not server_deps or server_deps[0].get('version') != 'beta':
+        errors.append('beta dimension regression: @minecraft/server dependency is not exactly beta')
+
+    for key,identifier in _BETA_REALITY_IDS.items():
+        checks += 2
+        if identifier not in script:
+            errors.append(f'beta dimension regression: missing dimension id {identifier}')
+        if f"{key}:'{identifier}'" not in script:
+            errors.append(f'beta dimension regression: {key} is not mapped to its custom dimension')
+
+    required = {
+        'startup dimension registration':'event.dimensionRegistry.registerCustomDimension(id)',
+        'custom dimension resolution':'world.getDimension(dimensionId)',
+        'awaited destination chunk load':'await world.tickingAreaManager.createTickingArea',
+        'authored reality built in target dimension':'buildZone(dimension,key)',
+        'cross-dimension teleport':'{dimension:prepared.dimension}',
+        'portal transition helper':'async function openTrueRealityPortal(player,key,z)',
+        'portal particles':'minecraft:basic_portal_particle',
+        'portal camera fade':'player.camera.fade',
+        'world-persistent build marker':'world.setDynamicProperty(rsRealityBuiltKey(key),true)',
+        'explicit Overworld Home':"world.getDimension('minecraft:overworld')",
+    }
+    for label,needle in required.items():
+        checks += 1
+        if needle not in script:
+            errors.append(f'beta dimension regression: missing {label} ({needle!r})')
+
+    checks += 4
+    if 'buildZone(player.dimension,key)' in script:
+        errors.append('portal integrity regression: fake buildZone(player.dimension,key) route returned')
+    if 'player.teleport(z.pos,{dimension:player.dimension})' in script:
+        errors.append('portal integrity regression: fake same-dimension destination teleport returned')
+    if '§cREALITY ROUTING OFFLINE§r' in script:
+        errors.append('beta dimension regression: TEST 52 offline route still survives')
+    if (BP/'dimensions').exists() and any((BP/'dimensions').glob('*.json')):
+        errors.append('beta dimension regression: obsolete data-driven dimension JSON leaked back in')
+
+    report['checks'] = checks
+    report['errors'] = errors
+    report['status'] = 'PASS' if not errors else 'FAIL'
+    report['custom_dimension_mode'] = 'five true void dimensions registered through experimental DimensionRegistry'
+    report['requires_beta_apis_experiment'] = True
+    report['deployment_path'] = 'Android local Beta APIs -> Realm transfer -> PS5 download -> local play'
+    report['realm_role'] = 'transfer bridge only; experimental script runtime is local'
+    gates = [g for g in report.get('feature_regression_gates',[]) if g != 'reality_travel_fails_closed_no_fake_overworld']
+    for gate in ('true_custom_dimensions_beta_api','awaited_custom_dimension_chunk_loading','cross_dimension_portal_transit','no_fake_overworld_reality_travel'):
+        if gate not in gates: gates.append(gate)
+    report['feature_regression_gates'] = gates
+    jwrite(OUT/'validation_report.json', report)
+    return report
