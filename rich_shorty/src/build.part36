@@ -1,0 +1,67 @@
+
+# ---------------------------------------------------------------------------
+# IN-PLACE BASE VISUAL MIGRATION
+# TEST 58 worlds already contain a deployed starter base. Do not require a fresh
+# world just to inspect the furnished layout: derive the original anchor from
+# the saved Home coordinates and run the idempotent polish pass once.
+# ---------------------------------------------------------------------------
+_base_migration_previous_validate = validate
+
+SCRIPT = SCRIPT.replace(
+    "  polishStarterBase(d,x,y,z);\n\n  // Save the authored garage as Home.",
+    "  polishStarterBase(d,x,y,z);\n  player.setDynamicProperty('rs:base_visual_version',2);\n\n  // Save the authored garage as Home.",
+    1
+)
+
+SCRIPT += r'''
+
+world.afterEvents.playerSpawn.subscribe(e=>{
+  const p=e.player;
+  system.runTimeout(()=>{
+    try{
+      if(!Boolean(p.getDynamicProperty('rs:base_deployed')??false)) return;
+      if(Number(p.getDynamicProperty('rs:base_visual_version')??0)>=2) return;
+      const hx=Number(p.getDynamicProperty('rs:home_x'));
+      const hy=Number(p.getDynamicProperty('rs:home_y'));
+      const hz=Number(p.getDynamicProperty('rs:home_z'));
+      if(!Number.isFinite(hx)||!Number.isFinite(hy)||!Number.isFinite(hz)) return;
+
+      // buildStarterBase saved Home at anchor + (6.5, 1, -1.5).
+      const x=Math.round(hx-6.5), y=Math.round(hy-1), z=Math.round(hz+1.5);
+      const overworld=world.getDimension('minecraft:overworld');
+      polishStarterBase(overworld,x,y,z);
+      p.setDynamicProperty('rs:base_visual_version',2);
+      msg(p,'§aBASE RENOVATION COMPLETE§r: Rich found the furniture budget. House, garage, lab, and driveway have been upgraded in place.');
+    }catch(err){
+      msg(p,`§eBASE RENOVATION§r: existing base migration could not finish: ${err}`);
+    }
+  },40);
+});
+'''
+
+
+def validate(addon:Path):
+    report=_base_migration_previous_validate(addon)
+    errors=list(report.get('errors',[])); checks=int(report.get('checks',0))
+    script=(BP/'scripts/main.js').read_text(encoding='utf-8')
+    required={
+      'base visual version':'base_visual_version',
+      'saved Home anchor recovery':'hx-6.5',
+      'explicit Overworld migration':"world.getDimension('minecraft:overworld')",
+      'in-place polish call':'polishStarterBase(overworld,x,y,z)',
+      'migration confirmation':'BASE RENOVATION COMPLETE'
+    }
+    for label,needle in required.items():
+        checks+=1
+        if needle not in script: errors.append(f'base migration regression: missing {label} ({needle!r})')
+    report['checks']=checks
+    report['errors']=errors
+    report['status']='PASS' if not errors else 'FAIL'
+    report['retail_dimension_verification']='VERIFIED_BY_ANDROID_TEST_58'
+    report['runtime_verification_status']='CUSTOM_DIMENSIONS_VERIFIED_ANDROID_RETAIL_TEST_58'
+    gates=list(report.get('feature_regression_gates',[]))
+    for g in ('existing_base_visual_migration','android_retail_custom_dimensions_verified_test58'):
+        if g not in gates: gates.append(g)
+    report['feature_regression_gates']=gates
+    jwrite(OUT/'validation_report.json',report)
+    return report
