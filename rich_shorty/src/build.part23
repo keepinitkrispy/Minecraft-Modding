@@ -1,0 +1,216 @@
+
+# ---------------------------------------------------------------------------
+# FINE-VOXEL CHARACTER GEOMETRY PASS
+# User/client visual gate: the previous HD cast still read too chunky because
+# the rounded heads were built from coarse merged bars and torsos used only six
+# large slices. Refine ONLY character geometry here. The Reality Fabricator is
+# intentionally untouched and remains on its proven 48-cube geometry.
+# ---------------------------------------------------------------------------
+
+
+def _ellipsoid_runs(bone, cx, cy, cz, rx, ry, rz, base, light='skin_light', shadow='skin_shadow', y_step=.65, z_step=.65):
+    """Fine stepped ellipsoid with extra segmentation on the visible/front shell."""
+    ys=max(1,int(math.ceil((2.0*ry)/y_step)))
+    zs=max(1,int(math.ceil((2.0*rz)/z_step)))
+    for yi in range(ys):
+        yy=-ry+(yi+.5)*((2.0*ry)/ys)
+        h=(2.0*ry)/ys
+        for zi in range(zs):
+            zz=-rz+(zi+.5)*((2.0*rz)/zs)
+            d=(2.0*rz)/zs
+            t=1.0-(yy/ry)**2-(zz/rz)**2
+            if t<=0: continue
+            xr=max(.32,round((rx*math.sqrt(t))*4.0)/4.0)
+            run=2.0*xr
+            mat=base
+            if yy < -ry*.44: mat=shadow
+            elif yy > ry*.46: mat=light
+
+            # The front third is what reads as the face in game. Break those
+            # runs into smaller voxels instead of one long horizontal bar.
+            if zz < -rz*.34 and run>2.2:
+                pieces=max(2,min(6,int(math.ceil(run/1.45))))
+                pw=run/pieces
+                for pi in range(pieces):
+                    pm=mat
+                    if pi==0: pm=shadow
+                    elif pi==pieces-1: pm=light
+                    _c(bone,(cx-xr+pi*pw,cy+yy-h/2.0,cz+zz-d/2.0),(pw+.025,h+.025,d+.025),pm)
+            else:
+                _c(bone,(cx-xr,cy+yy-h/2.0,cz+zz-d/2.0),(run,h+.025,d+.025),mat)
+
+
+def _hair_cap(bone, cy, hair, elder=False, long_sides=False, pony=False, crown=False):
+    hi={
+        'hair_rich':'cyan_light','hair_shorty':'brown_light','hair_bess':'blonde_light',
+        'hair_gerry':'brown_light','hair_sundae':'redhair_light','white':'white',
+        'darkgrey':'metal_light','blue':'blue_light','green':'green_light'
+    }.get(hair,hair)
+    sh={
+        'hair_rich':'cyan_shadow','hair_shorty':'brown_shadow','hair_bess':'blonde_shadow',
+        'hair_gerry':'brown_shadow','hair_sundae':'redhair_shadow','white':'lightgrey',
+        'darkgrey':'metal_dark','blue':'blue','green':'green'
+    }.get(hair,hair)
+
+    # Six smaller crown tiers, each with a shallow center and narrower side
+    # pieces so hair wraps around the skull instead of reading as stacked slabs.
+    tiers=[(8.7,5.35),(8.45,5.15),(8.0,4.9),(7.45,4.55),(6.75,4.1),(5.7,3.55)]
+    for j,(w,d) in enumerate(tiers):
+        y=cy+3.05+j*.62
+        side=max(.8,w*.22); center=w-2*side
+        _c(bone,(-center/2,y,-d/2+.22),(center,.68,d),hi if j>=3 else hair)
+        _c(bone,(-w/2,y,-d*.38),(side+.04,.68,d*.76),sh)
+        _c(bone,(w/2-side,y,-d*.38),(side+.04,.68,d*.76),hi)
+
+    if elder:
+        # Scientist hair gets many narrow, uneven spikes instead of seven large
+        # rectangular towers.
+        spikes=[(-5.0,3.9,1.05,4.7),(-4.0,4.35,1.0,5.4),(-2.9,4.7,1.0,5.9),
+                (-1.8,5.0,.95,6.4),(-.7,5.2,1.0,6.75),(.45,5.12,.95,6.55),
+                (1.55,4.95,1.0,6.15),(2.7,4.65,1.0,5.75),(3.8,4.3,1.0,5.25),(4.8,3.95,.95,4.65)]
+        for i,(x,dy,w,h) in enumerate(spikes):
+            _c(bone,(x-w/2,cy+dy,-1.52),(w,h,3.04),hair if i%2 else sh)
+            _c(bone,(x-w*.31,cy+dy+h-.62,-1.78),(w*.62,.78,3.56),hi)
+        for x in (-4.7,3.55):
+            for i in range(4): _c(bone,(x,cy+1.2+i*.78,.7),(1.15,.86,2.45),sh if i%2 else hair)
+    else:
+        locks=[(-3.95,1.65),(-2.4,1.35),(-1.05,1.55),(.55,1.4),(2.05,1.6),(3.45,1.25)]
+        for i,(x,w) in enumerate(locks):
+            _c(bone,(x,cy+2.55+(i%2)*.28,-3.05),(w,.82,1.25),sh if i%3==0 else hi if i%3==2 else hair)
+
+    if long_sides:
+        for x in (-5.15,4.0):
+            for i in range(8):
+                taper=1.15-max(0,i-5)*.12
+                _c(bone,(x,cy-2.1+i*.78,.55),(max(.72,taper),.86,2.65),hair if i%2 else sh)
+    if pony:
+        for i in range(7):
+            w=max(.8,2.15-i*.16)
+            _c(bone,(3.45+(2.15-w)/2,cy+1.9-i*.72,1.05),(w,.82,2.35-i*.08),hair if i%2 else sh)
+    if crown:
+        for x,h in [(-3.8,2.0),(-1.9,2.8),(0,3.2),(1.9,2.8),(3.8,2.0)]:
+            _c(bone,(x-.45,cy+7.0,-.72),(.9,h,1.44),'yellow')
+
+
+def _sculpt_body(m, shirt, pants='pants_dark', skin='skin_shorty', coat=False, narrow=False, armored=False):
+    body=m.bone('body',(0,10.5,0))
+    _c(body,(-1.45,12.35,-1.45),(2.9,1.8,2.9),_mat(skin+'_shadow','skin_shadow'))
+
+    # Eleven sub-block-height torso layers. Each layer is three pieces with the
+    # side pieces slightly shallower, producing an actually rounded/tapered
+    # cross-section instead of a wide rectangular plate.
+    widths=[7.2,7.45,7.75,8.15,8.55,8.9,9.15,9.0,8.65,8.2,7.75]
+    depths=[3.35,3.45,3.55,3.7,3.85,3.95,4.02,3.98,3.88,3.72,3.55]
+    if narrow:
+        widths=[w*.91 for w in widths]; depths=[d*.94 for d in depths]
+    hi={'shirt_teal':'teal_light','shirt_amber':'amber_light','red':'red_light','green':'green_light','purple':'purple_light','blue':'blue_light','shirt_black':'black_light'}.get(shirt,shirt)
+    sh={'shirt_teal':'teal_shadow','shirt_amber':'amber_shadow','red':'red','green':'green','purple':'purple','blue':'blue','shirt_black':'black'}.get(shirt,shirt)
+    for i,(w,d) in enumerate(zip(widths,depths)):
+        y=6.15+i*.59
+        side=w*.245; center=w-2*side
+        mat=sh if i<2 else hi if i in (6,7) else shirt
+        _c(body,(-center/2,y,-d/2),(center,.64,d),mat)
+        _c(body,(-w/2,y,-d*.40),(side+.03,.64,d*.80),sh)
+        _c(body,(w/2-side,y,-d*.40),(side+.03,.64,d*.80),hi if i>=4 else mat)
+    _c(body,(-3.85,5.72,-1.88),(7.7,.58,3.76),'darkgrey')
+
+    if coat:
+        # Split coat into lapels, side panels, tails and back strips so it
+        # follows the refined torso instead of hiding it behind giant boxes.
+        for side in (-1,1):
+            x=-4.82 if side<0 else 3.15
+            for i in range(6):
+                _c(body,(x+(i*.045 if side<0 else -i*.045),8.35+i*.63,-2.24),(1.58,.69,4.48),'coat' if i%2 else 'coat_shadow')
+        _c(body,(-4.45,6.0,1.52),(8.9,6.6,.72),'coat_shadow')
+        for x in (-4.0,.65):
+            for i in range(6): _c(body,(x,2.45+i*.62,-2.0),(3.35,.68,4.0),'coat' if i%2 else 'coat_shadow')
+        _c(body,(-2.45,8.15,-2.55),(1.12,4.2,.44),'coat_shadow')
+        _c(body,(1.33,8.15,-2.55),(1.12,4.2,.44),'coat_shadow')
+    if armored:
+        for i,(w,y) in enumerate([(9.35,10.55),(8.7,11.2),(7.9,11.85)]):
+            _c(body,(-w/2,y,-2.42),(w,.58,4.84),'metal_light' if i==1 else 'metal_dark')
+        _c(body,(-3.45,7.35,-2.5),(6.9,1.9,.58),'metal_dark')
+        _c(body,(-1.45,7.85,-2.98),(2.9,1.7,.58),'visor')
+    return body
+
+
+def _sculpt_limbs(m, shirt, pants='pants_dark', skin='skin_shorty', coat=False, child=False, wing=False):
+    armshirt='coat' if coat else shirt
+    armshadow='coat_shadow' if coat else {'shirt_teal':'teal_shadow','shirt_amber':'amber_shadow','shirt_black':'black','red':'red','green':'green','purple':'purple','blue':'blue'}.get(shirt,shirt)
+    span=4.45 if child else 5.0
+    for side in (-1,1):
+        x=-span if side<0 else span
+        uname='left_upper_arm' if side<0 else 'right_upper_arm'; lname='left_lower_arm' if side<0 else 'right_lower_arm'
+        ua=m.bone(uname,(x,11.55,0),'body')
+        if wing:
+            ox=x-2.0 if side<0 else x-.15
+            for i in range(6):
+                _c(ua,(ox+(-i*.12 if side<0 else i*.12),7.8+i*.64,-1.25),(2.0-i*.08,.72,2.5-i*.12),'feather')
+        else:
+            ox=x-1.58 if side<0 else x-.02
+            for i in range(5):
+                w=1.62-i*.055; dep=2.82-i*.10
+                _c(ua,(ox+(1.62-w)/2,8.0+i*.72,-dep/2),(w,.78,dep),armshirt if i>1 else armshadow)
+        la=m.bone(lname,(x,8.0,0),uname)
+        ox=x-1.37 if side<0 else x+.03
+        if wing:
+            for i in range(5):
+                _c(la,(ox+(-i*.13 if side<0 else i*.13),4.45+i*.66,-1.0),(1.85-i*.08,.72,2.0-i*.1),'feather')
+        else:
+            for i in range(5):
+                w=1.28-i*.035; dep=2.28-i*.08
+                mat=_mat(skin+'_shadow','skin_shadow') if i<2 else skin
+                _c(la,(ox+(1.28-w)/2,3.9+i*.54,-dep/2),(w,.60,dep),mat)
+            _c(la,(ox-.18,2.72,-1.3),(1.68,.84,2.6),skin)
+            _c(la,(ox+.02,2.25,-1.55),(1.3,.52,1.0),_mat(skin+'_light','skin_light'))
+
+    for side in (-1,1):
+        x=-2.75 if side<0 else .35
+        uname='left_upper_leg' if side<0 else 'right_upper_leg'; lname='left_lower_leg' if side<0 else 'right_lower_leg'
+        ul=m.bone(uname,((-1.75 if side<0 else 1.75),6.25,0),'body')
+        for i in range(5):
+            w=2.5-i*.08; dep=3.02-i*.10
+            _c(ul,(x+(2.5-w)/2,2.72+i*.67,-dep/2),(w,.73,dep),pants if i!=2 else _mat('navy_light',pants))
+        ll=m.bone(lname,((-1.75 if side<0 else 1.75),3.15,0),uname)
+        for i in range(5):
+            w=2.12-i*.07; dep=2.62-i*.08
+            _c(ll,(x+.18+(2.12-w)/2,-.78+i*.64,-dep/2),(w,.70,dep),pants)
+        # stepped shoe: ankle, heel, forefoot, toe
+        _c(ll,(x+.08,-1.28,-1.55),(2.3,.72,2.75),'shoe')
+        _c(ll,(x-.18,-1.52,-2.35),(2.85,.66,3.55),'shoe')
+        _c(ll,(x+.15,-1.62,-3.0),(2.35,.54,1.2),'shoe')
+
+
+# Re-run every character factory through the finer helpers. Character-specific
+# silhouettes/details from the HD pass stay intact because the hd_* functions
+# resolve these helper globals when called here. Nothing rebuilds Fabricator.
+CHAR_MODELS = [
+    hd_rich(), hd_shorty(False), hd_shorty(True), hd_bess(), hd_gerry(), hd_sundae(),
+    hd_bird_dude(), hd_scronchy(), hd_needs_it(), hd_professor_poop(), hd_captain_drizzle(),
+    hd_nightmare_larry(), hd_sprocket(), hd_consensus(), hd_cucumber(), hd_krombo(),
+    hd_shorty_jr(), hd_validator(), hd_franky(), hd_council_rich()
+]
+
+_fine_geometry_validate=validate
+
+def validate(addon:Path):
+    report=_fine_geometry_validate(addon)
+    errors=list(report.get('errors',[])); checks=int(report.get('checks',0))
+    counts={}; fine_counts={}
+    for m in CHAR_MODELS:
+        cubes=[c for b in m.bones for c in b.cubes]
+        count=len(cubes)
+        fine=sum(1 for c in cubes if min(c.size)<=.82 and max(c.size)<=3.25)
+        counts[m.name]=count; fine_counts[m.name]=fine
+        checks+=3
+        if count<140: errors.append(f'{m.name}: fine-voxel sculpt has only {count} cubes; expected >=140')
+        if count>500: errors.append(f'{m.name}: fine-voxel sculpt has {count} cubes; performance ceiling is 500')
+        if fine<32: errors.append(f'{m.name}: only {fine} fine-detail cubes; expected >=32')
+    report['checks']=checks
+    report['errors']=errors
+    report['status']='PASS' if not errors else 'FAIL'
+    report['visual_cube_counts']=counts
+    report['fine_detail_cube_counts']=fine_counts
+    report['character_geometry_profile']='fine_voxel_v2'
+    jwrite(OUT/'validation_report.json',report)
+    return report
