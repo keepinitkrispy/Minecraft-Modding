@@ -121,6 +121,9 @@ jobs:
             # world-tool rewrite is parsed by current Bedrock. Give the smoke
             # cells solid support so placement-rule blocks (fire/rail/etc.) do
             # not create false runtime errors unrelated to their identifiers.
+            # Each target is first changed to barrier, which cannot occur in
+            # naturally generated terrain; this guarantees the subsequent
+            # setblock is a real state change rather than "already that block".
             echo 'fill 20 79 20 35 79 23 minecraft:stone'
             i=0
             for bid in \
@@ -133,6 +136,7 @@ jobs:
               smooth_stone lodestone scaffolding gold_block honey_block obsidian sponge bookshelf; do
               x=$((20 + (i % 16)))
               z=$((20 + (i / 16)))
+              echo "setblock $x 80 $z minecraft:barrier"
               echo "setblock $x 80 $z minecraft:$bid"
               i=$((i + 1))
             done
