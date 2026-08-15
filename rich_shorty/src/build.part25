@@ -1,85 +1,69 @@
 
 # ---------------------------------------------------------------------------
-# MOBILE TEST IMPORT ISOLATION
-# During client iteration, Bedrock should keep previous test packs installed
-# instead of treating every new .mcaddon as the same RP/BP pair. Derive a
-# deterministic identity from the complete builder source: same source = same
-# UUIDs/build label, any source change = a new coexisting test-pack pair.
-# Final release can disable TEST_IMPORT_ISOLATION to return to stable UUIDs.
+# MOBILE IN-PLACE PACK UPDATES
+# Bedrock replaces an already imported pack when the UUID stays the same and
+# the incoming manifest version is higher. Keep the permanent Rich & Shorty
+# RP/BP UUIDs, but stamp every CI release-gate artifact with a monotonically
+# increasing test version so Ryan can import fixes over the current packs
+# without deleting them from Storage between mobile test iterations.
 # ---------------------------------------------------------------------------
 
-TEST_IMPORT_ISOLATION = True
+
+def _mobile_update_version():
+    # GitHub Actions' run number increases for every run of this workflow.
+    # Release artifacts are produced by that workflow, so [0,2,run] is both
+    # monotonic and safely above the original [0,1,0] test packs.
+    try:
+        run=max(1,int(os.environ.get('GITHUB_RUN_NUMBER','1')))
+    except Exception:
+        run=1
+    return [0,2,run]
 
 
-def _test_build_identity():
-    # build.py writes the concatenated source to __file__ before invoking us,
-    # so this fingerprint includes every source part and is reproducible in CI.
-    source_bytes = Path(__file__).read_bytes()
-    fingerprint = hashlib.sha256(source_bytes).hexdigest()
-    return fingerprint[:8].upper(), fingerprint
-
-
-def _test_uuid(build_tag: str, role: str) -> str:
-    return str(uuid.uuid5(uuid.NAMESPACE_URL, f'rich-shorty/test/{build_tag}/{role}'))
-
-
-_import_isolation_make_pack = make_pack
-_import_isolation_validate = validate
+_mobile_update_make_pack = make_pack
+_mobile_update_validate = validate
 
 
 def make_pack():
-    addon = _import_isolation_make_pack()
-    if not TEST_IMPORT_ISOLATION:
-        return addon
+    addon = _mobile_update_make_pack()
+    ver = _mobile_update_version()
 
-    build_tag, source_fingerprint = _test_build_identity()
-    bp_manifest_path = BP/'manifest.json'
-    rp_manifest_path = RP/'manifest.json'
-    bp = json.loads(bp_manifest_path.read_text(encoding='utf-8'))
-    rp = json.loads(rp_manifest_path.read_text(encoding='utf-8'))
+    bp_path=BP/'manifest.json'; rp_path=RP/'manifest.json'
+    bp=json.loads(bp_path.read_text(encoding='utf-8'))
+    rp=json.loads(rp_path.read_text(encoding='utf-8'))
 
-    ids = {
-      'bp_header': _test_uuid(build_tag,'bp/header'),
-      'bp_data': _test_uuid(build_tag,'bp/data'),
-      'bp_script': _test_uuid(build_tag,'bp/script'),
-      'rp_header': _test_uuid(build_tag,'rp/header'),
-      'rp_resources': _test_uuid(build_tag,'rp/resources')
-    }
+    # Preserve the original pack identities so Bedrock recognizes these as
+    # updates to the packs already installed rather than additional packs.
+    bp['header']['uuid']=UUIDS['bp_header']
+    rp['header']['uuid']=UUIDS['rp_header']
+    bp['header']['version']=ver
+    rp['header']['version']=ver
 
-    # Visible labels make it obvious which matching RP/BP pair belongs together
-    # in Bedrock's storage and world pack selectors.
-    bp['header']['name'] = f'Rich & Shorty BP [TEST {build_tag}]'
-    bp['header']['description'] = f'Rich & Shorty mobile test build {build_tag} — behavior'
-    bp['header']['uuid'] = ids['bp_header']
-    rp['header']['name'] = f'Rich & Shorty RP [TEST {build_tag}]'
-    rp['header']['description'] = f'Rich & Shorty mobile test build {build_tag} — resources'
-    rp['header']['uuid'] = ids['rp_header']
-
-    # Module UUIDs must move with the pack identity as well.
     for module in bp.get('modules',[]):
-        if module.get('type') == 'data': module['uuid'] = ids['bp_data']
-        elif module.get('type') == 'script': module['uuid'] = ids['bp_script']
+        if module.get('type')=='data':
+            module['uuid']=UUIDS['bp_data']; module['version']=ver
+        elif module.get('type')=='script':
+            module['uuid']=UUIDS['bp_script']; module['version']=ver
     for module in rp.get('modules',[]):
-        if module.get('type') == 'resources': module['uuid'] = ids['rp_resources']
+        if module.get('type')=='resources':
+            module['uuid']=UUIDS['rp_resources']; module['version']=ver
 
-    # Keep the BP -> RP dependency paired to this exact test build. Module-name
-    # dependencies (@minecraft/server etc.) are left untouched.
+    # The BP dependency must request this exact RP version while retaining the
+    # RP's stable header UUID.
     for dep in bp.get('dependencies',[]):
         if isinstance(dep,dict) and 'uuid' in dep:
-            dep['uuid'] = ids['rp_header']
+            dep['uuid']=UUIDS['rp_header']
+            dep['version']=ver
 
-    # Record the label in metadata for validation/artifact inspection without
-    # changing gameplay identifiers. Old test packs can coexist in storage; only
-    # one matching pair should be active in a world at a time.
-    bp['metadata'] = dict(bp.get('metadata',{}), keepinitkrispy_test_build=build_tag,
-                          keepinitkrispy_source_sha256=source_fingerprint)
-    rp['metadata'] = dict(rp.get('metadata',{}), keepinitkrispy_test_build=build_tag,
-                          keepinitkrispy_source_sha256=source_fingerprint)
+    # Keep names stable so the world continues showing one Rich & Shorty BP/RP.
+    # Put the iteration number in the description for troubleshooting only.
+    bp['header']['name']='Rich & Shorty BP'
+    rp['header']['name']='Rich & Shorty RP'
+    bp['header']['description']=f'Parody multiverse adventure — behavior — mobile build {ver[2]}'
+    rp['header']['description']=f'Parody multiverse adventure — resources — mobile build {ver[2]}'
 
-    jwrite(bp_manifest_path,bp); jwrite(rp_manifest_path,rp)
+    jwrite(bp_path,bp); jwrite(rp_path,rp)
 
-    # The previous make_pack already sealed the archive; reseal with the new
-    # manifests so the actual imported artifact carries the isolated identities.
     if addon.exists(): addon.unlink()
     with zipfile.ZipFile(addon,'w',zipfile.ZIP_DEFLATED) as zf:
         for pack in (BP,RP):
@@ -89,43 +73,45 @@ def make_pack():
 
 
 def validate(addon:Path):
-    report = _import_isolation_validate(addon)
-    errors = list(report.get('errors',[])); checks = int(report.get('checks',0))
-    build_tag, source_fingerprint = _test_build_identity()
+    report=_mobile_update_validate(addon)
+    errors=list(report.get('errors',[])); checks=int(report.get('checks',0))
+    ver=_mobile_update_version()
+    bp=json.loads((BP/'manifest.json').read_text(encoding='utf-8'))
+    rp=json.loads((RP/'manifest.json').read_text(encoding='utf-8'))
 
-    if TEST_IMPORT_ISOLATION:
-        bp = json.loads((BP/'manifest.json').read_text(encoding='utf-8'))
-        rp = json.loads((RP/'manifest.json').read_text(encoding='utf-8'))
-        expected_bp = f'Rich & Shorty BP [TEST {build_tag}]'
-        expected_rp = f'Rich & Shorty RP [TEST {build_tag}]'
+    checks += 10
+    if bp.get('header',{}).get('uuid') != UUIDS['bp_header']:
+        errors.append('mobile update regression: BP header UUID changed; import would create a second pack')
+    if rp.get('header',{}).get('uuid') != UUIDS['rp_header']:
+        errors.append('mobile update regression: RP header UUID changed; import would create a second pack')
+    if bp.get('header',{}).get('version') != ver:
+        errors.append('mobile update regression: BP header version is not current CI build version')
+    if rp.get('header',{}).get('version') != ver:
+        errors.append('mobile update regression: RP header version is not current CI build version')
+    if tuple(ver) <= tuple(VERSION):
+        errors.append(f'mobile update regression: generated version {ver} is not higher than original {VERSION}')
 
-        checks += 8
-        if bp.get('header',{}).get('name') != expected_bp:
-            errors.append('test import isolation: BP visible build label missing/wrong')
-        if rp.get('header',{}).get('name') != expected_rp:
-            errors.append('test import isolation: RP visible build label missing/wrong')
-        if bp.get('header',{}).get('uuid') != _test_uuid(build_tag,'bp/header'):
-            errors.append('test import isolation: BP header UUID is not build-specific')
-        if rp.get('header',{}).get('uuid') != _test_uuid(build_tag,'rp/header'):
-            errors.append('test import isolation: RP header UUID is not build-specific')
-        uuid_deps=[d.get('uuid') for d in bp.get('dependencies',[]) if isinstance(d,dict) and d.get('uuid')]
-        if _test_uuid(build_tag,'rp/header') not in uuid_deps:
-            errors.append('test import isolation: BP dependency does not target matching RP build')
-        if bp.get('metadata',{}).get('keepinitkrispy_source_sha256') != source_fingerprint:
-            errors.append('test import isolation: BP source fingerprint missing/wrong')
-        if rp.get('metadata',{}).get('keepinitkrispy_source_sha256') != source_fingerprint:
-            errors.append('test import isolation: RP source fingerprint missing/wrong')
-        if bp.get('header',{}).get('uuid') == UUIDS['bp_header'] or rp.get('header',{}).get('uuid') == UUIDS['rp_header']:
-            errors.append('test import isolation: stable release UUID survived in a test build')
+    bpmods={m.get('type'):m for m in bp.get('modules',[]) if isinstance(m,dict)}
+    rpmods={m.get('type'):m for m in rp.get('modules',[]) if isinstance(m,dict)}
+    if bpmods.get('data',{}).get('uuid') != UUIDS['bp_data'] or bpmods.get('data',{}).get('version') != ver:
+        errors.append('mobile update regression: BP data module identity/version mismatch')
+    if bpmods.get('script',{}).get('uuid') != UUIDS['bp_script'] or bpmods.get('script',{}).get('version') != ver:
+        errors.append('mobile update regression: BP script module identity/version mismatch')
+    if rpmods.get('resources',{}).get('uuid') != UUIDS['rp_resources'] or rpmods.get('resources',{}).get('version') != ver:
+        errors.append('mobile update regression: RP resource module identity/version mismatch')
 
-        report['test_import_build'] = build_tag
-        report['test_import_bp_name'] = expected_bp
-        report['test_import_rp_name'] = expected_rp
-        gates=list(report.get('feature_regression_gates',[]))
-        if 'coexisting_mobile_test_pack_identities' not in gates:
-            gates.append('coexisting_mobile_test_pack_identities')
-        report['feature_regression_gates']=gates
+    uuiddeps=[d for d in bp.get('dependencies',[]) if isinstance(d,dict) and d.get('uuid')]
+    if not any(d.get('uuid')==UUIDS['rp_header'] and d.get('version')==ver for d in uuiddeps):
+        errors.append('mobile update regression: BP dependency does not match current RP UUID/version')
+    if bp.get('header',{}).get('name')!='Rich & Shorty BP' or rp.get('header',{}).get('name')!='Rich & Shorty RP':
+        errors.append('mobile update regression: visible pack names changed instead of updating in place')
 
+    report['mobile_import_strategy']='stable UUID + monotonically higher manifest version = replace existing pack'
+    report['mobile_build_version']=ver
+    gates=list(report.get('feature_regression_gates',[]))
+    if 'mobile_in_place_pack_updates' not in gates:
+        gates.append('mobile_in_place_pack_updates')
+    report['feature_regression_gates']=gates
     report['checks']=checks; report['errors']=errors
     report['status']='PASS' if not errors else 'FAIL'
     jwrite(OUT/'validation_report.json',report)
