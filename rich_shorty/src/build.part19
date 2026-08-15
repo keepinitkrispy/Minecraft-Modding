@@ -1,0 +1,139 @@
+
+# ---------------------------------------------------------------------------
+# PLAYER TOOL MANUAL + HARD FEATURE REGRESSION GATES
+# Powerful weird tools are only fun if the player knows the input and result.
+# Also lock the now-approved visual/gameplay architecture into validation so a
+# later refactor cannot quietly return us to box people or a rerolling machine.
+# ---------------------------------------------------------------------------
+
+# Portal Remote: add an always-available tool manual.
+SCRIPT = SCRIPT.replace(
+    'f.button("Current Fabricator Recipe");',
+    'f.button("Current Fabricator Recipe");\n  f.button("Reality Tool Manual");'
+)
+SCRIPT = SCRIPT.replace(
+    'const key=["home","glorp","fizz","chrono","scrap","citadel","ledger","recipe"][r.selection];',
+    'const key=["home","glorp","fizz","chrono","scrap","citadel","ledger","recipe","manual"][r.selection];'
+)
+SCRIPT = SCRIPT.replace(
+    'if(key==="recipe"){ const costs=readLockedRecipe(player); msg(player,`§eLOCKED RECIPE§r: ${recipeText(costs)}. It will not change until you fabricate it.`); return; }',
+    'if(key==="recipe"){ const costs=readLockedRecipe(player); msg(player,`§eLOCKED RECIPE§r: ${recipeText(costs)}. It will not change until you fabricate it.`); return; }\n  if(key==="manual"){ await toolManual(player); return; }'
+)
+
+# Give first-use instructions from the item itself. This is controller-friendly:
+# the player does not have to remember which effects are use vs use-on-block.
+SCRIPT = SCRIPT.replace(
+    'function useTool(player,id,block){\n  const d=player.dimension, p=block?.location ?? player.location;',
+    '''function useTool(player,id,block){
+  const d=player.dimension, p=block?.location ?? player.location;
+  const helpKey=`rs:tool_help_${id.split(':')[1]}`;
+  if(!Boolean(player.getDynamicProperty(helpKey)??false)){
+    const help=TOOL_HELP[id];
+    if(help) msg(player,`§bTOOL MANUAL§r — ${help}`);
+    player.setDynamicProperty(helpKey,true);
+  }'''
+)
+
+SCRIPT += r'''
+
+const TOOL_HELP = {
+  'rs:gravity_spanner':'Gravity Spanner — USE in the air. Kicks you upward hard enough to turn a bad jump into a questionable flight plan.',
+  'rs:phase_pick':'Phase Pick — USE ON A BLOCK. Deletes a 3×3×3 pocket around the target. There is no undo button because Rich called that "scope creep."',
+  'rs:freeze_ray':'Freeze Ray — USE ON A BLOCK near water. Freezes water in a broad area around the target for instant bridges and regrettable landscaping.',
+  'rs:time_skip_watch':'Time-Skip Watch — USE anywhere. Forces a major time jump and clears the weather. The sun was not consulted.',
+  'rs:scaffold_printer':'Scaffold Printer — USE while facing where you want to go. Prints a short scaffolding path forward from your feet.',
+  'rs:matter_swap_glove':'Matter-Swap Glove — USE ON A BLOCK. Rewrites nearby stone to calcite and dirt to moss. Geological consent is not implemented.',
+  'rs:pocket_black_hole':'Pocket Black Hole — USE anywhere. Pulls nearby non-player entities toward you. This includes things you may immediately regret attracting.',
+  'rs:chaos_bonker':'Chaos Bonker — USE ON A BLOCK. Randomly rewrites the target into one of several deeply unnecessary materials.'
+};
+
+async function toolManual(player){
+  const body=[
+    '§lREALITY TOOL MANUAL§r',
+    '',
+    'Fabricated tools are deliberately powerful. They share a short native cooldown so using one feels like an action instead of input spam.',
+    '',
+    ...TOOL_POOL.map(([id,label])=>`§e${label}§r\n${TOOL_HELP[id]??'Instructions misplaced in another reality.'}`),
+    '',
+    '§cWorld-editing effects are real. Phase Pick, Matter-Swap Glove and Chaos Bonker can permanently change your build.§r'
+  ].join('\n\n');
+  const form=new ActionFormData().title('Reality Tool Manual').body(body);
+  form.button('Back to Portal Remote');
+  const result=await form.show(player);
+  if(!result.canceled) await travelMenu(player);
+}
+'''
+
+
+_feature_gate_validate = validate
+
+def validate(addon:Path):
+    report=_feature_gate_validate(addon)
+    errors=list(report.get('errors',[])); checks=int(report.get('checks',0))
+
+    script_path=BP/'scripts/main.js'
+    script=script_path.read_text(encoding='utf-8') if script_path.exists() else ''
+    required_script_signatures={
+      'locked Fabricator implementation':'function fabricateLocked(player)',
+      'locked recipe persistence':'active_recipe',
+      'Fabricator registration uses locked loop':'fabricateLocked(e.player)',
+      'Liability Ledger':'function questLedger(player)',
+      'persistent Citadel unlock':'citadel_unlocked',
+      'tool manual':'function toolManual(player)',
+      'first-use tool help':'tool_help_',
+      'boss completion persistence':'boss_defeated'
+    }
+    for label,needle in required_script_signatures.items():
+        checks+=1
+        if needle not in script: errors.append(f'script regression: missing {label} ({needle!r})')
+    checks+=1
+    if 'fabricate(e.player)' in script:
+        errors.append('script regression: Reality Fabricator registration reverted to the old reroll-on-touch fabricate() loop')
+
+    # The approved sculpt pass is now architectural, not optional polish.
+    cube_counts={}
+    for m in CHAR_MODELS:
+        checks+=1
+        path=RP/f'models/entity/{m.name}.geo.json'
+        if not path.exists(): continue
+        geo=json.loads(path.read_text(encoding='utf-8'))['minecraft:geometry'][0]
+        count=sum(len(b.get('cubes',[])) for b in geo.get('bones',[]))
+        cube_counts[m.name]=count
+        if count<80:
+            errors.append(f'visual regression: {m.name} fell to {count} cubes; sculpted-cast floor is 80')
+
+    # Creator Tools warns above 50 cubes for custom blocks. Keep the machine at
+    # or under the threshold even if its texture/material art becomes richer.
+    checks+=1
+    fab_geo=RP/'models/blocks/reality_fabricator.geo.json'
+    if fab_geo.exists():
+        geo=json.loads(fab_geo.read_text(encoding='utf-8'))['minecraft:geometry'][0]
+        fab_cubes=sum(len(b.get('cubes',[])) for b in geo.get('bones',[]))
+        if fab_cubes>50: errors.append(f'performance regression: Reality Fabricator has {fab_cubes} cubes (>50)')
+    else:
+        fab_cubes=None; errors.append('missing Reality Fabricator geometry')
+
+    # Every fabricated world tool must retain the same native cooldown category.
+    tool_ids=['gravity_spanner','phase_pick','freeze_ray','time_skip_watch','scaffold_printer','matter_swap_glove','pocket_black_hole','chaos_bonker']
+    cooldowns={}
+    for iid in tool_ids:
+        checks+=1
+        path=BP/f'items/{iid}.json'
+        if not path.exists(): errors.append(f'missing world tool item {iid}'); continue
+        obj=json.loads(path.read_text(encoding='utf-8'))
+        cd=obj.get('minecraft:item',{}).get('components',{}).get('minecraft:cooldown')
+        cooldowns[iid]=cd
+        if not isinstance(cd,dict) or cd.get('category')!='keepinitkrispy_rich_shorty_world_tools' or cd.get('type')!='use':
+            errors.append(f'tool pacing regression: {iid} missing shared native use cooldown')
+
+    report['checks']=checks
+    report['errors']=errors
+    report['status']='PASS' if not errors else 'FAIL'
+    report['visual_cube_counts']=cube_counts
+    report['fabricator_cubes']=fab_cubes
+    report['feature_regression_gates']=[
+      'locked_recipe_until_fulfilled','liability_ledger','persistent_citadel_unlock',
+      'tool_manual','sculpted_cast_min_80_cubes','fabricator_max_50_cubes','world_tool_native_cooldown'
+    ]
+    jwrite(OUT/'validation_report.json',report)
+    return report
