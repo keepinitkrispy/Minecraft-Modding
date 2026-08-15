@@ -1,0 +1,90 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import json, math, os, shutil, uuid, zipfile, hashlib
+from pathlib import Path
+from dataclasses import dataclass, field
+from typing import List, Dict, Tuple, Optional
+from PIL import Image, ImageDraw
+
+ROOT = Path(__file__).resolve().parent
+OUT = ROOT / 'dist'
+BP = OUT / 'RichShorty_BP'
+RP = OUT / 'RichShorty_RP'
+VERSION = [0, 1, 0]
+MIN_ENGINE = [1, 21, 90]
+TEX_SIZE = 256
+NS = 'rs'
+
+# Stable, deterministic UUIDs so updates replace the same pack.
+def duid(name: str) -> str:
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, 'rich-shorty/' + name))
+
+UUIDS = {
+    'bp_header': duid('bp/header'), 'bp_data': duid('bp/data'), 'bp_script': duid('bp/script'),
+    'rp_header': duid('rp/header'), 'rp_resources': duid('rp/resources')
+}
+
+PALETTE = {
+    'skin_rich': '#d8b49a', 'skin_shorty': '#e3b89d', 'skin_bess': '#e0b292',
+    'skin_gerry': '#ddb28f', 'skin_sundae': '#d9a98e',
+    'hair_rich': '#b8e9eb', 'hair_shorty': '#6a4028', 'hair_bess': '#e5d0a4',
+    'hair_gerry': '#8f5d37', 'hair_sundae': '#d96f57',
+    'coat': '#e9eef0', 'coat_shadow': '#c7d2d8', 'shirt_teal': '#84c7b7',
+    'shirt_amber': '#d9a83c', 'shirt_black': '#20242c', 'pants_dark': '#303c53',
+    'pants_tan': '#786c53', 'shoe': '#292b30', 'white': '#f6f4ea', 'eye': '#eef6f7',
+    'pupil': '#20232a', 'mouth': '#6b2630', 'tooth': '#f6f0df', 'visor': '#64f0d5',
+    'visor_dark': '#173e45', 'purple': '#7d4ea3', 'green': '#5faa57', 'orange': '#df7140',
+    'blue': '#447dbb', 'yellow': '#e7c84c', 'red': '#b73e4b', 'grey': '#747983',
+    'lightgrey': '#c3c7cb', 'darkgrey': '#363a41', 'bird': '#98734e', 'feather': '#4f81a6',
+    'scronch': '#9c734b', 'poop': '#b28b5d', 'citadel': '#7ba5a8', 'portal': '#75f0a6',
+}
+
+SWATCH_ORDER = list(PALETTE.keys())
+SWATCH_UV: Dict[str, Tuple[int,int]] = {}
+for i, name in enumerate(SWATCH_ORDER):
+    x = (i % 8) * 32
+    y = (i // 8) * 32
+    SWATCH_UV[name] = (x, y)
+
+
+def jwrite(path: Path, obj):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(obj, indent=2), encoding='utf-8')
+
+
+def twrite(path: Path, text: str):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding='utf-8')
+
+
+def make_palette_texture(path: Path, accent: Optional[Dict[str,str]]=None):
+    colors = dict(PALETTE)
+    if accent: colors.update(accent)
+    im = Image.new('RGBA', (TEX_SIZE, TEX_SIZE), (255,255,255,255))
+    px = im.load()
+    for i, name in enumerate(SWATCH_ORDER):
+        c = colors.get(name, PALETTE[name])
+        rgb = tuple(int(c[k:k+2],16) for k in (1,3,5))
+        x0,y0 = SWATCH_UV[name]
+        for y in range(y0, min(y0+32,TEX_SIZE)):
+            for x in range(x0, min(x0+32,TEX_SIZE)):
+                # very subtle material grain; fully opaque
+                n = ((x*13 + y*7 + i*11) % 5) - 2
+                px[x,y] = tuple(max(0,min(255,v+n)) for v in rgb) + (255,)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    im.save(path)
+
+
+def make_item_icon(path: Path, base: str, accent: str, kind: str):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    im = Image.new('RGBA', (32,32), (0,0,0,0)); d=ImageDraw.Draw(im)
+    b=tuple(int(base[k:k+2],16) for k in (1,3,5)); a=tuple(int(accent[k:k+2],16) for k in (1,3,5))
+    if kind=='crystal':
+        d.polygon([(16,2),(26,11),(21,28),(10,28),(5,12)], fill=b+(255,), outline=a+(255,))
+        d.polygon([(16,5),(21,12),(18,24),(11,25),(9,13)], fill=a+(210,))
+    elif kind=='dust':
+        for cx,cy,r in [(9,19,5),(17,11,4),(23,20,5),(15,24,3)]: d.ellipse((cx-r,cy-r,cx+r,cy+r), fill=b+(255,), outline=a+(255,))
+    elif kind=='scrap':
+        d.rectangle((5,8,26,24),fill=b+(255,),outline=a+(255,)); d.line((7,22,25,10),fill=a+(255,),width=3); d.ellipse((9,13,14,18),fill=a+(255,)); d.rectangle((20,5,24,12),fill=a+(255,))
+    elif kind=='remote':
