@@ -1,0 +1,4 @@
+
+# Material alias: sculpt code uses semantic `black`; share the existing
+# shirt_black swatch rather than growing the already-full 8x8 texture atlas.
+SWATCH_UV['black'] = SWATCH_UV['shirt_black']
