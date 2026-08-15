@@ -10,19 +10,19 @@ Rich & Shorty is a Minecraft Bedrock parody adventure vertical slice with a stab
 
 The project is deliberately not using experimental custom dimensions. The four resource realities and Citadel-ish are authored pocket-world zones in the Overworld reached through a scripted Portal Remote. This preserves the multiverse loop without making experimental dimension APIs a hard dependency.
 
-## VERIFIED — First Client-Test Candidate
+## VERIFIED — Current Client-Test Candidate
 
-The first artifact that is approved to leave automated/server testing is the candidate built from branch commit `d8434fe3d7d5693a202580c1c056932447bb14a7`.
+The authoritative artifact approved to leave automated/server testing is the candidate built from branch commit `7a9ef901dc2bbe29bf7290b05936296f6dd99fb2`.
 
 Exact tested add-on SHA-256:
 
-`033aaa412534f774bf4bf3507f043c55ed381485a2212fb186a7fbd4d6c73131`
+`637b8e07930f924e72bb9ca5483afd461efebc4a254d7dadf3d46cd9fa9a3bcf`
 
-Exact tested add-on size: **170,385 bytes**.
+Exact tested add-on size: **171,270 bytes**.
 
 Release-gate results for that exact artifact:
 
-- deterministic local validation: **531 checks PASS / 0 errors**
+- deterministic local validation: **537 checks PASS / 0 errors**
 - Mojang Minecraft Creator Tools full suite: **PASS / 0 errors / 0 warnings / 0 recommendations**
 - Mojang Minecraft Creator Tools Add-On suite: **PASS / 0 errors / 0 warnings / 0 recommendations**
 - real current Bedrock Dedicated Server **1.26.44.3** boot: PASS
@@ -75,9 +75,9 @@ Exact current cube counts:
 - Franky Lincolnstein 100
 - Council Rich 122
 
-The exact shipping `.geo.json` + texture files are rendered into `previews/rich_shorty_cast_actual_geometry.png` by CI. This is not concept art. The final client-candidate cast sheet was manually inspected after the full green run and retained.
+The exact shipping `.geo.json` + texture files are rendered into `previews/rich_shorty_cast_actual_geometry.png` by CI. This is not concept art. The client-candidate cast sheet was manually inspected after the full green run and retained.
 
-The Reality Fabricator is a custom **48-cube** machine with an asymmetrical silhouette and explicit dark-metal / portal-green / warning / screen material regions. It intentionally stays under Creator Tools' >50-cube custom-block performance warning threshold. The final client-candidate Fabricator render was manually inspected after the full green run and retained.
+The Reality Fabricator is a custom **48-cube** machine with an asymmetrical silhouette and explicit dark-metal / portal-green / warning / screen material regions. It intentionally stays under Creator Tools' >50-cube custom-block performance warning threshold. The client-candidate Fabricator render was manually inspected after the full green run and retained.
 
 ## Current Cast
 
@@ -118,7 +118,7 @@ The intent is obvious affectionate sci-fi-cartoon parody, not direct asset copyi
 6. Completing the recipe consumes the materials and produces one random world-manipulation tool.
 7. The immediately previous tool is excluded so consecutive fabrication results do not repeat.
 8. A new different recipe is pre-rolled only after successful fabrication.
-9. Side liabilities reward Citadel Tokens / special tools.
+9. Side liabilities reward Citadel Tokens / special tools and leave persistent physical consequences in their realities.
 10. Three tokens permanently unlock Citadel-ish.
 11. Citadel-ish is a story hub. Evil Shorty does **not** auto-spawn on arrival.
 12. Interacting with Council Rich begins the Council hearing and stages the Evil Shorty encounter in the central chamber.
@@ -129,13 +129,24 @@ The intent is obvious affectionate sci-fi-cartoon parody, not direct asset copyi
 
 The resource zones are not flat test pads.
 
-- **Glorp-9:** fungal/goo basin, warped stalks, luminous roots, slime stepping route, water basin. The old `lily_pad` command identifier was rejected by current Bedrock and was deliberately replaced with server-verified slime stepping pads.
+- **Glorp-9:** fungal/goo basin, warped stalks, luminous roots, slime stepping route, water basin. The old `lily_pad` command identifier was rejected by current Bedrock and deliberately replaced with server-verified slime stepping pads.
 - **Fizz Desert:** red-sand caldera, basalt/orange-terracotta chimneys, magma fractures. Generic `terracotta` was rejected by current Bedrock and replaced with the server-verified `orange_terracotta` ID.
-- **Chrono Shelf:** packed/blue-ice terraces, amethyst time pillars, broken clock motif
-- **Scrap Moon:** tuff salvage field, copper/iron wreckage, cranes, rails and gantries
-- **Citadel-ish:** central tower, satellite towers, bridges, civic ring, customs structure and council dais
+- **Chrono Shelf:** packed/blue-ice terraces, amethyst time pillars, broken clock motif.
+- **Scrap Moon:** tuff salvage field, copper/iron wreckage, cranes, rails and gantries.
+- **Citadel-ish:** central tower, satellite towers, bridges, civic ring, customs structure and council dais.
 
-The real-Bedrock release gate now smoke-tests the full vanilla block palette used by reality construction and world-tool rewrites so invalid command identifiers cannot silently reach the client candidate.
+The real-Bedrock release gate smoke-tests the full vanilla block palette used by reality construction and world-tool rewrites so invalid command identifiers cannot silently reach the client candidate.
+
+## Side-Quest World Consequences
+
+Completed side liabilities now leave one-shot persistent landmarks instead of existing only as tags/menu entries:
+
+- **Sundae:** Glorp-9 gains a luminous coolant garden beside the landing pad.
+- **Bird Dude:** Chrono Shelf gains a calcite/amethyst ceremonial time-roost.
+- **Mr. Needs-It:** Scrap Moon gains an iron/copper receiver tower.
+- **Gerry:** Scrap Moon gains the actual multiversal shelf he requested resources to stabilize.
+
+Each consequence has a per-player persistent effect flag to prevent repeated rebuilding/message spam. The construction palette is covered by the real-Bedrock block parser/placement smoke gate. Actual player-triggered quest completion remains part of the retail-client test boundary.
 
 ## World Tool Pool
 
@@ -202,6 +213,7 @@ Current validation explicitly rejects regressions in:
 - `fabricator_max_50_cubes`
 - `world_tool_native_cooldown`
 - `staged_citadel_hearing_boss`
+- `persistent_sidequest_world_changes`
 - Bedrock 1.26.10 pushability component split
 
 ## Hard Quality Rules
@@ -220,13 +232,13 @@ Current validation explicitly rejects regressions in:
 
 **VERIFIED:** structure, schema, archive, script syntax, server pack loading, custom-block registration/placement, full authored vanilla block identifier palette on current real Bedrock, all custom-entity server registration/summoning, exact generated-geometry offline render review, and the hard gameplay/visual regression signatures listed above.
 
-**UNKNOWN until client/player test:** actual Bedrock retail-client rendering, animation playback in the retail client, controller/touch UI behavior, real player-driven Portal Remote interaction, real player-driven Fabricator custom component execution, full reality generation triggered through the UI, side-quest turn-ins under real play, staged Council hearing under real player interaction, and Realm → PS5 behavior.
+**UNKNOWN until client/player test:** actual Bedrock retail-client rendering, animation playback in the retail client, controller/touch UI behavior, real player-driven Portal Remote interaction, real player-driven Fabricator custom component execution, full reality generation triggered through the UI, side-quest turn-ins and their persistent world changes under real play, staged Council hearing under real player interaction, and Realm → PS5 behavior.
 
 Do not collapse UNKNOWN into PASS.
 
 ## Next Work
 
-1. **Ryan client test:** import the exact SHA-256-pinned client candidate into Bedrock/Realm using the existing Android/mobile-first path.
+1. **Ryan client test:** import the exact SHA-256-pinned current client candidate into Bedrock/Realm using the existing Android/mobile-first path.
 2. Record actual observed retail-client behavior here as PASS/FAIL, especially:
    - RP model/texture rendering
    - animations
@@ -236,7 +248,7 @@ Do not collapse UNKNOWN into PASS.
    - one full resource → fabrication loop
    - Liability Ledger and Tool Manual
    - environment construction
-   - one side-quest turn-in
+   - one side-quest turn-in plus persistent world landmark
    - Citadel unlock and Council hearing
 3. Fix only from observed evidence; rerun all automated/server gates for every repair.
 4. After the retail-client/Realm pass is clean, bump out of `v0.1.0` and package the next distributable candidate.
