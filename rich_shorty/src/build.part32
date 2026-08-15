@@ -1,0 +1,139 @@
+
+# ---------------------------------------------------------------------------
+# RETAIL CHARACTER GEOMETRY NORMALIZATION
+# TEST 58 proved the true custom dimensions on retail Android, but also proved
+# the shared fine-voxel sculpt primitives render badly in the actual client:
+# heads and torsos read as stacked ribs/plates. Replace those shared primitives
+# with substantial stepped volumes while preserving articulation and character
+# specific detail.
+# ---------------------------------------------------------------------------
+
+_retail_forms_previous_validate = validate
+
+
+def _ellipsoid_runs(bone, cx, cy, cz, rx, ry, rz, base,
+                    light='skin_light', shadow='skin_shadow',
+                    y_step=1.0, z_step=1.0):
+    """Retail-safe stepped ellipsoid made from substantial nested cuboids."""
+    core_h=max(2.4,ry*1.28); core_w=max(2.0,rx*1.92); core_d=max(2.0,rz*1.90)
+    _c(bone,(cx-core_w/2,cy-core_h/2,cz-core_d/2),(core_w,core_h,core_d),base)
+
+    cap_h=max(1.6,ry*.36); cap_w=max(1.6,rx*1.58); cap_d=max(1.6,rz*1.58)
+    _c(bone,(cx-cap_w/2,cy+core_h/2-cap_h*.18,cz-cap_d/2),(cap_w,cap_h,cap_d),light)
+    _c(bone,(cx-cap_w/2,cy-core_h/2-cap_h*.82,cz-cap_d/2),(cap_w,cap_h,cap_d),shadow)
+
+    side_w=max(.9,rx*.24); side_h=max(2.2,ry*1.02); side_d=max(1.8,rz*1.45)
+    _c(bone,(cx-rx,cy-side_h/2,cz-side_d/2),(side_w,side_h,side_d),shadow)
+    _c(bone,(cx+rx-side_w,cy-side_h/2,cz-side_d/2),(side_w,side_h,side_d),light)
+
+
+def _hair_cap(bone,cy,hair,elder=False,long_sides=False,pony=False,crown=False):
+    hi={'hair_rich':'cyan_light','hair_shorty':'brown_light','hair_bess':'blonde_light',
+        'hair_gerry':'brown_light','hair_sundae':'redhair_light','white':'white',
+        'darkgrey':'metal_light','blue':'blue_light','green':'green_light'}.get(hair,hair)
+    sh={'hair_rich':'cyan_shadow','hair_shorty':'brown_shadow','hair_bess':'blonde_shadow',
+        'hair_gerry':'brown_shadow','hair_sundae':'redhair_shadow','white':'lightgrey',
+        'darkgrey':'metal_dark','blue':'blue','green':'green'}.get(hair,hair)
+
+    _c(bone,(-4.35,cy+3.0,-2.45),(8.7,2.45,4.9),hair)
+    _c(bone,(-3.45,cy+5.15,-1.95),(6.9,1.65,3.9),hi)
+
+    if elder:
+        spikes=[(-4.7,4.45,1.55,5.2),(-2.85,4.9,1.6,5.9),(-.95,5.2,1.6,6.4),
+                (.95,5.1,1.6,6.2),(2.85,4.75,1.55,5.7),(4.55,4.35,1.4,5.0)]
+        for x,dy,w,h in spikes:
+            _c(bone,(x-w/2,cy+dy,-1.6),(w,h,3.2),hair)
+            _c(bone,(x-w*.28,cy+dy+h-.8,-1.85),(w*.56,.9,3.7),hi)
+        _c(bone,(-4.6,cy+2.35,.85),(1.4,3.7,2.3),sh)
+        _c(bone,(3.2,cy+2.35,.85),(1.4,3.7,2.3),sh)
+    else:
+        _c(bone,(-3.9,cy+2.45,-3.0),(2.35,1.8,1.35),sh)
+        _c(bone,(-1.25,cy+2.75,-3.2),(2.5,2.0,1.45),hair)
+        _c(bone,(1.45,cy+2.5,-3.05),(2.4,1.75,1.35),hi)
+
+    if long_sides:
+        _c(bone,(-5.2,cy-1.4,.55),(1.35,6.2,2.9),sh)
+        _c(bone,(3.85,cy-1.4,.55),(1.35,6.2,2.9),hair)
+    if pony:
+        _c(bone,(3.5,cy+1.6,.95),(2.2,5.4,2.6),hair)
+        _c(bone,(4.05,cy-1.8,1.15),(1.8,3.5,2.15),sh)
+    if crown:
+        for x,h in [(-3.8,2.0),(-1.9,2.8),(0,3.2),(1.9,2.8),(3.8,2.0)]:
+            _c(bone,(x-.55,cy+6.45,-.8),(1.1,h,1.6),'yellow')
+
+
+def _sculpt_body(m,shirt,pants='pants_dark',skin='skin_shorty',coat=False,narrow=False,armored=False):
+    body=m.bone('body',(0,10.5,0))
+    _c(body,(-1.6,12.25,-1.6),(3.2,2.0,3.2),_mat(skin+'_shadow','skin_shadow'))
+
+    hi={'shirt_teal':'teal_light','shirt_amber':'amber_light','red':'red_light',
+        'green':'green_light','purple':'purple_light','blue':'blue_light',
+        'shirt_black':'black_light'}.get(shirt,shirt)
+    sh={'shirt_teal':'teal_shadow','shirt_amber':'amber_shadow','red':'red',
+        'green':'green','purple':'purple','blue':'blue','shirt_black':'black'}.get(shirt,shirt)
+
+    shoulder_w=8.7 if narrow else 9.5
+    torso_w=7.4 if narrow else 8.2
+    waist_w=6.8 if narrow else 7.6
+
+    _c(body,(-shoulder_w/2,10.0,-2.05),(shoulder_w,2.45,4.10),hi)
+    _c(body,(-torso_w/2,6.65,-1.95),(torso_w,3.65,3.90),shirt)
+    _c(body,(-waist_w/2,5.45,-1.78),(waist_w,1.55,3.56),sh)
+    _c(body,(-4.15,5.35,-2.0),(8.3,.72,4.0),'darkgrey')
+
+    if coat:
+        _c(body,(-5.0,8.15,-2.38),(1.75,6.15,4.76),'coat')
+        _c(body,(3.25,8.15,-2.38),(1.75,6.15,4.76),'coat')
+        _c(body,(-4.6,5.65,1.55),(9.2,7.9,.86),'coat_shadow')
+        _c(body,(-4.15,2.45,-2.12),(3.35,4.8,4.24),'coat')
+        _c(body,(.8,2.45,-2.12),(3.35,4.8,4.24),'coat')
+        _c(body,(-2.65,8.5,-2.66),(1.35,4.2,.52),'coat_shadow')
+        _c(body,(1.3,8.5,-2.66),(1.35,4.2,.52),'coat_shadow')
+    if armored:
+        _c(body,(-4.75,10.25,-2.55),(9.5,1.45,5.1),'metal_light')
+        _c(body,(-3.65,7.25,-2.5),(7.3,2.35,.72),'metal_dark')
+        _c(body,(-1.6,8.0,-3.0),(3.2,2.0,.65),'visor')
+    return body
+
+
+def validate(addon:Path):
+    report=_retail_forms_previous_validate(addon)
+    errors=list(report.get('errors',[])); checks=int(report.get('checks',0))
+    per_model={}
+    model_root=RP/'models/entity'
+    if not model_root.exists():
+        model_root=RP/'models/entities'
+    for path in sorted(model_root.glob('*.geo.json')):
+        try:
+            obj=json.loads(path.read_text(encoding='utf-8'))
+        except Exception as exc:
+            errors.append(f'retail geometry gate: cannot parse {path}: {exc}')
+            continue
+        broad_thin=0; total=0
+        for geo in obj.get('minecraft:geometry',[]):
+            for bone in geo.get('bones',[]):
+                for cube in bone.get('cubes',[]):
+                    size=cube.get('size',[])
+                    if not isinstance(size,list) or len(size)!=3: continue
+                    total += 1
+                    try: w,h,d=(float(size[0]),float(size[1]),float(size[2]))
+                    except Exception: continue
+                    if h<=1.25 and w>=5.0 and d>=3.0: broad_thin += 1
+        name=path.stem
+        per_model[name]={'total_cubes':total,'broad_thin_horizontal_plates':broad_thin}
+        checks += 1
+        if broad_thin>7:
+            errors.append(f'retail geometry regression: {name} still has {broad_thin} broad thin horizontal plates (max 7)')
+
+    report['checks']=checks
+    report['errors']=errors
+    report['status']='PASS' if not errors else 'FAIL'
+    report['character_geometry_profile']='retail_clean_forms_v3'
+    report['retail_geometry_plate_counts']=per_model
+    report['retail_test_58_character_result']='FAILED_LAYERED_GEOMETRY_REPLACED'
+    gates=list(report.get('feature_regression_gates',[]))
+    for gate in ('retail_clean_character_forms','no_layer_cake_heads','no_layer_cake_torsos'):
+        if gate not in gates: gates.append(gate)
+    report['feature_regression_gates']=gates
+    jwrite(OUT/'validation_report.json',report)
+    return report
