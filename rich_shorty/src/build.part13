@@ -1,0 +1,534 @@
+
+# ---------------------------------------------------------------------------
+# HIGH-DETAIL VOXEL SCULPT PASS
+# The first runtime-clean cast still read too much like stacked box people in
+# the exact-geometry approval sheet. This pass raises the visual bar before any
+# user test: rounded voxel-sculpted crania, tapered bodies, facial projection,
+# smaller articulated limb segments, identity-specific silhouettes, and much
+# higher cube density while retaining Bedrock-friendly cuboid geometry.
+# ---------------------------------------------------------------------------
+
+# Extra swatches used by the sculpt pass. Rebuild the 32px swatch atlas map so
+# late-generated textures and geometry share one deterministic source of truth.
+PALETTE.update({
+    'skin_light':'#efccb4','skin_shadow':'#b98f77',
+    'cyan_light':'#dff9f8','cyan_shadow':'#67b1b7',
+    'brown_light':'#915b35','brown_shadow':'#41271b',
+    'blonde_light':'#fbeec6','blonde_shadow':'#b7996b',
+    'redhair_light':'#f29171','redhair_shadow':'#9a493a',
+    'teal_light':'#a4decf','teal_shadow':'#509486',
+    'amber_light':'#f4c751','amber_shadow':'#a47821',
+    'navy_light':'#465570','black_light':'#363e48',
+    'red_light':'#de5260','green_light':'#7ec874',
+    'purple_light':'#a069c6','blue_light':'#6599cf',
+    'metal_light':'#c7ccd1','metal_dark':'#4a5058',
+    'sea_light':'#90d6e8','poop_light':'#d0a875'
+})
+SWATCH_ORDER = list(PALETTE.keys())
+SWATCH_UV = {}
+for i, name in enumerate(SWATCH_ORDER):
+    SWATCH_UV[name] = ((i % 8) * 32, (i // 8) * 32)
+
+
+def _mat(name, fallback):
+    return name if name in PALETTE else fallback
+
+
+def _c(bone, origin, size, mat, **kw):
+    bone.cubes.append(Cube(tuple(origin), tuple(size), mat, **kw))
+
+
+def _ellipsoid_runs(bone, cx, cy, cz, rx, ry, rz, base, light='skin_light', shadow='skin_shadow', y_step=1.0, z_step=1.0):
+    """Filled ellipsoid as merged X-runs. Rounded silhouette without cube spam."""
+    iy0 = math.floor(-ry); iy1 = math.ceil(ry)
+    iz0 = math.floor(-rz); iz1 = math.ceil(rz)
+    for iy in range(iy0, iy1 + 1):
+        yy = iy + 0.5
+        for iz in range(iz0, iz1 + 1):
+            zz = iz + 0.5
+            t = 1.0 - (yy/ry)**2 - (zz/rz)**2
+            if t <= 0: continue
+            xr = max(0.5, round((rx * math.sqrt(t))*2)/2)
+            mat = base
+            if iy < -ry*0.43: mat = shadow
+            elif iy > ry*0.46: mat = light
+            _c(bone, (cx-xr, cy+iy, cz+iz), (2*xr, y_step, z_step), mat)
+
+
+def _hair_cap(bone, cy, hair, elder=False, long_sides=False, pony=False, crown=False):
+    hi = {
+        'hair_rich':'cyan_light','hair_shorty':'brown_light','hair_bess':'blonde_light',
+        'hair_gerry':'brown_light','hair_sundae':'redhair_light','white':'white',
+        'darkgrey':'metal_light','blue':'blue_light','green':'green_light'
+    }.get(hair, hair)
+    sh = {
+        'hair_rich':'cyan_shadow','hair_shorty':'brown_shadow','hair_bess':'blonde_shadow',
+        'hair_gerry':'brown_shadow','hair_sundae':'redhair_shadow','white':'lightgrey',
+        'darkgrey':'metal_dark','blue':'blue','green':'green'
+    }.get(hair, hair)
+    # rounded crown rows
+    for j,(w,d) in enumerate([(8.4,5.0),(8.0,4.8),(7.2,4.4),(6.0,3.8)]):
+        _c(bone, (-w/2, cy+3.5+j*0.95, -d/2+0.45), (w,1.0,d), hi if j>=2 else hair)
+    if elder:
+        # asymmetrical tall scientist spikes with highlight tips
+        spikes=[(-5.1,4.2,1.55,5.6),(-3.45,4.7,1.6,6.1),(-1.75,5.0,1.55,6.5),(0.0,5.1,1.6,6.7),(1.75,4.9,1.55,6.3),(3.45,4.55,1.55,5.9),(5.0,4.15,1.45,5.4)]
+        for x,dy,w,h in spikes:
+            _c(bone,(x-w/2,cy+dy,-1.65),(w,h,3.3),hair)
+            _c(bone,(x-w*.3,cy+dy+h-.75,-1.95),(w*.6,1.0,3.9),hi)
+        _c(bone,(-4.5,cy+2.8,1.2),(1.25,3.5,2.2),sh)
+        _c(bone,(3.25,cy+2.8,1.2),(1.25,3.5,2.2),sh)
+    else:
+        # little front locks break up the cap silhouette
+        _c(bone,(-3.8,cy+3.1,-3.0),(2.1,1.2,1.2),sh)
+        _c(bone,(-1.45,cy+3.45,-3.15),(2.0,1.15,1.3),hair)
+        _c(bone,(0.8,cy+3.25,-3.05),(2.15,1.15,1.2),hi)
+    if long_sides:
+        for side in (-1,1):
+            x=-5.2 if side<0 else 4.0
+            for i in range(5):
+                _c(bone,(x,cy-1.3+i*1.05,0.65),(1.2,1.15,2.9), hair if i%2 else sh)
+    if pony:
+        _c(bone,(3.5,cy+1.8,1.0),(2.1,5.2,2.5),hair)
+        _c(bone,(4.15,cy-1.1,1.2),(1.8,3.8,2.1),sh)
+        _c(bone,(4.45,cy-3.0,1.35),(1.4,2.2,1.8),hi)
+    if crown:
+        for x,h in [(-3.8,2.0),(-1.9,2.8),(0,3.2),(1.9,2.8),(3.8,2.0)]:
+            _c(bone,(x-.55,cy+7.1,-.8),(1.1,h,1.6),'yellow')
+
+
+def _sculpt_head(m, cy, skin, hair=None, elder=False, visor=False, worried=False, long_hair=False, pony=False, crown=False, alien=False, face_color=None):
+    head=m.bone('head',(0,cy,0),'body')
+    if alien:
+        _ellipsoid_runs(head,0,cy,0,4.6,4.5,3.35,skin,_mat(skin+'_light',skin),_mat(skin+'_shadow',skin))
+    else:
+        _ellipsoid_runs(head,0,cy,0,4.7,4.25,3.25,skin,'skin_light','skin_shadow')
+    # ears / cheek planes / projected muzzle and nose
+    _c(head,(-5.05,cy-.4,-.8),(1.0,2.4,1.6), _mat(skin+'_shadow','skin_shadow'))
+    _c(head,(4.05,cy-.4,-.8),(1.0,2.4,1.6), _mat(skin+'_shadow','skin_shadow'))
+    _c(head,(-2.75,cy-1.55,-3.55),(5.5,1.45,.8), _mat(skin+'_light','skin_light'))
+    _c(head,(-1.05,cy-.15,-4.15),(2.1,2.05,1.1),skin)
+    _c(head,(-.65,cy-.65,-4.7),(1.3,.8,.7), _mat(skin+'_light','skin_light'))
+    # eyes + pupils, with brows separated from hair cap
+    for x in (-3.15,.75):
+        _c(head,(x,cy+.55,-3.78),(2.35,1.55,.58),'eye')
+        px=x+(1.25 if x<0 else .45)
+        _c(head,(px,cy+.84,-4.15),(.65,.9,.38),'pupil')
+    browmat = hair or _mat(face_color or skin,'darkgrey')
+    if worried:
+        _c(head,(-3.3,cy+2.18,-3.9),(2.2,.35,.46),browmat)
+        _c(head,(1.0,cy+1.86,-3.9),(2.2,.35,.46),browmat)
+    else:
+        _c(head,(-3.3,cy+2.05,-3.9),(2.2,.35,.46),browmat)
+        _c(head,(1.0,cy+2.05,-3.9),(2.2,.35,.46),browmat)
+    # mouth is recessed by shadow + projecting teeth/lower lip
+    _c(head,(-1.9,cy-2.18,-3.78),(3.8,.55,.5),'mouth')
+    _c(head,(-1.15,cy-2.11,-4.08),(2.3,.3,.38),'tooth')
+    _c(head,(-1.45,cy-2.53,-3.85),(2.9,.28,.4),_mat(skin+'_shadow','skin_shadow'))
+    if visor:
+        _c(head,(-4.0,cy+.28,-4.32),(8.0,2.45,.52),'visor')
+        _c(head,(3.38,cy+.42,-4.65),(1.22,1.22,.66),'visor_dark')
+        _c(head,(-3.65,cy+.52,-4.62),(5.9,.25,.22),'white')
+    if hair:
+        _hair_cap(head,cy,hair,elder=elder,long_sides=long_hair,pony=pony,crown=crown)
+    return head
+
+
+def _sculpt_body(m, shirt, pants='pants_dark', skin='skin_shorty', coat=False, narrow=False, armored=False):
+    body=m.bone('body',(0,10.5,0))
+    # neck
+    _c(body,(-1.6,12.35,-1.6),(3.2,1.9,3.2), _mat(skin+'_shadow','skin_shadow'))
+    # six tapered torso layers create shoulders/chest/waist rather than a box
+    widths=[7.5,8.2,8.9,9.25,8.95,8.55] if not narrow else [6.9,7.5,8.15,8.55,8.2,7.75]
+    depths=[3.45,3.65,3.85,4.05,3.95,3.7]
+    hi={'shirt_teal':'teal_light','shirt_amber':'amber_light','red':'red_light','green':'green_light','purple':'purple_light','blue':'blue_light','shirt_black':'black_light'}.get(shirt,shirt)
+    sh={'shirt_teal':'teal_shadow','shirt_amber':'amber_shadow','red':'red','green':'green','purple':'purple','blue':'blue','shirt_black':'black'}.get(shirt,shirt)
+    for i,(w,d) in enumerate(zip(widths,depths)):
+        mat=sh if i==0 else hi if i==3 else shirt
+        _c(body,(-w/2,6.55+i*1.03,-d/2),(w,1.08,d),mat)
+    _c(body,(-4.15,5.95,-2.0),(8.3,.68,4.0),'darkgrey')
+    if coat:
+        _c(body,(-5.0,10.0,-2.38),(2.0,4.15,4.76),'coat')
+        _c(body,(3.0,10.0,-2.38),(2.0,4.15,4.76),'coat')
+        _c(body,(-4.72,5.8,1.55),(9.44,7.75,.86),'coat_shadow')
+        _c(body,(-4.25,2.5,-2.12),(3.5,4.7,4.24),'coat')
+        _c(body,(.75,2.5,-2.12),(3.5,4.7,4.24),'coat')
+        _c(body,(-2.7,8.9,-2.66),(1.45,4.0,.52),'coat_shadow')
+        _c(body,(1.25,8.9,-2.66),(1.45,4.0,.52),'coat_shadow')
+    if armored:
+        _c(body,(-4.8,10.3,-2.55),(9.6,1.0,5.1),'metal_light')
+        _c(body,(-3.7,7.45,-2.5),(7.4,2.25,.72),'metal_dark')
+        _c(body,(-1.6,8.0,-3.0),(3.2,2.0,.65),'visor')
+    return body
+
+
+def _sculpt_limbs(m, shirt, pants='pants_dark', skin='skin_shorty', coat=False, child=False, wing=False):
+    armshirt='coat' if coat else shirt
+    armshadow='coat_shadow' if coat else {'shirt_teal':'teal_shadow','shirt_amber':'amber_shadow','shirt_black':'black','red':'red','green':'green','purple':'purple','blue':'blue'}.get(shirt,shirt)
+    span=4.5 if child else 5.15
+    for side in (-1,1):
+        x=-span if side<0 else span
+        uname='left_upper_arm' if side<0 else 'right_upper_arm'
+        lname='left_lower_arm' if side<0 else 'right_lower_arm'
+        ua=m.bone(uname,(x,11.6,0),'body')
+        if wing:
+            _c(ua,(x-2.0 if side<0 else x-.2,7.8,-1.4),(2.2,4.6,2.8),'feather')
+            _c(ua,(x-2.6 if side<0 else x+.4,9.4,-1.0),(1.0,5.4,2.0),'feather')
+        else:
+            ox=x-1.65 if side<0 else x-.05
+            _c(ua,(ox,9.15,-1.48),(1.75,3.05,2.96),armshirt)
+            _c(ua,(ox+.16,7.85,-1.34),(1.45,1.45,2.68),armshadow)
+        la=m.bone(lname,(x,8.0,0),uname)
+        ox=x-1.45 if side<0 else x+.05
+        if wing:
+            _c(la,(ox-.5 if side<0 else ox,4.7,-1.05),(2.1,3.7,2.1),'feather')
+            _c(la,(ox-1.0 if side<0 else ox+.5,3.8,-.7),(1.0,3.0,1.4),'feather')
+        else:
+            _c(la,(ox,5.55,-1.16),(1.35,2.55,2.32), _mat(skin+'_shadow','skin_shadow'))
+            _c(la,(ox+.08,3.5,-1.06),(1.2,2.2,2.12),skin)
+            _c(la,(ox-.18,2.55,-1.42),(1.75,1.25,2.84),skin)
+            _c(la,(ox+.05,2.18,-1.78),(1.3,.66,1.05), _mat(skin+'_light','skin_light'))
+    # legs use smaller segments, visible knees and narrower ankles
+    for side in (-1,1):
+        x=-2.85 if side<0 else .35
+        uname='left_upper_leg' if side<0 else 'right_upper_leg'
+        lname='left_lower_leg' if side<0 else 'right_lower_leg'
+        ul=m.bone(uname,((-1.8 if side<0 else 1.8),6.3,0),'body')
+        _c(ul,(x,3.05,-1.57),(2.55,3.15,3.14),pants)
+        _c(ul,(x+.12,2.2,-1.48),(2.3,1.0,2.96),_mat('navy_light',pants))
+        ll=m.bone(lname,((-1.8 if side<0 else 1.8),3.2,0),uname)
+        _c(ll,(x+.2,-.15,-1.38),(2.15,2.55,2.76),pants)
+        _c(ll,(x+.3,-1.18,-1.28),(1.95,1.25,2.56),pants)
+        _c(ll,(x-.15,-1.55,-2.85),(2.95,1.12,4.2),'shoe')
+
+
+def _humanoid(name, *, skin='skin_shorty', hair='hair_shorty', shirt='shirt_amber', pants='pants_dark', elder=False, coat=False, visor=False, worried=False, narrow=False, long_hair=False, pony=False, crown=False, child=False, armored=False, alien=False):
+    m=Model(name,1.1,1.9)
+    _sculpt_body(m,shirt,pants,skin,coat=coat,narrow=narrow,armored=armored)
+    cy=15.6 if child else 16.6
+    _sculpt_head(m,cy,skin,hair,elder=elder,visor=visor,worried=worried,long_hair=long_hair,pony=pony,crown=crown,alien=alien)
+    _sculpt_limbs(m,shirt,pants,skin,coat=coat,child=child)
+    return m
+
+
+def hd_rich():
+    m=_humanoid('rich',skin='skin_rich',hair='hair_rich',shirt='shirt_teal',pants='pants_tan',elder=True,coat=True)
+    b=next(x for x in m.bones if x.name=='body'); h=next(x for x in m.bones if x.name=='head')
+    _c(b,(-1.0,10.0,-2.82),(2.0,2.8,.5),'white')
+    _c(b,(-3.7,8.35,-2.85),(2.1,1.15,.5),'cyan_shadow')
+    _c(b,(2.0,8.2,-2.84),(1.5,.9,.48),'red')
+    # scientist drool / lower-face detail
+    _c(h,(1.7,13.9,-4.15),(.5,1.8,.38),'visor')
+    _c(h,(1.55,13.45,-4.08),(.8,.45,.42),'visor')
+    return scale_model(m,.94,1.06,.96)
+
+
+def hd_shorty(evil=False):
+    m=_humanoid('evil_shorty' if evil else 'shorty',skin='skin_shorty',hair='hair_shorty',shirt='shirt_black' if evil else 'shirt_amber',pants='pants_dark',visor=evil,worried=True)
+    b=next(x for x in m.bones if x.name=='body'); h=next(x for x in m.bones if x.name=='head')
+    _c(b,(-2.5,11.75,-2.55),(5.0,.65,.45),'visor_dark' if evil else 'amber_light')
+    if evil:
+        _c(b,(-4.55,5.4,1.55),(9.1,7.2,.85),'black_light')
+        _c(b,(-4.7,11.65,-2.45),(9.4,1.0,4.9),'black_light')
+        _c(h,(-4.3,14.1,2.15),(8.6,7.0,.9),'black')
+    return scale_model(m,.94,.91,.96)
+
+
+def hd_bess():
+    m=_humanoid('bess',skin='skin_bess',hair='hair_bess',shirt='red',pants='pants_dark',narrow=True,long_hair=True)
+    b=next(x for x in m.bones if x.name=='body')
+    _c(b,(-3.2,9.0,-2.62),(6.4,.7,.48),'red_light')
+    return scale_model(m,.94,.97,.95)
+
+
+def hd_gerry():
+    m=_humanoid('gerry',skin='skin_gerry',hair='hair_gerry',shirt='green',pants='pants_tan',worried=True)
+    h=next(x for x in m.bones if x.name=='head'); b=next(x for x in m.bones if x.name=='body')
+    _c(h,(-1.0,15.9,-4.55),(2.0,1.1,.62),'skin_light')
+    _c(b,(-3.6,8.65,-2.65),(7.2,.65,.45),'lightgrey')
+    return scale_model(m,.98,1.0,.96)
+
+
+def hd_sundae():
+    m=_humanoid('sundae',skin='skin_sundae',hair='hair_sundae',shirt='purple',pants='pants_dark',narrow=True,pony=True)
+    # white sleeve cuffs read strongly against purple
+    for bn in ('left_upper_arm','right_upper_arm'):
+        b=next(x for x in m.bones if x.name==bn)
+        if b.cubes: b.cubes[0].mat='white'
+    return scale_model(m,.92,.95,.94)
+
+
+def _bird_head(m,cy=16.8):
+    h=m.bone('head',(0,cy,0),'body')
+    _ellipsoid_runs(h,0,cy,0,4.5,4.2,3.4,'bird','feather','bird')
+    # beak wedge-by-steps
+    _c(h,(-1.8,cy-.35,-4.0),(3.6,1.45,1.2),'yellow')
+    _c(h,(-1.25,cy-.15,-5.0),(2.5,1.0,1.0),'yellow')
+    _c(h,(-.7,cy+.05,-5.65),(1.4,.65,.75),'yellow')
+    for x in (-3.0,.8):
+        _c(h,(x,cy+1.0,-3.95),(2.0,1.5,.5),'eye')
+        _c(h,(x+.7,cy+1.3,-4.28),(.65,.8,.35),'pupil')
+    # feather crest and side cheek feathers
+    for x,hh in [(-3.5,2.5),(-1.8,3.5),(0,4.1),(1.8,3.5),(3.5,2.5)]:
+        _c(h,(x-.65,cy+3.3,-1.5),(1.3,hh,3.0),'feather')
+    _c(h,(-5.0,cy-.6,-.5),(1.2,3.4,2.3),'feather')
+    _c(h,(3.8,cy-.6,-.5),(1.2,3.4,2.3),'feather')
+
+
+def hd_bird_dude():
+    m=Model('bird_dude',1.2,2.0)
+    b=m.bone('body',(0,10.5,0))
+    for i,(w,d) in enumerate([(7.2,3.6),(8.1,4.0),(8.8,4.4),(8.6,4.2),(7.8,3.8)]):
+        _c(b,(-w/2,6.6+i*1.15,-d/2),(w,1.2,d),'feather' if i%2 else 'bird')
+    _c(b,(-1.2,6.2,1.8),(2.4,5.3,1.2),'yellow')
+    _bird_head(m)
+    _sculpt_limbs(m,'feather','bird','bird',wing=True)
+    # taloned feet
+    for bn,sgn in [('left_lower_leg',-1),('right_lower_leg',1)]:
+        l=next(x for x in m.bones if x.name==bn)
+        x=-3.3 if sgn<0 else .4
+        _c(l,(x,-1.5,-3.4),(3.4,.7,4.7),'yellow')
+        _c(l,(x-.3,-1.55,-4.0),(1.0,.5,1.4),'yellow')
+    return m
+
+
+def hd_scronchy():
+    m=_humanoid('scronchy',skin='scronch',hair='scronch',shirt='orange',pants='darkgrey',worried=False)
+    h=next(x for x in m.bones if x.name=='head')
+    # furry ear towers / cheek tufts
+    _c(h,(-5.4,17.5,-.7),(1.6,4.8,2.8),'scronch')
+    _c(h,(3.8,17.5,-.7),(1.6,4.8,2.8),'scronch')
+    _c(h,(-5.0,15.2,-2.7),(1.5,2.0,2.2),'orange')
+    _c(h,(3.5,15.2,-2.7),(1.5,2.0,2.2),'orange')
+    return scale_model(m,.96,.94,.98)
+
+
+def hd_needs_it():
+    m=_humanoid('mr_needs_it',skin='blue',hair=None,shirt='blue',pants='blue',narrow=True,alien=True)
+    h=next(x for x in m.bones if x.name=='head'); b=next(x for x in m.bones if x.name=='body')
+    # big round alien eyes + fin ears + chest glow
+    _c(h,(-3.7,17.0,-4.25),(3.0,2.2,.7),'eye'); _c(h,(.7,17.0,-4.25),(3.0,2.2,.7),'eye')
+    _c(h,(-2.6,17.5,-4.65),(.9,1.2,.4),'pupil'); _c(h,(1.6,17.5,-4.65),(.9,1.2,.4),'pupil')
+    _c(h,(-5.6,16.0,-.5),(1.6,2.0,1.8),'blue_light'); _c(h,(4.0,16.0,-.5),(1.6,2.0,1.8),'blue_light')
+    _c(b,(-1.5,8.6,-2.7),(3.0,2.0,.55),'visor')
+    return scale_model(m,.9,.98,.92)
+
+
+def hd_professor_poop():
+    m=_humanoid('professor_poop',skin='poop',hair=None,shirt='yellow',pants='pants_dark',child=True)
+    h=next(x for x in m.bones if x.name=='head')
+    # replace generic crown impression with stepped swirl silhouette
+    for i,(w,d,xoff) in enumerate([(8.0,5.2,0),(6.8,4.7,.35),(5.5,4.0,-.2),(4.0,3.3,.25),(2.4,2.4,-.15)]):
+        _c(h,(-w/2+xoff,19.0+i*1.05,-d/2+.6),(w,1.1,d),'poop_light' if i%2 else 'poop')
+    return scale_model(m,.88,.78,.9)
+
+
+def hd_captain_drizzle():
+    m=_humanoid('captain_drizzle',skin='blue',hair='white',shirt='blue',pants='blue',elder=True)
+    h=next(x for x in m.bones if x.name=='head'); b=next(x for x in m.bones if x.name=='body')
+    _c(b,(-5.2,11.7,-2.45),(10.4,1.1,4.9),'white')
+    _c(b,(-3.0,6.5,-2.55),(6.0,.9,.5),'yellow')
+    _c(h,(-3.5,14.3,-4.0),(2.8,.55,.45),'white'); _c(h,(.7,14.3,-4.0),(2.8,.55,.45),'white')
+    return scale_model(m,1.01,1.04,1.02)
+
+
+def hd_nightmare_larry():
+    m=_humanoid('nightmare_larry',skin='red',hair='darkgrey',shirt='purple',pants='pants_dark')
+    h=next(x for x in m.bones if x.name=='head'); b=next(x for x in m.bones if x.name=='body')
+    # burnt fedora / sweater stripes / glove blades
+    _c(h,(-6.0,20.8,-3.0),(12,1.0,6.0),'darkgrey'); _c(h,(-4.0,21.8,-2.3),(8.0,2.2,4.6),'darkgrey')
+    _c(b,(-4.6,10.4,-2.5),(9.2,.8,5.0),'red'); _c(b,(-4.2,8.2,-2.4),(8.4,.75,4.8),'red')
+    for bn in ('left_lower_arm','right_lower_arm'):
+        a=next(x for x in m.bones if x.name==bn); base=-7.2 if bn.startswith('left') else 5.2
+        for j in range(3): _c(a,(base+j*.75,2.1,-2.2-j*.08),(.38,2.8,.38),'metal_light')
+    return m
+
+
+def hd_sprocket():
+    m=_humanoid('sprocket_face',skin='grey',hair='darkgrey',shirt='orange',pants='pants_dark',armored=True)
+    h=next(x for x in m.bones if x.name=='head')
+    # crown gear teeth + monocular lens + jaw plating
+    for x,y in [(-5.1,18.1),(-4.3,20.6),(-2.5,22.4),(-.5,23.2),(1.7,22.8),(3.7,21.3),(4.9,18.8)]:
+        _c(h,(x,y,-.9),(1.1,1.9,1.8),'metal_light')
+    _c(h,(.7,16.8,-4.55),(3.0,3.0,.75),'visor')
+    _c(h,(-4.9,14.7,-3.5),(9.8,1.0,.75),'metal_dark')
+    return scale_model(m,.96,1.0,.98)
+
+
+def hd_consensus():
+    m=_humanoid('consensus',skin='green',hair=None,shirt='green',pants='green',alien=True)
+    h=next(x for x in m.bones if x.name=='head'); b=next(x for x in m.bones if x.name=='body')
+    for x,hh in [(-3.4,2.7),(-1.2,3.6),(1.2,3.8),(3.4,2.7)]: _c(h,(x-.7,20.0,-1.7),(1.4,hh,3.4),'visor')
+    _c(h,(-3.8,17.0,-4.25),(7.6,.62,.48),'visor_dark')
+    for i,w in enumerate([6.4,4.8,3.2]): _c(b,(-w/2,10.6-i*1.55,-2.65),(w,.62,.45),'visor')
+    return scale_model(m,.94,.98,.95)
+
+
+def hd_cucumber():
+    m=Model('cucumber_rich',.95,1.35)
+    b=m.bone('body',(0,7.0,0))
+    # tall rounded cucumber built from ellipsoid runs, with bumps and rat-tech harness
+    _ellipsoid_runs(b,0,7.8,0,3.7,7.0,2.8,'green','green_light','green')
+    for x,y,z in [(-3.5,8,-1.8),(3.0,10,-1.5),(-2.5,4.2,2.0),(2.4,6.1,2.1),(.5,13,-2.3)]: _c(b,(x,y,z),(1.0,1.0,1.0),'green_light')
+    _c(b,(-3.8,5.2,2.0),(7.6,1.0,.85),'metal_dark')
+    _c(b,(-1.0,3.9,2.0),(2.0,3.5,.7),'red')
+    h=m.bone('head',(0,10.0,0),'body')
+    for x in (-2.6,.6): _c(h,(x,10.1,-3.15),(2.0,1.5,.55),'eye')
+    _c(h,(-1.9,10.4,-3.5),(.7,.8,.35),'pupil'); _c(h,(1.1,10.4,-3.5),(.7,.8,.35),'pupil')
+    _c(h,(-1.7,8.6,-3.2),(3.4,.55,.45),'mouth')
+    # articulated scavenged limbs
+    for side in (-1,1):
+        x=-3.8 if side<0 else 3.8; un='left_upper_arm' if side<0 else 'right_upper_arm'; ln='left_lower_arm' if side<0 else 'right_lower_arm'
+        u=m.bone(un,(x,8.0,0),'body'); _c(u,(x-2.0 if side<0 else x,6.6,-.7),(2.2,1.0,1.4),'metal_light'); _c(u,(x-1.5 if side<0 else x+.5,5.7,-1.1),(1.0,2.0,2.2),'metal_dark')
+        l=m.bone(ln,(x,6.2,0),un); _c(l,(x-3.0 if side<0 else x,4.7,-.6),(3.0,1.0,1.2),'metal_light'); _c(l,(x-3.5 if side<0 else x+2.5,4.0,-1.0),(1.1,1.8,2.0),'metal_dark')
+    for side in (-1,1):
+        x=-2.7 if side<0 else .4; un='left_upper_leg' if side<0 else 'right_upper_leg'; ln='left_lower_leg' if side<0 else 'right_lower_leg'
+        u=m.bone(un,((-1.7 if side<0 else 1.7),2.7,0),'body'); _c(u,(x,.4,-.9),(2.4,2.7,1.8),'metal_light')
+        l=m.bone(ln,((-1.7 if side<0 else 1.7),.5,0),un); _c(l,(x+.2,-1.4,-.8),(2.0,2.0,1.6),'metal_dark'); _c(l,(x-.3,-1.7,-2.0),(3.0,.8,3.0),'shoe')
+    return m
+
+
+def hd_krombo():
+    m=_humanoid('killer_krombo',skin='grey',hair='darkgrey',shirt='darkgrey',pants='pants_dark',armored=True)
+    h=next(x for x in m.bones if x.name=='head'); b=next(x for x in m.bones if x.name=='body')
+    _c(h,(-4.9,18.7,-3.55),(9.8,.85,6.0),'red')
+    _c(h,(-3.2,20.0,-3.0),(6.4,1.6,5.0),'darkgrey')
+    _c(b,(-4.7,11.5,-2.5),(9.4,.8,5.0),'red')
+    _c(b,(3.5,6.8,-2.8),(1.2,4.6,.7),'red')
+    return scale_model(m,.96,1.0,.98)
+
+
+def hd_shorty_jr():
+    m=_humanoid('shorty_jr',skin='skin_shorty',hair='hair_shorty',shirt='blue',pants='pants_dark',worried=True,child=True)
+    h=next(x for x in m.bones if x.name=='head'); b=next(x for x in m.bones if x.name=='body')
+    _c(h,(-4.5,19.4,-2.1),(9.0,.8,4.2),'yellow')
+    _c(b,(-2.8,10.5,-2.45),(5.6,.7,.45),'yellow')
+    return scale_model(m,.78,.75,.82)
+
+
+def hd_validator():
+    m=_humanoid('validator_prime',skin='grey',hair='blue',shirt='blue',pants='darkgrey',coat=True,visor=True,armored=True,crown=True)
+    h=next(x for x in m.bones if x.name=='head'); b=next(x for x in m.bones if x.name=='body')
+    _c(h,(-5.0,20.7,-2.55),(10.0,.8,5.1),'yellow')
+    _c(b,(-5.0,11.8,-2.55),(10.0,.85,5.1),'yellow')
+    _c(b,(-1.35,8.4,-3.05),(2.7,1.5,.7),'white')
+    return scale_model(m,1.0,1.06,1.0)
+
+
+def hd_franky():
+    m=_humanoid('franky_lincolnstein',skin='skin_gerry',hair='darkgrey',shirt='coat',pants='pants_dark')
+    h=next(x for x in m.bones if x.name=='head'); b=next(x for x in m.bones if x.name=='body')
+    _c(h,(-4.6,20.7,-2.45),(9.2,.9,4.9),'darkgrey'); _c(h,(-3.0,21.6,-2.0),(6.0,5.3,4.0),'darkgrey')
+    _c(h,(-2.2,14.2,-4.05),(4.4,.45,.42),'darkgrey')
+    _c(b,(-4.1,11.6,-2.5),(8.2,.8,5.0),'red'); _c(b,(-.9,7.4,-2.8),(1.8,4.8,.55),'blue')
+    return scale_model(m,.98,1.03,.98)
+
+
+def hd_council_rich():
+    m=_humanoid('council_rich',skin='skin_rich',hair='hair_rich',shirt='citadel',pants='darkgrey',elder=True,coat=True,crown=True)
+    b=next(x for x in m.bones if x.name=='body')
+    _c(b,(-4.5,11.65,-2.6),(9.0,.85,5.2),'yellow')
+    _c(b,(-1.5,7.8,-3.0),(3.0,3.0,.7),'citadel')
+    return scale_model(m,.96,1.04,.97)
+
+
+# Rebuild every featured model from the sculpted style. These are the objects
+# seen by the already-wrapped make_pack() when packaging finally executes.
+CHAR_MODELS = [
+    hd_rich(), hd_shorty(False), hd_shorty(True), hd_bess(), hd_gerry(), hd_sundae(),
+    hd_bird_dude(), hd_scronchy(), hd_needs_it(), hd_professor_poop(), hd_captain_drizzle(),
+    hd_nightmare_larry(), hd_sprocket(), hd_consensus(), hd_cucumber(), hd_krombo(),
+    hd_shorty_jr(), hd_validator(), hd_franky(), hd_council_rich()
+]
+
+# Character-specific animation polish. Keep the same three named animations so
+# existing client entity references remain stable, but vary personality beats.
+_hd_base_animations = animations
+
+def animations(name:str):
+    obj=_hd_base_animations(name)
+    anims=obj['animations']
+    idle=anims[f'animation.keepinitkrispy_rs.{name}.idle'] if f'animation.keepinitkrispy_rs.{name}.idle' in anims else anims.get(f'animation.rs.{name}.idle')
+    walk=anims[f'animation.keepinitkrispy_rs.{name}.walk'] if f'animation.keepinitkrispy_rs.{name}.walk' in anims else anims.get(f'animation.rs.{name}.walk')
+    talk=anims[f'animation.keepinitkrispy_rs.{name}.talk'] if f'animation.keepinitkrispy_rs.{name}.talk' in anims else anims.get(f'animation.rs.{name}.talk')
+    if idle:
+        if name in ('shorty','shorty_jr'):
+            idle['bones']['body']={'rotation':{'0.0':[0,0,-1.5],'0.8':[1.2,0,1.5],'1.6':[0,0,-1.5]}}
+            idle['bones']['head']={'rotation':{'0.0':[1,-5,0],'.45':[-2,4,0],'.9':[2,-3,0],'1.6':[1,-5,0]}}
+        elif name in ('rich','council_rich'):
+            idle['bones']['head']={'rotation':{'0.0':[-2,-4,0],'.2':[1,7,0],'.35':[-2,-5,0],'2.4':[-2,-4,0]}}
+        elif name=='bird_dude':
+            idle['bones']['left_upper_arm']={'rotation':{'0.0':[0,0,-8],'1.2':[0,0,-16],'2.4':[0,0,-8]}}
+            idle['bones']['right_upper_arm']={'rotation':{'0.0':[0,0,8],'1.2':[0,0,16],'2.4':[0,0,8]}}
+        elif name=='cucumber_rich':
+            idle['bones']['left_lower_arm']={'rotation':{'0.0':[0,0,-8],'.6':[0,0,16],'1.2':[0,0,-8]}}
+            idle['bones']['right_lower_arm']={'rotation':{'0.0':[0,0,8],'.6':[0,0,-16],'1.2':[0,0,8]}}
+    if talk and name in ('gerry','professor_poop'):
+        talk['bones']['left_lower_arm']={'rotation':{'0.0':[-10,0,20],'.45':[-55,0,35],'.9':[-10,0,20]}}
+    return obj
+
+
+# Improve the Fabricator at the same visual gate: asymmetrical reactor silhouette,
+# stepped luminous aperture, pipes, control bank, coil towers, and service legs.
+def fabricator_geometry():
+    cubes=[]
+    def c(origin,size,uv=(0,0),rotation=None,pivot=None):
+        q={'origin':list(origin),'size':list(size),'uv':list(uv)}
+        if rotation is not None: q['rotation']=list(rotation)
+        if pivot is not None: q['pivot']=list(pivot)
+        cubes.append(q)
+    # layered hex-ish pedestal via offsets
+    c((-8,0,-8),(16,2,16)); c((-7,2,-7),(14,1,14)); c((-6,3,-6),(12,1,12))
+    # four reactor feet and lower service bays
+    for x,z in [(-6,-6),(4,-6),(-6,4),(4,4)]:
+        c((x,4,z),(2,8,2)); c((x-.5,4,z-.5),(3,1,3))
+    c((-5,4,-5),(10,6,10)); c((-4.3,10,-4.3),(8.6,3,8.6)); c((-5.3,13,-5.3),(10.6,1.2,10.6))
+    # inset side tanks / asymmetry
+    c((-7.2,6,-3),(2.2,5,6)); c((5.0,6,-3),(2.2,5,6))
+    c((-3,6,5.0),(6,5,2.2)); c((-3,6,-7.2),(6,5,2.2))
+    # front console bank with stepped screen hood / buttons
+    c((-4.6,5,-9.0),(9.2,4.5,2.0)); c((-3.8,9.5,-9.5),(7.6,2.0,1.2)); c((-3.0,11.5,-9.1),(6.0,1.0,.9))
+    for x in (-2.4,-.8,.8,2.4): c((x-.35,7.0,-9.65),(.7,.7,.5))
+    # upper aperture frame: stair-step oval, more recognizable than a slab
+    for x,y,w in [(-5.5,15,2.0),(-4.6,17,1.6),(-3.2,18.8,1.5),(-1.4,19.8,1.5),(.4,19.8,1.5),(2.2,18.8,1.5),(3.6,17,1.6),(4.5,15,2.0)]:
+        c((x,y,-2.2),(w,4.0 if y<18 else 2.8,4.4))
+    c((-4.0,14.5,-2.4),(8.0,1.2,4.8)); c((-3.0,20.8,-2.0),(6.0,1.2,4.0))
+    # inner glowing throat bars and field nodes
+    c((-3.3,16.0,-2.8),(6.6,.65,5.6)); c((-3.3,18.0,-2.8),(6.6,.65,5.6))
+    c((-3.3,16.6,-2.9),(.65,1.4,5.8)); c((2.65,16.6,-2.9),(.65,1.4,5.8))
+    # asymmetrical pipes and condenser stacks
+    c((-9.0,5,2.5),(2.0,9,2.0)); c((-9.6,13,2.0),(3.2,2.0,3.0)); c((-9.0,15,2.5),(2.0,3.5,2.0))
+    c((7.0,4,-4.5),(1.4,7,1.4)); c((7.0,10,-4.5),(3.0,1.4,1.4)); c((8.6,10,-4.5),(1.4,5,1.4))
+    # exposed cables / bus bars
+    for i,x in enumerate([-4.5,-2.7,-.9,.9,2.7,4.5]): c((x,12.9,5.5),(.45,3.2,.45))
+    # top warning beacon and antenna
+    c((-.9,22,-.9),(1.8,2.0,1.8)); c((-.3,24,-.3),(.6,3.0,.6)); c((-2.4,24.8,-.3),(4.8,.5,.6))
+    return {'format_version':'1.12.0','minecraft:geometry':[{'description':{'identifier':'geometry.keepinitkrispy_rs.reality_fabricator','texture_width':64,'texture_height':64,'visible_bounds_width':3.2,'visible_bounds_height':3.8,'visible_bounds_offset':[0,1.3,0]},'bones':[{'name':'machine','pivot':[0,0,0],'cubes':cubes}]}]}
+
+
+# More sophisticated machine material: panel breaks, glowing aperture strips,
+# hazard marks and screen glyphs while remaining a single small 64px texture.
+_hd_old_make_pack = make_pack
+
+def make_pack():
+    addon=_hd_old_make_pack()
+    # Finalizer already moved block texture into the creator/pack folder.
+    fabtex=RP/f'textures/blocks/{ASSET_CREATOR}/{ASSET_PACK}/reality_fabricator.png'
+    if fabtex.exists():
+        im=Image.new('RGBA',(64,64),(39,52,60,255)); d=ImageDraw.Draw(im)
+        for y in range(0,64,8): d.line((0,y,63,y),fill=(50,70,76,255),width=1)
+        for x in range(0,64,8): d.line((x,0,x,63),fill=(34,45,53,255),width=1)
+        # luminous field swatches live at UV 0 because block geometry uses uv 0,0;
+        # texture variation still gives faces material breakup in game.
+        for x in range(4,64,12): d.rectangle((x,3,x+2,60),fill=(101,231,173,255))
+        d.rectangle((10,10,53,19),fill=(15,30,35,255)); d.rectangle((14,12,49,17),fill=(104,243,187,255))
+        for x in range(12,49,6): d.rectangle((x,23,x+2,26),fill=(226,193,76,255))
+        for i in range(6):
+            x=6+i*9; d.polygon([(x,48),(x+5,48),(x+9,56),(x+4,56)],fill=(209,165,52,255))
+        im.save(fabtex)
+    # Re-seal because the texture was polished after the namespace finalizer.
+    if addon.exists(): addon.unlink()
+    with zipfile.ZipFile(addon,'w',zipfile.ZIP_DEFLATED) as z:
+        for pack in (BP,RP):
+            for f in pack.rglob('*'):
+                if f.is_file(): z.write(f,f.relative_to(OUT))
+    return addon
