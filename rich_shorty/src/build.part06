@@ -7,7 +7,7 @@
       im=Image.new('RGBA',(16,16),tuple(int(b[k:k+2],16) for k in (1,3,5))+(255,)); d=ImageDraw.Draw(im); ac=tuple(int(a[k:k+2],16) for k in (1,3,5))+(255,)
       for i in range(7):
         x=(i*5+3)%16;y=(i*9+2)%16;d.rectangle((x,y,min(15,x+2),min(15,y+2)),fill=ac)
-      im.save(RP/f'textures/blocks/{tex}.png'); terrain[tex]={'textures':f'textures/blocks/{tex}'}
+      im.save(RP/f'textures/blocks/{tex}.png'); terrain[tex]={'textures':[f'textures/blocks/{tex}']}
     # Reality Fabricator is a custom voxel machine, never a cube placeholder.
     jwrite(RP/'models/blocks/reality_fabricator.geo.json',fabricator_geometry())
     fab=block_json('rs:reality_fabricator','reality_fabricator',destroy=3,component='rs:fabricator',light=8)
