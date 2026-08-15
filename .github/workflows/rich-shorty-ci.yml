@@ -11,7 +11,7 @@ on:
 jobs:
   build-and-validate:
     runs-on: ubuntu-22.04
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -28,7 +28,8 @@ jobs:
           python -m pip install --disable-pip-version-check pillow
           python rich_shorty/build.py
           node --check rich_shorty/dist/RichShorty_BP/scripts/main.js
-          unzip -t rich_shorty/dist/Rich_and_Shorty_v0.1.0.mcaddon
+          unzip -t rich_shorty/dist/Rich_and_Shorty_v0.1.0.mcaddon | tee rich_shorty/dist/archive.log
+          sha256sum rich_shorty/dist/Rich_and_Shorty_v0.1.0.mcaddon | tee rich_shorty/dist/sha256.txt
           mkdir -p /tmp/rich-shorty-project
           cp -R rich_shorty/dist/RichShorty_BP /tmp/rich-shorty-project/BP
           cp -R rich_shorty/dist/RichShorty_RP /tmp/rich-shorty-project/RP
@@ -40,9 +41,123 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mct version
+          mct version | tee rich_shorty/dist/mct-version.log
           python rich_shorty/validate_with_creator_tools.py /tmp/rich-shorty-project --suite all --fail-on-warnings --log rich_shorty/dist/mct-all.log
           python rich_shorty/validate_with_creator_tools.py /tmp/rich-shorty-project --suite addon --fail-on-warnings --log rich_shorty/dist/mct-addon.log
+
+      - name: Download current official Bedrock Dedicated Server
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/rich-shorty-bds
+          cd /tmp/rich-shorty-bds
+          api='https://net-secondary.web.minecraft-services.net/api/v1.0/download/links'
+          curl -fsSL "$api" -o download-links.json
+          url=$(jq -r '.result.links[] | select(.downloadType=="serverBedrockLinux") | .downloadUrl' download-links.json | head -1)
+          test -n "$url" && test "$url" != "null"
+          echo "$url" | tee /tmp/rich-shorty-bds-download-url.txt
+          curl -fL --retry 3 --retry-delay 2 -A 'Mozilla/5.0' "$url" -o bedrock-server.zip
+          mkdir bds
+          unzip -q bedrock-server.zip -d bds
+          test -x bds/bedrock_server
+
+      - name: Configure isolated real Bedrock world
+        shell: bash
+        run: |
+          set -euo pipefail
+          BDS=/tmp/rich-shorty-bds/bds
+          WORLD="$BDS/worlds/RichShortyReleaseGate"
+          mkdir -p "$BDS/behavior_packs/RichShorty_BP" "$BDS/resource_packs/RichShorty_RP" "$WORLD"
+          cp -a /tmp/rich-shorty-project/BP/. "$BDS/behavior_packs/RichShorty_BP/"
+          cp -a /tmp/rich-shorty-project/RP/. "$BDS/resource_packs/RichShorty_RP/"
+          cat > "$WORLD/world_behavior_packs.json" <<'JSON'
+          [
+            {"pack_id":"5ef1afb2-dd53-578c-9b79-15c1131f81b6","version":[0,1,0]}
+          ]
+          JSON
+          cat > "$WORLD/world_resource_packs.json" <<'JSON'
+          [
+            {"pack_id":"bfc76487-f44c-5c28-8c0f-c99793542d96","version":[0,1,0]}
+          ]
+          JSON
+          sed -i 's/^level-name=.*/level-name=RichShortyReleaseGate/' "$BDS/server.properties"
+          sed -i 's/^online-mode=.*/online-mode=false/' "$BDS/server.properties"
+          sed -i 's/^allow-list=.*/allow-list=false/' "$BDS/server.properties"
+          sed -i 's/^allow-cheats=.*/allow-cheats=true/' "$BDS/server.properties"
+          sed -i 's/^content-log-console-output-enabled=.*/content-log-console-output-enabled=true/' "$BDS/server.properties"
+
+      - name: Real Bedrock boot, registry, and 20-character summon gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /tmp/rich-shorty-bds/bds
+          {
+            sleep 10
+            echo 'tickingarea add circle 0 80 0 2 rs_release_ci true'
+            sleep 5
+            echo 'setblock 0 80 5 rs:reality_fabricator'
+            echo 'testforblock 0 80 5 rs:reality_fabricator'
+            echo 'setblock 2 80 5 rs:glorp_ore'
+            echo 'setblock 4 80 5 rs:fizzium_ore'
+            echo 'setblock 6 80 5 rs:chronodust_cluster'
+            echo 'setblock 8 80 5 rs:scrap_node'
+            for id in rich shorty evil_shorty bess gerry sundae bird_dude scronchy mr_needs_it professor_poop captain_drizzle nightmare_larry sprocket_face consensus cucumber_rich killer_krombo shorty_jr validator_prime franky_lincolnstein council_rich; do
+              echo "summon rs:$id 0 80 0"
+              sleep 0.4
+              echo "testfor @e[type=rs:$id]"
+              sleep 0.2
+            done
+            sleep 2
+            echo 'stop'
+          } | timeout --signal=INT --kill-after=5s 70s env LD_LIBRARY_PATH=. ./bedrock_server 2>&1 | tee /tmp/rich-shorty-bds.log || code=$?
+          code=${code:-0}
+          echo "BDS process exit code: $code" | tee -a /tmp/rich-shorty-bds.log
+
+          grep -F 'Server started.' /tmp/rich-shorty-bds.log
+          grep -F 'Added ticking area' /tmp/rich-shorty-bds.log
+          summons=$(grep -c 'Object successfully summoned' /tmp/rich-shorty-bds.log || true)
+          echo "Successful entity summons: $summons"
+          test "$summons" -ge 20
+
+          if grep -F 'Unable to summon object' /tmp/rich-shorty-bds.log; then
+            echo 'FAIL: at least one Rich & Shorty entity could not be summoned.'
+            exit 1
+          fi
+          if grep -E '\[[^]]+ ERROR\]' /tmp/rich-shorty-bds.log; then
+            echo 'FAIL: Bedrock emitted a content/runtime ERROR.'
+            exit 1
+          fi
+          if grep -E 'Script.*(Error|Exception)|Unhandled.*(Error|Exception)' /tmp/rich-shorty-bds.log; then
+            echo 'FAIL: Bedrock script runtime emitted an error.'
+            exit 1
+          fi
+          if ! grep -E 'Successfully set the block|Block placed|Found.*rs:reality_fabricator|testforblock' /tmp/rich-shorty-bds.log >/dev/null; then
+            echo 'FAIL: custom Reality Fabricator registry test produced no success evidence.'
+            exit 1
+          fi
+          cp /tmp/rich-shorty-bds.log rich_shorty/dist/bds-runtime.log
+
+      - name: Write sealed validation summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo 'RICH & SHORTY v0.1.0 RELEASE GATE'
+            echo '=================================='
+            echo 'Local deterministic validation: PASS'
+            cat rich_shorty/dist/validation_report.json
+            echo
+            echo 'Mojang Creator Tools all suite: PASS, fail-closed, 0 errors / 0 warnings'
+            echo 'Mojang Creator Tools addon suite: PASS, fail-closed, 0 errors / 0 warnings'
+            echo 'Bedrock Dedicated Server: PASS'
+            grep -m1 'Version:' rich_shorty/dist/bds-runtime.log || true
+            echo '20/20 featured cast entities: summon-tested'
+            echo 'Reality Fabricator registry: server-tested'
+            echo 'Archive CRC: PASS'
+            cat rich_shorty/dist/sha256.txt
+            echo
+            echo 'BOUNDARY: client-side RP rendering, controller UI interaction, and PS5/Realm behavior remain gated until the visual approval build is ready.'
+          } | tee rich_shorty/dist/release-gate.txt
 
       - name: Upload tested add-on and reports
         uses: actions/upload-artifact@v4
@@ -53,4 +168,18 @@ jobs:
             rich_shorty/dist/validation_report.json
             rich_shorty/dist/story_bible.json
             rich_shorty/dist/mct-*.log
+            rich_shorty/dist/archive.log
+            rich_shorty/dist/sha256.txt
+            rich_shorty/dist/bds-runtime.log
+            rich_shorty/dist/release-gate.txt
           if-no-files-found: error
+
+      - name: Upload diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Rich-and-Shorty-failure-diagnostics
+          path: |
+            rich_shorty/dist
+            /tmp/rich-shorty-bds.log
+          if-no-files-found: warn
