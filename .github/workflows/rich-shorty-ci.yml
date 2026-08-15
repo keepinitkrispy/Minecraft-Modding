@@ -111,7 +111,6 @@ jobs:
             # cells solid support so placement-rule blocks (fire/rail/etc.) do
             # not create false runtime errors unrelated to their identifiers.
             echo 'fill 20 79 20 35 79 23 minecraft:stone'
-            echo 'fill 20 80 20 35 80 23 minecraft:air'
             i=0
             for bid in \
               moss_block warped_stem warped_wart_block shroomlight slime water \
