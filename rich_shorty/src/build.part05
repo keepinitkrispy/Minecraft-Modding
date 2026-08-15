@@ -1,4 +1,6 @@
-    p.addTag("rs_started"); give(p,"rs:busted_portal_remote",1); give(p,"rs:reality_fabricator",1);
+    p.addTag("rs_started");
+    p.setDynamicProperty('rs:home_x',p.location.x); p.setDynamicProperty('rs:home_y',p.location.y); p.setDynamicProperty('rs:home_z',p.location.z);
+    give(p,"rs:busted_portal_remote",1); give(p,"rs:reality_fabricator",1);
     system.runTimeout(()=>{ msg(p,"A busted portal remote and a Reality Fabricator have appeared in your pockets. Rich insists this counts as onboarding."); try{p.dimension.spawnEntity('rs:rich',{x:p.location.x+3,y:p.location.y,z:p.location.z+2});p.dimension.spawnEntity('rs:shorty',{x:p.location.x+5,y:p.location.y,z:p.location.z+2});}catch{} },20);
   }
 });
