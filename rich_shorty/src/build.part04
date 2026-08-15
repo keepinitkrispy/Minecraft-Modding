@@ -41,9 +41,14 @@ function buildCitadel(dim,p){
 
 async function travelMenu(player){
   const f=new ActionFormData().title("Busted Portal Remote").body("Pick a reality. Each one has abundant junk the Fabricator wants.");
+  f.button("Garage / Home");
   for(const k of ["glorp","fizz","chrono","scrap","citadel"]) f.button(ZONES[k].label);
   const r=await f.show(player); if(r.canceled||r.selection===undefined)return;
-  const key=["glorp","fizz","chrono","scrap","citadel"][r.selection];
+  const key=["home","glorp","fizz","chrono","scrap","citadel"][r.selection];
+  if(key==="home"){
+    const home={x:Number(player.getDynamicProperty('rs:home_x')??player.location.x),y:Number(player.getDynamicProperty('rs:home_y')??player.location.y),z:Number(player.getDynamicProperty('rs:home_z')??player.location.z)};
+    player.teleport(home,{dimension:player.dimension}); msg(player,"Back to the garage. The machine is probably still violating three zoning laws."); return;
+  }
   if(key==="citadel" && countItem(player,"rs:citadel_token")<3){ msg(player,"Citadel-ish customs requires 3 Citadel Tokens. Apparently tyranny has a punch card."); return; }
   const z=ZONES[key]; buildZone(player.dimension,key); player.teleport(z.pos,{dimension:player.dimension});
   msg(player,`Portal stapled to ${z.label}. Try not to lick anything.`);
