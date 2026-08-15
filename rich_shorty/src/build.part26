@@ -1,0 +1,101 @@
+
+# ---------------------------------------------------------------------------
+# RETAIL BEDROCK ANIMATION COMPATIBILITY
+# Android retail Bedrock rejected animation keyframe object keys written as
+# ".2", ".35", ".45", ".6", and ".9" even though earlier validation accepted
+# the files. Normalize every leading-decimal keyframe to an explicit zero form
+# ("0.2", etc.) in the shipped RP and make the exact retail failure impossible
+# to regress. Also assert that both shipped manifests remain format_version 2.
+# ---------------------------------------------------------------------------
+import re as _retail_re
+
+_retail_animation_make_pack = make_pack
+_retail_animation_validate = validate
+_retail_keyframe = _retail_re.compile(r'^\.([0-9]+)$')
+
+
+def _normalize_animation_keyframes(value):
+    if isinstance(value, list):
+        return [_normalize_animation_keyframes(v) for v in value]
+    if not isinstance(value, dict):
+        return value
+    out = {}
+    for key, child in value.items():
+        new_key = key
+        if isinstance(key, str):
+            match = _retail_keyframe.fullmatch(key)
+            if match:
+                new_key = '0.' + match.group(1)
+        out[new_key] = _normalize_animation_keyframes(child)
+    return out
+
+
+def make_pack():
+    addon = _retail_animation_make_pack()
+
+    # Fix the generated shipping animation JSON, not just the source examples.
+    for path in sorted((RP/'animations').glob('*.json')):
+        obj = json.loads(path.read_text(encoding='utf-8'))
+        obj = _normalize_animation_keyframes(obj)
+        # 1.10.0 is a supported animation document format and is already the
+        # format used by the generated client animation files.
+        obj['format_version'] = '1.10.0'
+        jwrite(path, obj)
+
+    # Keep the deployment capsule aligned with the current content format used
+    # by the other generated items; this also removes Creator Tools' stale-patch
+    # recommendation without changing item behavior.
+    capsule = BP/'items/garage_deployment_capsule.json'
+    if capsule.exists():
+        obj = json.loads(capsule.read_text(encoding='utf-8'))
+        obj['format_version'] = '1.26.40'
+        jwrite(capsule, obj)
+
+    # The previous make_pack sealed the archive before this retail cleanup.
+    # Reseal so the exact imported artifact contains the corrected files.
+    if addon.exists(): addon.unlink()
+    with zipfile.ZipFile(addon,'w',zipfile.ZIP_DEFLATED) as zf:
+        for pack in (BP,RP):
+            for f in pack.rglob('*'):
+                if f.is_file(): zf.write(f,f.relative_to(OUT))
+    return addon
+
+
+def validate(addon:Path):
+    report = _retail_animation_validate(addon)
+    errors = list(report.get('errors', [])); checks = int(report.get('checks', 0))
+
+    # Retail-client keyframe grammar gate: no leading-decimal timestamp keys.
+    bad = []
+    for path in sorted((RP/'animations').glob('*.json')):
+        obj = json.loads(path.read_text(encoding='utf-8'))
+        checks += 1
+        def walk(v, trail=''):
+            if isinstance(v, dict):
+                for k, child in v.items():
+                    if isinstance(k, str) and _retail_keyframe.fullmatch(k):
+                        bad.append(f'{path}: {trail}/{k}')
+                    walk(child, f'{trail}/{k}')
+            elif isinstance(v, list):
+                for i, child in enumerate(v): walk(child, f'{trail}/{i}')
+        walk(obj)
+    if bad:
+        errors.extend('retail animation keyframe regression: '+x for x in bad)
+
+    # The generic Android "Pack Manifest version 0" warning must never be ours.
+    # Both generated Rich & Shorty manifests are required to declare v2.
+    for path in (BP/'manifest.json', RP/'manifest.json'):
+        checks += 1
+        obj = json.loads(path.read_text(encoding='utf-8'))
+        if obj.get('format_version') != 2:
+            errors.append(f'retail manifest regression: {path} format_version is {obj.get("format_version")!r}, expected 2')
+
+    report['checks'] = checks
+    report['errors'] = errors
+    report['status'] = 'PASS' if not errors else 'FAIL'
+    gates = list(report.get('feature_regression_gates', []))
+    for gate in ('retail_animation_explicit_zero_keyframes','manifest_format_version_2'):
+        if gate not in gates: gates.append(gate)
+    report['feature_regression_gates'] = gates
+    jwrite(OUT/'validation_report.json', report)
+    return report
