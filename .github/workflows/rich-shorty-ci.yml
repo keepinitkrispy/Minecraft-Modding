@@ -90,7 +90,7 @@ jobs:
           sed -i 's/^allow-cheats=.*/allow-cheats=true/' "$BDS/server.properties"
           sed -i 's/^content-log-console-output-enabled=.*/content-log-console-output-enabled=true/' "$BDS/server.properties"
 
-      - name: Real Bedrock boot, registry, and 20-character summon gate
+      - name: Real Bedrock boot, registry, palette, and 20-character summon gate
         shell: bash
         run: |
           set -euo pipefail
@@ -105,6 +105,28 @@ jobs:
             echo 'setblock 4 80 5 keepinitkrispy_rs:fizzium_ore'
             echo 'setblock 6 80 5 keepinitkrispy_rs:chronodust_cluster'
             echo 'setblock 8 80 5 keepinitkrispy_rs:scrap_node'
+
+            # Every vanilla block identifier used by reality construction or a
+            # world-tool rewrite is sent through the same current Bedrock parser.
+            # Some blocks have placement rules, so success placement is not
+            # required here; unknown/syntax-invalid identifiers are fatal below.
+            echo 'say RS_ENV_BLOCK_SMOKE_BEGIN'
+            i=0
+            for bid in \
+              moss_block warped_stem warped_wart_block shroomlight slime water lily_pad \
+              red_sand basalt orange_terracotta magma fire red_sandstone terracotta \
+              packed_ice blue_ice calcite amethyst_block sea_lantern end_rod \
+              tuff exposed_cut_copper iron_block redstone_lamp cut_copper chain \
+              deepslate_tiles iron_bars rail smooth_quartz oxidized_cut_copper \
+              dark_prismarine quartz_bricks crying_obsidian polished_deepslate \
+              smooth_stone lodestone scaffolding gold_block honey_block obsidian sponge bookshelf; do
+              x=$((20 + (i % 16)))
+              z=$((20 + (i / 16)))
+              echo "setblock $x 80 $z minecraft:$bid"
+              i=$((i + 1))
+            done
+            echo 'say RS_ENV_BLOCK_SMOKE_END'
+
             for id in rich shorty evil_shorty bess gerry sundae bird_dude scronchy mr_needs_it professor_poop captain_drizzle nightmare_larry sprocket_face consensus cucumber_rich killer_krombo shorty_jr validator_prime franky_lincolnstein council_rich; do
               echo "summon keepinitkrispy_rs:$id 0 80 0"
               sleep 0.4
@@ -113,12 +135,14 @@ jobs:
             done
             sleep 2
             echo 'stop'
-          } | timeout --signal=INT --kill-after=5s 70s env LD_LIBRARY_PATH=. ./bedrock_server 2>&1 | tee /tmp/rich-shorty-bds.log || code=$?
+          } | timeout --signal=INT --kill-after=5s 75s env LD_LIBRARY_PATH=. ./bedrock_server 2>&1 | tee /tmp/rich-shorty-bds.log || code=$?
           code=${code:-0}
           echo "BDS process exit code: $code" | tee -a /tmp/rich-shorty-bds.log
 
           grep -F 'Server started.' /tmp/rich-shorty-bds.log
           grep -F 'Added ticking area' /tmp/rich-shorty-bds.log
+          grep -F 'RS_ENV_BLOCK_SMOKE_BEGIN' /tmp/rich-shorty-bds.log
+          grep -F 'RS_ENV_BLOCK_SMOKE_END' /tmp/rich-shorty-bds.log
           summons=$(grep -c 'Object successfully summoned' /tmp/rich-shorty-bds.log || true)
           echo "Successful entity summons: $summons"
           test "$summons" -ge 20
@@ -133,6 +157,10 @@ jobs:
           fi
           if grep -E 'Script.*(Error|Exception)|Unhandled.*(Error|Exception)' /tmp/rich-shorty-bds.log; then
             echo 'FAIL: Bedrock script runtime emitted an error.'
+            exit 1
+          fi
+          if grep -E 'Unknown block|Block type .* not found|Syntax error:.*minecraft:' /tmp/rich-shorty-bds.log; then
+            echo 'FAIL: at least one reality/tool vanilla block identifier is not accepted by current Bedrock.'
             exit 1
           fi
           if ! grep -E 'Successfully set the block|Block placed|Found.*keepinitkrispy_rs:reality_fabricator|testforblock' /tmp/rich-shorty-bds.log >/dev/null; then
@@ -157,6 +185,7 @@ jobs:
             grep -m1 'Version:' rich_shorty/dist/bds-runtime.log || true
             echo '20/20 featured cast entities: summon-tested'
             echo 'Reality Fabricator registry: server-tested'
+            echo 'Reality/tool vanilla block palette: parser smoke-tested on real Bedrock'
             echo 'Namespace: keepinitkrispy_rs'
             echo 'Archive CRC: PASS'
             cat rich_shorty/dist/sha256.txt
