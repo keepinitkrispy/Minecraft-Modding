@@ -1,0 +1,282 @@
+
+# ---------------------------------------------------------------------------
+# DEPLOYABLE STARTER BASE / OPENING HUB
+# The adventure should begin from an authored place, not an arbitrary world
+# coordinate. A fresh player receives one Garage Deployment Capsule. Dropping
+# it consumes the capsule, gives a five-second evacuation countdown, constructs
+# the house + garage + underground reality lab, places the Fabricator in the
+# lab, moves the Remote's Home destination to the new garage, and introduces
+# Rich + Shorty only after the hub exists.
+# ---------------------------------------------------------------------------
+
+# Fresh onboarding now gives the Remote + deployable base capsule. The
+# Fabricator is installed by the base builder instead of arriving loose in the
+# player's inventory.
+SCRIPT = SCRIPT.replace(
+    'give(p,"rs:busted_portal_remote",1); give(p,"rs:reality_fabricator",1);',
+    'give(p,"rs:busted_portal_remote",1); give(p,"rs:garage_deployment_capsule",1);'
+)
+SCRIPT = SCRIPT.replace(
+    'system.runTimeout(()=>{ msg(p,"A busted portal remote and a Reality Fabricator have appeared in your pockets. Rich insists this counts as onboarding."); try{p.dimension.spawnEntity(\'rs:rich\',{x:p.location.x+3,y:p.location.y,z:p.location.z+2});p.dimension.spawnEntity(\'rs:shorty\',{x:p.location.x+5,y:p.location.y,z:p.location.z+2});}catch{} },20);',
+    'system.runTimeout(()=>{ msg(p,"§6BASE DEPLOYMENT§r: Rich left you a Busted Portal Remote and one Garage Deployment Capsule. Drop the capsule where you want your permanent garage. When it starts counting down, back up."); },20);'
+)
+
+SCRIPT += r'''
+
+function garageDistance(a,b){
+  const dx=a.x-b.x, dy=a.y-b.y, dz=a.z-b.z;
+  return Math.sqrt(dx*dx+dy*dy+dz*dz);
+}
+
+function garageCountdown(player, anchor){
+  const labels=[5,4,3,2,1];
+  labels.forEach((n,i)=>system.runTimeout(()=>{
+    msg(player,`§cGARAGE DEPLOYMENT: ${n}§r — clear the construction footprint.`);
+  },i*20));
+  system.runTimeout(()=>buildStarterBase(player,anchor),100);
+}
+
+function buildStarterBase(player,a){
+  const d=player.dimension;
+  const x=a.x, y=a.y, z=a.z;
+
+  // Safe observation pad outside the construction footprint. Even if the
+  // player ignored every warning, move them clear before the first bulldozer
+  // command so deployment cannot trap them inside a wall.
+  fillb(d,x-2,y-1,z-16,x+2,y-1,z-12,'minecraft:smooth_stone');
+  fillb(d,x-2,y,z-16,x+2,y+4,z-12,'minecraft:air');
+  try{ player.teleport({x:x+.5,y:y+1,z:z-14+.5},{dimension:d}); }catch{}
+
+  msg(player,'§6DEPLOYING GARAGE§r: Local zoning laws have been temporarily disabled.');
+
+  // Clear only the authored footprint. The lab is excavated separately below.
+  fillb(d,x-14,y,z-10,x+14,y+11,z+10,'minecraft:air');
+
+  // Shared foundation and driveway.
+  fillb(d,x-13,y-1,z-9,x+13,y-1,z+9,'minecraft:stone_bricks');
+  fillb(d,x+3,y-1,z-15,x+12,y-1,z-9,'minecraft:smooth_stone');
+  for(let dz=-15;dz<=-10;dz+=2) fillb(d,x+4,y,z+dz,x+11,y,z+dz,'minecraft:light_gray_concrete');
+
+  // Main house: compact modern suburban shell with actual readable windows,
+  // an open front entrance, warm wood floor, and utility furniture.
+  fillb(d,x-13,y,z-9,x+1,y+6,z+9,'minecraft:white_concrete hollow');
+  fillb(d,x-12,y,z-8,x,y,z+8,'minecraft:oak_planks');
+  fillb(d,x-8,y+1,z-9,x-6,y+3,z-9,'minecraft:air');
+  fillb(d,x-12,y+2,z-9,x-10,y+4,z-9,'minecraft:glass');
+  fillb(d,x-4,y+2,z-9,x-1,y+4,z-9,'minecraft:glass');
+  fillb(d,x-13,y+2,z-5,x-13,y+4,z-1,'minecraft:glass');
+  fillb(d,x+1,y+1,z+1,x+1,y+3,z+3,'minecraft:air');
+
+  // House roof and exterior trim. Broad clean masses are deliberate; this is
+  // a Minecraft build, not a cube-count stunt.
+  fillb(d,x-14,y+7,z-10,x+2,y+7,z+10,'minecraft:dark_oak_planks');
+  fillb(d,x-11,y+8,z-7,x-1,y+8,z+7,'minecraft:dark_oak_planks');
+  fillb(d,x-13,y+6,z-9,x+1,y+6,z-9,'minecraft:dark_oak_planks');
+
+  // Attached garage: industrial shell, large open vehicle door, strip lights,
+  // and a service opening into the house.
+  fillb(d,x+2,y,z-9,x+13,y+6,z+9,'minecraft:light_gray_concrete hollow');
+  fillb(d,x+3,y,z-8,x+12,y,z+8,'minecraft:smooth_stone');
+  fillb(d,x+4,y+1,z-9,x+11,y+4,z-9,'minecraft:air');
+  fillb(d,x+4,y+5,z-9,x+11,y+5,z-9,'minecraft:iron_block');
+  fillb(d,x+13,y+2,z-5,x+13,y+4,z-1,'minecraft:glass');
+  fillb(d,x+2,y+1,z+1,x+2,y+3,z+3,'minecraft:air');
+  fillb(d,x+2,y+7,z-10,x+14,y+7,z+10,'minecraft:gray_concrete');
+  for(let zz=-6;zz<=6;zz+=4) fillb(d,x+5,y+6,z+zz,x+10,y+6,z+zz,'minecraft:sea_lantern');
+
+  // Useful but intentionally lightweight home furnishing.
+  setb(d,x-10,y+1,z+5,'minecraft:crafting_table');
+  setb(d,x-8,y+1,z+5,'minecraft:furnace');
+  fillb(d,x-5,y+1,z+7,x-1,y+3,z+7,'minecraft:bookshelf');
+  setb(d,x-11,y+1,z-5,'minecraft:chest');
+  setb(d,x+5,y+1,z+6,'minecraft:crafting_table');
+  setb(d,x+7,y+1,z+6,'minecraft:stonecutter');
+  setb(d,x+9,y+1,z+6,'minecraft:anvil');
+
+  // Underground reality lab: excavate first, then build a sealed shell. The
+  // finished interior is seven blocks tall and large enough to use fabricated
+  // world tools without immediately destroying the entire room.
+  fillb(d,x-12,y-12,z-9,x+12,y-3,z+9,'minecraft:air');
+  fillb(d,x-11,y-11,z-8,x+11,y-3,z+8,'minecraft:polished_deepslate hollow');
+  fillb(d,x-10,y-10,z-7,x+10,y-10,z+7,'minecraft:smooth_quartz');
+  fillb(d,x-10,y-4,z-7,x+10,y-4,z+7,'minecraft:gray_concrete');
+
+  // Ceiling lighting grid and cyan laboratory accents.
+  for(let xx=-8;xx<=8;xx+=4){
+    fillb(d,x+xx,y-4,z-5,x+xx,y-4,z+5,'minecraft:sea_lantern');
+  }
+  fillb(d,x-10,y-9,z-7,x-10,y-5,z+7,'minecraft:dark_prismarine');
+  fillb(d,x+10,y-9,z-7,x+10,y-5,z+7,'minecraft:dark_prismarine');
+
+  // Central Fabricator bay. This is the same approved custom Fabricator block;
+  // deployment merely gives it a permanent authored home.
+  fillb(d,x-3,y-10,z-2,x+3,y-10,z+3,'minecraft:polished_deepslate');
+  fillb(d,x-2,y-9,z-1,x+2,y-9,z+2,'minecraft:smooth_stone');
+  setb(d,x,y-8,z,'rs:reality_fabricator');
+  for(const [dx,dz] of [[-4,-3],[4,-3],[-4,4],[4,4]]) setb(d,x+dx,y-9,z+dz,'minecraft:sea_lantern');
+
+  // Portal/test arch at the rear of the lab, matching the visual language used
+  // in the four realities without pretending to be a functional Nether portal.
+  fillb(d,x-8,y-9,z+6,x-8,y-4,z+6,'minecraft:crying_obsidian');
+  fillb(d,x-3,y-9,z+6,x-3,y-4,z+6,'minecraft:crying_obsidian');
+  fillb(d,x-8,y-4,z+6,x-3,y-4,z+6,'minecraft:crying_obsidian');
+  fillb(d,x-7,y-8,z+6,x-4,y-5,z+6,'minecraft:glass');
+
+  // Work benches / diagnostic banks around the perimeter.
+  for(let zz=-5;zz<=3;zz+=2){
+    fillb(d,x+6,y-9,z+zz,x+9,y-8,z+zz,'minecraft:iron_block');
+    setb(d,x+8,y-7,z+zz,'minecraft:redstone_lamp');
+  }
+  fillb(d,x-9,y-9,z-5,x-6,y-8,z-5,'minecraft:cut_copper');
+  fillb(d,x-9,y-9,z-3,x-6,y-8,z-3,'minecraft:iron_block');
+  fillb(d,x-9,y-9,z-1,x-6,y-8,z-1,'minecraft:dark_prismarine');
+
+  // Garage-to-lab access: protected 3x3 service shaft with a supported
+  // scaffolding column. No fragile stair-state syntax is required on Bedrock.
+  fillb(d,x+8,y-9,z+4,x+10,y+2,z+6,'minecraft:air');
+  fillb(d,x+9,y-10,z+5,x+9,y+1,z+5,'minecraft:scaffolding');
+  fillb(d,x+7,y,z+3,x+7,y+2,z+7,'minecraft:iron_bars');
+  fillb(d,x+11,y,z+3,x+11,y+2,z+7,'minecraft:iron_bars');
+  fillb(d,x+8,y,z+7,x+10,y+2,z+7,'minecraft:iron_bars');
+  setb(d,x+9,y-9,z+4,'minecraft:sea_lantern');
+
+  // Save the authored garage as Home. Portal returns put the player inside the
+  // garage, one turn away from the lab shaft and Fabricator.
+  player.setDynamicProperty('rs:home_x',x+6.5);
+  player.setDynamicProperty('rs:home_y',y+1);
+  player.setDynamicProperty('rs:home_z',z-1.5);
+  player.setDynamicProperty('rs:base_deployed',true);
+  player.setDynamicProperty('rs:base_deploying',false);
+
+  // Bring the leads in only after the place they supposedly work from exists.
+  try{
+    d.spawnEntity('rs:rich',{x:x+4.5,y:y+1,z:z+.5});
+    d.spawnEntity('rs:shorty',{x:x+6.5,y:y+1,z:z+2.5});
+  }catch{}
+
+  msg(player,'§aGARAGE ONLINE§r: House, garage, and definitely-not-permitted underground lab deployed. Garage / Home on the Portal Remote now returns here.');
+  system.runTimeout(()=>msg(player,'Rich: I compressed a suburban property and an illegal reality lab into a throwable capsule. That is called vertical integration.'),20);
+  system.runTimeout(()=>msg(player,'Shorty: We were inside that thing, Rich?'),45);
+  system.runTimeout(()=>msg(player,'§6ACT I — WARRANTY VOID§r: Go down the garage service shaft, inspect the Reality Fabricator, then use the Portal Remote to find whatever the machine demands.'),70);
+}
+
+// Dropping the custom capsule is the intentional deployment gesture. The item
+// entity itself supplies the exact player-selected build coordinate.
+world.afterEvents.entitySpawn.subscribe(e=>{
+  const ent=e.entity;
+  if(ent.typeId!=='minecraft:item') return;
+  system.run(()=>{
+    let stack;
+    try{ stack=ent.getComponent('minecraft:item')?.itemStack; }catch{return;}
+    if(stack?.typeId!=='rs:garage_deployment_capsule') return;
+
+    let nearby=[];
+    try{ nearby=ent.dimension.getPlayers({location:ent.location,maxDistance:10}); }catch{return;}
+    if(!nearby.length) return;
+    let player=nearby[0];
+    for(const q of nearby){ if(garageDistance(q.location,ent.location)<garageDistance(player.location,ent.location)) player=q; }
+
+    if(Boolean(player.getDynamicProperty('rs:base_deployed')??false)){
+      msg(player,'Your Garage Deployment Capsule refuses to create a second mortgage. This base is already deployed.');
+      return;
+    }
+    if(Boolean(player.getDynamicProperty('rs:base_deploying')??false)) return;
+
+    const anchor={x:Math.floor(ent.location.x),y:Math.floor(ent.location.y)-1,z:Math.floor(ent.location.z)};
+    player.setDynamicProperty('rs:base_deploying',true);
+    try{ent.remove();}catch{}
+    msg(player,'§eDEPLOYMENT CAPSULE ARMED§r: Five seconds. Back up. The underground portion is not asking permission from the terrain.');
+    garageCountdown(player,anchor);
+  });
+});
+'''
+
+# The item is added after the existing finalized pack is generated because the
+# original item table predates this feature. Write it directly in final namespace
+# form, extend the already-namespaced item atlas, then reseal the exact artifact.
+_garage_base_make_pack = make_pack
+
+def make_pack():
+    addon=_garage_base_make_pack()
+
+    item_id=f'{FINAL_NS}:garage_deployment_capsule'
+    icon_key=f'{FINAL_NS}_garage_deployment_capsule'
+    item_obj={
+      'format_version':'1.26.0',
+      'minecraft:item':{
+        'description':{'identifier':item_id,'menu_category':{'category':'items'}},
+        'components':{
+          'minecraft:icon':icon_key,
+          'minecraft:display_name':{'value':'Garage Deployment Capsule'},
+          'minecraft:max_stack_size':1
+        }
+      }
+    }
+    jwrite(BP/'items/garage_deployment_capsule.json',item_obj)
+
+    icon_path=RP/f'textures/items/{ASSET_CREATOR}/{ASSET_PACK}/garage_deployment_capsule.png'
+    icon_path.parent.mkdir(parents=True,exist_ok=True)
+    make_item_icon(icon_path,'#28363f','#73f0b2','remote')
+
+    atlas_path=RP/'textures/item_texture.json'
+    atlas=json.loads(atlas_path.read_text(encoding='utf-8'))
+    atlas.setdefault('texture_data',{})[icon_key]={
+      'textures':[f'textures/items/{ASSET_CREATOR}/{ASSET_PACK}/garage_deployment_capsule']
+    }
+    jwrite(atlas_path,atlas)
+
+    if addon.exists(): addon.unlink()
+    with zipfile.ZipFile(addon,'w',zipfile.ZIP_DEFLATED) as zf:
+      for pack in (BP,RP):
+        for f in pack.rglob('*'):
+          if f.is_file(): zf.write(f,f.relative_to(OUT))
+    return addon
+
+
+_garage_base_validate = validate
+
+def validate(addon:Path):
+    report=_garage_base_validate(addon)
+    errors=list(report.get('errors',[])); checks=int(report.get('checks',0))
+    script=(BP/'scripts/main.js').read_text(encoding='utf-8') if (BP/'scripts/main.js').exists() else ''
+
+    required={
+      'starter base builder':'function buildStarterBase(player,a)',
+      'five-second deployment countdown':'GARAGE DEPLOYMENT: ${n}',
+      'drop-to-deploy event':'world.afterEvents.entitySpawn.subscribe',
+      'deployment item detection':f'{FINAL_NS}:garage_deployment_capsule',
+      'underground Fabricator placement':f"setb(d,x,y-8,z,'{FINAL_NS}:reality_fabricator')",
+      'garage becomes Home':f"player.setDynamicProperty('{FINAL_NS}:home_x'",
+      'base completion state':f"player.setDynamicProperty('{FINAL_NS}:base_deployed',true)",
+      'underground service shaft':'minecraft:scaffolding',
+      'opening Act I handoff':'ACT I — WARRANTY VOID'
+    }
+    for label,needle in required.items():
+      checks+=1
+      if needle not in script: errors.append(f'garage onboarding regression: missing {label} ({needle!r})')
+
+    checks+=1
+    item_path=BP/'items/garage_deployment_capsule.json'
+    if not item_path.exists():
+      errors.append('garage onboarding regression: missing Garage Deployment Capsule item')
+    else:
+      obj=json.loads(item_path.read_text(encoding='utf-8'))
+      ident=obj.get('minecraft:item',{}).get('description',{}).get('identifier')
+      if ident!=f'{FINAL_NS}:garage_deployment_capsule': errors.append(f'garage capsule has wrong identifier {ident!r}')
+
+    checks+=1
+    icon=RP/f'textures/items/{ASSET_CREATOR}/{ASSET_PACK}/garage_deployment_capsule.png'
+    if not icon.exists(): errors.append('garage onboarding regression: deployment capsule icon missing')
+
+    checks+=1
+    if f'give(p,"{FINAL_NS}:reality_fabricator",1)' in script:
+      errors.append('garage onboarding regression: Fabricator is still handed loose to fresh players instead of installed in the lab')
+
+    report['checks']=checks
+    report['errors']=errors
+    report['status']='PASS' if not errors else 'FAIL'
+    gates=list(report.get('feature_regression_gates',[]))
+    if 'drop_deploy_house_garage_underground_lab' not in gates: gates.append('drop_deploy_house_garage_underground_lab')
+    report['feature_regression_gates']=gates
+    jwrite(OUT/'validation_report.json',report)
+    return report
