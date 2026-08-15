@@ -10,22 +10,31 @@ Rich & Shorty is a Minecraft Bedrock parody adventure vertical slice with a stab
 
 The project is deliberately not using experimental custom dimensions. The four resource realities and Citadel-ish are authored pocket-world zones in the Overworld reached through a scripted Portal Remote. This preserves the multiverse loop without making experimental dimension APIs a hard dependency.
 
-## VERIFIED — Current Green Baseline
+## VERIFIED — First Client-Test Candidate
 
-As of the `Persist Citadel unlock and pace reality tools` release-gate run:
+The first artifact that is approved to leave automated/server testing is the candidate built from branch commit `d8434fe3d7d5693a202580c1c056932447bb14a7`.
 
-- deterministic local validation: PASS
-- Mojang Minecraft Creator Tools full suite: PASS, fail-closed on warnings
-- Mojang Minecraft Creator Tools Add-On suite: PASS, fail-closed on warnings
-- real current Bedrock Dedicated Server boot: PASS
+Exact tested add-on SHA-256:
+
+`033aaa412534f774bf4bf3507f043c55ed381485a2212fb186a7fbd4d6c73131`
+
+Exact tested add-on size: **170,385 bytes**.
+
+Release-gate results for that exact artifact:
+
+- deterministic local validation: **531 checks PASS / 0 errors**
+- Mojang Minecraft Creator Tools full suite: **PASS / 0 errors / 0 warnings / 0 recommendations**
+- Mojang Minecraft Creator Tools Add-On suite: **PASS / 0 errors / 0 warnings / 0 recommendations**
+- real current Bedrock Dedicated Server **1.26.44.3** boot: PASS
 - custom Reality Fabricator block registry/placement: PASS
-- all 20 featured custom entities summon on real Bedrock server: PASS
-- archive integrity: PASS
+- real-server smoke of every vanilla block ID used by authored reality construction/world tools: PASS
+- all 20 featured custom entities summon on real Bedrock server: **20/20 PASS**
+- archive CRC/integrity: PASS
 - JavaScript syntax check: PASS
 - final creator/pack namespace: `keepinitkrispy_rs`
 - runtime regression gate exists for the Bedrock 1.26.10 `minecraft:pushable` split
 
-Do not weaken these gates to make a build pass.
+This is now the authoritative baseline. Do not weaken these gates to make a later build pass.
 
 ## VERIFIED — Visual Architecture
 
@@ -35,7 +44,7 @@ The current cast was rebuilt as high-detail voxel sculpture:
 
 - 20 featured characters
 - 10 articulated bones per character
-- current generated character geometry is roughly 86–122 authored cubes per character
+- generated character geometry spans **86–122 authored cubes per character**
 - rounded/stepped voxel head construction rather than one-box heads
 - projected facial features
 - tapered layered torsos
@@ -43,9 +52,32 @@ The current cast was rebuilt as high-detail voxel sculpture:
 - identity-specific hair, clothing and silhouette details
 - Cucumber Rich is a genuinely non-humanoid custom rig
 
-The exact shipping `.geo.json` + texture files are rendered into `previews/rich_shorty_cast_actual_geometry.png` by CI. This is not concept art.
+Exact current cube counts:
 
-The Reality Fabricator is a custom 48-cube machine with an asymmetrical silhouette and explicit dark-metal / portal-green / warning / screen material regions. It intentionally stays under Creator Tools' >50-cube custom-block performance warning threshold.
+- Rich 120
+- Shorty 96
+- Evil Shorty 102
+- Bess 106
+- Gerry 97
+- Sundae 98
+- Bird Dude 86
+- Scronchy 99
+- Mr. Needs-It 95
+- Professor Poop 93
+- Captain Drizzle 112
+- Nightmare Larry 105
+- Sprocket Face 107
+- Consensus 96
+- Cucumber Rich 90
+- Killer Krombo 102
+- Shorty Jr. 97
+- Validator Prime 116
+- Franky Lincolnstein 100
+- Council Rich 122
+
+The exact shipping `.geo.json` + texture files are rendered into `previews/rich_shorty_cast_actual_geometry.png` by CI. This is not concept art. The final client-candidate cast sheet was manually inspected after the full green run and retained.
+
+The Reality Fabricator is a custom **48-cube** machine with an asymmetrical silhouette and explicit dark-metal / portal-green / warning / screen material regions. It intentionally stays under Creator Tools' >50-cube custom-block performance warning threshold. The final client-candidate Fabricator render was manually inspected after the full green run and retained.
 
 ## Current Cast
 
@@ -88,18 +120,22 @@ The intent is obvious affectionate sci-fi-cartoon parody, not direct asset copyi
 8. A new different recipe is pre-rolled only after successful fabrication.
 9. Side liabilities reward Citadel Tokens / special tools.
 10. Three tokens permanently unlock Citadel-ish.
-11. Citadel-ish contains the Evil Shorty multi-phase boss encounter.
-12. Defeating Evil Shorty persists the epilogue state; the Fabricator loop remains replayable afterward.
+11. Citadel-ish is a story hub. Evil Shorty does **not** auto-spawn on arrival.
+12. Interacting with Council Rich begins the Council hearing and stages the Evil Shorty encounter in the central chamber.
+13. Evil Shorty has a multi-phase boss fight.
+14. Defeating Evil Shorty persists the epilogue state; the Fabricator loop remains replayable afterward.
 
 ## Reality Environments
 
-The resource zones are not flat test pads anymore.
+The resource zones are not flat test pads.
 
-- **Glorp-9:** fungal/goo basin, warped stalks, luminous roots, slime stepping route, water basin
-- **Fizz Desert:** red-sand caldera, basalt/terracotta chimneys, magma fractures
+- **Glorp-9:** fungal/goo basin, warped stalks, luminous roots, slime stepping route, water basin. The old `lily_pad` command identifier was rejected by current Bedrock and was deliberately replaced with server-verified slime stepping pads.
+- **Fizz Desert:** red-sand caldera, basalt/orange-terracotta chimneys, magma fractures. Generic `terracotta` was rejected by current Bedrock and replaced with the server-verified `orange_terracotta` ID.
 - **Chrono Shelf:** packed/blue-ice terraces, amethyst time pillars, broken clock motif
 - **Scrap Moon:** tuff salvage field, copper/iron wreckage, cranes, rails and gantries
 - **Citadel-ish:** central tower, satellite towers, bridges, civic ring, customs structure and council dais
+
+The real-Bedrock release gate now smoke-tests the full vanilla block palette used by reality construction and world-tool rewrites so invalid command identifiers cannot silently reach the client candidate.
 
 ## World Tool Pool
 
@@ -112,7 +148,9 @@ The resource zones are not flat test pads anymore.
 - Pocket Black Hole
 - Chaos Bonker
 
-The tools intentionally manipulate traversal/world state. Native Bedrock use cooldowns are now attached so the effects cannot be controller-spammed without pacing.
+The tools intentionally manipulate traversal/world state. Native Bedrock use cooldowns are attached so the effects cannot be controller-spammed without pacing.
+
+The Portal Remote includes a **Reality Tool Manual**, and each tool gives first-use help describing whether it is used in the air or on a target block and what it changes.
 
 ## Story / Progression
 
@@ -132,6 +170,8 @@ Current side liabilities:
 ### Act III — The Least Democratic Citadel
 Three Citadel Tokens permanently unlock the Citadel-ish route. The unlock is persistent and does not disappear if tokens are later dropped/lost/stored.
 
+Arrival is not an immediate boss ambush. The player reaches the Citadel hub, interacts with Council Rich to begin the Council hearing, and that interaction stages Evil Shorty in the central chamber as the final liability.
+
 ### Epilogue — Randomness Wins
 Evil Shorty defeated; endless Fabricator/resource/tool loop remains available.
 
@@ -150,13 +190,27 @@ The Portal Remote includes an in-world Liability Ledger. It reports:
 
 The player should not need an external wiki to understand the main progression loop.
 
+## Hard Regression Gates
+
+Current validation explicitly rejects regressions in:
+
+- `locked_recipe_until_fulfilled`
+- `liability_ledger`
+- `persistent_citadel_unlock`
+- `tool_manual`
+- `sculpted_cast_min_80_cubes`
+- `fabricator_max_50_cubes`
+- `world_tool_native_cooldown`
+- `staged_citadel_hearing_boss`
+- Bedrock 1.26.10 pushability component split
+
 ## Hard Quality Rules
 
 - Never replace the sculpted cast with generic box people.
 - Never claim a static/schema pass proves runtime behavior.
 - Never hand Ryan a phone/Realm test build merely because JSON validates.
 - Keep Mojang validation fail-closed on warnings.
-- Keep a real Bedrock Dedicated Server boot/summon/placement gate.
+- Keep a real Bedrock Dedicated Server boot/summon/custom-block/environment-palette gate.
 - Keep exact shipping-geometry approval renders.
 - Stable PS5/Realm behavior is preferred over experimental APIs.
 - Preserve the Android/mobile-first deployment path; do not silently require Ryan to use a desktop.
@@ -164,17 +218,25 @@ The player should not need an external wiki to understand the main progression l
 
 ## Current Verification Boundary
 
-**VERIFIED:** structure, schema, archive, script syntax, server pack loading, custom-block registration/placement, all custom-entity server registration/summoning, exact generated-geometry offline render review.
+**VERIFIED:** structure, schema, archive, script syntax, server pack loading, custom-block registration/placement, full authored vanilla block identifier palette on current real Bedrock, all custom-entity server registration/summoning, exact generated-geometry offline render review, and the hard gameplay/visual regression signatures listed above.
 
-**UNKNOWN until client/player test:** actual Bedrock client rendering, animation playback in the retail client, controller/touch UI behavior, real player-driven Portal Remote interaction, player-driven Fabricator custom component execution, full environment generation triggered through the UI, Realm → PS5 behavior.
+**UNKNOWN until client/player test:** actual Bedrock retail-client rendering, animation playback in the retail client, controller/touch UI behavior, real player-driven Portal Remote interaction, real player-driven Fabricator custom component execution, full reality generation triggered through the UI, side-quest turn-ins under real play, staged Council hearing under real player interaction, and Realm → PS5 behavior.
 
 Do not collapse UNKNOWN into PASS.
 
 ## Next Work
 
-1. Add player-facing Tool Manual / per-tool usage feedback.
-2. Add hard regression assertions for the locked recipe, Liability Ledger, high-detail character cube floor, and <=50-cube Fabricator.
-3. Expand the real-server smoke gate to exercise every block ID used by authored reality environments.
-4. Do one more exact visual review after those changes.
-5. Produce the first client-test candidate `.mcaddon` for Ryan only after all automated/server gates are green.
-6. After Ryan's actual Bedrock/Realm test, record observed behavior here as PASS/FAIL and fix from evidence.
+1. **Ryan client test:** import the exact SHA-256-pinned client candidate into Bedrock/Realm using the existing Android/mobile-first path.
+2. Record actual observed retail-client behavior here as PASS/FAIL, especially:
+   - RP model/texture rendering
+   - animations
+   - Portal Remote ActionForms/controller interaction
+   - home/reality travel
+   - Reality Fabricator interaction and locked recipe persistence
+   - one full resource → fabrication loop
+   - Liability Ledger and Tool Manual
+   - environment construction
+   - one side-quest turn-in
+   - Citadel unlock and Council hearing
+3. Fix only from observed evidence; rerun all automated/server gates for every repair.
+4. After the retail-client/Realm pass is clean, bump out of `v0.1.0` and package the next distributable candidate.
