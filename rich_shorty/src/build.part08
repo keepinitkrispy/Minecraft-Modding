@@ -1,0 +1,209 @@
+
+# ---------------------------------------------------------------------------
+# POLISH LAYER: current-platform schemas + expanded featured parody cast.
+# This file intentionally comes after the original builder definitions. The
+# bootstrap loads every part before invoking make_pack(), so these globals and
+# factories are the versions used by the release artifact.
+# ---------------------------------------------------------------------------
+
+MIN_ENGINE = [1, 26, 0]
+
+_base_behavior_entity = behavior_entity
+_base_client_entity = client_entity
+_base_animations = animations
+_base_item_json = item_json
+_base_block_json = block_json
+
+
+def behavior_entity(name:str,boss=False,friendly=True):
+    obj = _base_behavior_entity(name,boss=boss,friendly=friendly)
+    obj['format_version'] = '1.26.0'
+    return obj
+
+
+def client_entity(name:str):
+    obj = _base_client_entity(name)
+    obj['format_version'] = '1.26.0'
+    return obj
+
+
+def animations(name:str):
+    obj = _base_animations(name)
+    obj['format_version'] = '1.10.0'
+    return obj
+
+
+def item_json(identifier,name,icon,component=None,stack=64):
+    obj = _base_item_json(identifier,name,icon,component=component,stack=stack)
+    obj['format_version'] = '1.26.0'
+    return obj
+
+
+def block_json(identifier, texture, destroy=2.0, component=None, loot=None, light=0):
+    obj = _base_block_json(identifier,texture,destroy=destroy,component=component,loot=loot,light=light)
+    obj['format_version'] = '1.26.0'
+    return obj
+
+
+def model_captain_drizzle():
+    m=Model('captain_drizzle',1.25,2.05)
+    add_humanoid(m,skin='blue',hair='white',torso='blue',pants='blue')
+    head=next(x for x in m.bones if x.name=='head'); body=next(x for x in m.bones if x.name=='body')
+    # wave-crown hair, sea collar, shell belt, long forked moustache
+    head.cubes += [Cube((-5.0,21.0,-1.5),(2.0,4.0,3.0),'white'),Cube((-2.3,22.0,-1.6),(2.0,5.0,3.2),'white'),Cube((0.5,22.3,-1.6),(2.0,5.3,3.2),'white'),Cube((3.2,21.0,-1.5),(2.0,4.0,3.0),'white'),Cube((-4.0,15.0,-4.0),(3.0,0.7,0.7),'white'),Cube((1.0,15.0,-4.0),(3.0,0.7,0.7),'white')]
+    body.cubes += [Cube((-5.3,13.5,-2.8),(10.6,1.3,5.6),'white'),Cube((-3.0,7.5,-3.0),(6.0,1.0,0.8),'yellow'),Cube((-1.0,7.2,-3.5),(2.0,1.6,1.0),'white')]
+    return scale_model(m,1.03,1.04,1.03)
+
+
+def model_nightmare_larry():
+    m=Model('nightmare_larry',1.15,1.9)
+    add_humanoid(m,skin='red',hair='darkgrey',torso='purple',pants='pants_dark')
+    head=next(x for x in m.bones if x.name=='head'); body=next(x for x in m.bones if x.name=='body')
+    # burnt fedora silhouette, cheek scars, striped sweater bands, claw gloves
+    head.cubes += [Cube((-6.0,21.0,-3.0),(12.0,1.2,6.0),'darkgrey'),Cube((-4.0,22.0,-2.3),(8.0,2.3,4.6),'darkgrey'),Cube((-4.0,17.0,-4.1),(1.0,0.45,0.5),'mouth'),Cube((2.8,16.3,-4.1),(1.2,0.45,0.5),'mouth')]
+    body.cubes += [Cube((-4.8,12.0,-2.8),(9.6,1.1,5.6),'red'),Cube((-4.2,9.7,-2.75),(8.4,1.0,5.5),'red')]
+    for bname in ('left_lower_arm','right_lower_arm'):
+        b=next(x for x in m.bones if x.name==bname)
+        x=-6.5 if bname.startswith('left') else 4.0
+        b.cubes += [Cube((x,2.5,-2.3),(0.6,2.4,0.6),'lightgrey'),Cube((x+0.8,2.2,-2.5),(0.6,2.7,0.6),'lightgrey'),Cube((x+1.6,2.5,-2.3),(0.6,2.4,0.6),'lightgrey')]
+    return m
+
+
+def model_sprocket_face():
+    m=Model('sprocket_face',1.05,1.9)
+    add_humanoid(m,skin='grey',hair='darkgrey',torso='orange',pants='pants_dark')
+    head=next(x for x in m.bones if x.name=='head'); body=next(x for x in m.bones if x.name=='body')
+    # mechanical cheek gears and crown teeth; asymmetric eye lens
+    for x,y in [(-5.5,18.0),(-4.8,21.3),(-2.8,23.2),(0.0,23.7),(2.8,23.2),(4.8,21.3),(5.5,18.0)]: head.cubes.append(Cube((x,y,-1.0),(1.2,2.0,2.0),'lightgrey'))
+    head.cubes += [Cube((1.0,18.0,-4.4),(2.8,2.8,0.9),'visor'),Cube((-5.4,17.0,-2.8),(1.2,3.0,5.6),'darkgrey')]
+    body.cubes += [Cube((-2.0,11.0,-3.2),(4.0,4.0,0.9),'lightgrey'),Cube((-1.0,12.0,-3.8),(2.0,2.0,0.8),'darkgrey')]
+    return m
+
+
+def model_consensus():
+    m=Model('consensus',1.1,1.9)
+    add_humanoid(m,skin='green',hair='green',torso='green',pants='green')
+    head=next(x for x in m.bones if x.name=='head'); body=next(x for x in m.bones if x.name=='body')
+    # hive-node crown and luminous chest lattice
+    head.cubes += [Cube((-4.5,21.0,-2.0),(2,3.2,4),'visor'),Cube((-1.0,22.0,-2.0),(2,4.0,4),'visor'),Cube((2.5,21.0,-2.0),(2,3.2,4),'visor'),Cube((-3.8,18.0,-4.2),(7.6,0.7,0.6),'visor_dark')]
+    body.cubes += [Cube((-3.2,12.5,-3.0),(6.4,0.7,0.7),'visor'),Cube((-2.4,10.7,-3.0),(4.8,0.7,0.7),'visor'),Cube((-1.5,8.9,-3.0),(3.0,0.7,0.7),'visor')]
+    return scale_model(m,0.96,1.01,0.96)
+
+
+def model_cucumber_rich():
+    m=Model('cucumber_rich',0.9,1.25)
+    # Fully custom non-humanoid pickle/cucumber rig with small rat-tech limbs.
+    body=m.bone('body',(0,9,0)); body.cubes=[Cube((-3.4,2.0,-2.5),(6.8,13.0,5.0),'green'),Cube((-4.0,5.0,-2.2),(8.0,7.0,4.4),'green'),Cube((-2.8,14.0,-2.0),(5.6,2.2,4.0),'green'),Cube((-4.2,7.0,-2.8),(1.2,1.2,1.2),'lightgrey'),Cube((3.0,10.0,-2.8),(1.2,1.2,1.2),'lightgrey')]
+    head=m.bone('head',(0,11,0),'body'); head.cubes=[Cube((-2.6,10.0,-3.2),(5.2,3.8,1.0),'green'),Cube((-2.4,12.0,-3.8),(1.8,1.6,0.8),'eye'),Cube((0.6,12.0,-3.8),(1.8,1.6,0.8),'eye'),Cube((-1.9,12.3,-4.1),(0.7,0.8,0.5),'pupil'),Cube((1.1,12.3,-4.1),(0.7,0.8,0.5),'pupil'),Cube((-1.8,10.4,-3.9),(3.6,0.6,0.5),'mouth')]
+    # Required articulated rig, visually mechanical/rat-bone rather than human.
+    lua=m.bone('left_upper_arm',(-3.5,9,0),'body'); lua.cubes=[Cube((-6,7,-0.8),(3,1.2,1.6),'lightgrey'),Cube((-5.5,6.5,-1.3),(1,2.2,2.6),'darkgrey')]
+    lla=m.bone('left_lower_arm',(-5.5,7.4,0),'left_upper_arm'); lla.cubes=[Cube((-8,5.5,-0.7),(3,1,1.4),'lightgrey'),Cube((-8.7,4.8,-1.2),(1.2,2.0,2.4),'darkgrey')]
+    rua=m.bone('right_upper_arm',(3.5,9,0),'body'); rua.cubes=[Cube((3,7,-0.8),(3,1.2,1.6),'lightgrey'),Cube((4.5,6.5,-1.3),(1,2.2,2.6),'darkgrey')]
+    rla=m.bone('right_lower_arm',(5.5,7.4,0),'right_upper_arm'); rla.cubes=[Cube((5,5.5,-0.7),(3,1,1.4),'lightgrey'),Cube((7.5,4.8,-1.2),(1.2,2.0,2.4),'darkgrey')]
+    for side,s in [('left',-1),('right',1)]:
+        u=m.bone(f'{side}_upper_leg',(2*s,3.5,0),'body'); x=-3.2 if s<0 else 0.7; u.cubes=[Cube((x,0.8,-1),(2.5,3.0,2),'lightgrey')]
+        l=m.bone(f'{side}_lower_leg',(2*s,1.0,0),f'{side}_upper_leg'); x=-3.0 if s<0 else 0.5; l.cubes=[Cube((x,-1.4,-0.8),(2.5,2.4,1.6),'darkgrey'),Cube((x-0.5,-1.7,-2.2),(3.5,1.0,3.2),'shoe')]
+    # Extra antenna/wire voxels put it safely above the visual complexity gate.
+    body.cubes += [Cube((-1.8,0.5,2.0),(0.7,5.0,0.7),'red'),Cube((1.1,0.5,2.0),(0.7,5.0,0.7),'blue'),Cube((-0.4,0.0,2.1),(0.8,4.0,0.8),'yellow'),Cube((-2.7,3.0,2.0),(5.4,1.0,1.0),'darkgrey')]
+    return m
+
+
+def model_killer_krombo():
+    m=Model('killer_krombo',1.0,1.85)
+    add_humanoid(m,skin='grey',hair='darkgrey',torso='darkgrey',pants='pants_dark')
+    head=next(x for x in m.bones if x.name=='head'); body=next(x for x in m.bones if x.name=='body')
+    head.cubes += [Cube((-5.2,19.5,-3.0),(10.4,1.0,6.0),'red'),Cube((-3.0,20.5,-3.0),(6.0,2.0,6.0),'darkgrey')]
+    body.cubes += [Cube((-4.8,13.0,-2.8),(9.6,1.0,5.6),'red'),Cube((-2.0,10.0,-3.1),(4.0,3.0,0.8),'grey'),Cube((3.6,8.0,-3.0),(1.2,5.0,1.0),'red')]
+    return scale_model(m,0.96,1.0,0.96)
+
+
+def model_shorty_jr():
+    m=Model('shorty_jr',0.85,1.25)
+    add_humanoid(m,skin='skin_shorty',hair='hair_shorty',torso='blue',pants='pants_dark')
+    head=next(x for x in m.bones if x.name=='head'); body=next(x for x in m.bones if x.name=='body')
+    head.cubes += [Cube((-4.7,20.5,-2.2),(9.4,1.0,4.4),'yellow')]
+    body.cubes += [Cube((-3.0,11.0,-3.0),(6.0,1.0,0.7),'yellow')]
+    return scale_model(m,0.78,0.73,0.8)
+
+
+def model_validator_prime():
+    m=Model('validator_prime',1.2,2.1)
+    add_humanoid(m,skin='grey',hair='blue',torso='blue',pants='darkgrey',coat=True,visor=True)
+    head=next(x for x in m.bones if x.name=='head'); body=next(x for x in m.bones if x.name=='body')
+    head.cubes += [Cube((-5.4,21.4,-2.6),(10.8,1.0,5.2),'yellow'),Cube((-1.2,22.4,-3.0),(2.4,3.0,6.0),'yellow')]
+    body.cubes += [Cube((-5.3,14.0,-2.8),(10.6,1.0,5.6),'yellow'),Cube((-2.5,9.5,-3.2),(5.0,4.0,0.9),'visor'),Cube((-1.3,10.7,-3.7),(2.6,1.6,0.8),'white')]
+    return scale_model(m,1.02,1.08,1.02)
+
+
+def model_franky_lincolnstein():
+    m=Model('franky_lincolnstein',1.08,1.95)
+    add_humanoid(m,skin='skin_gerry',hair='darkgrey',torso='coat',pants='pants_dark')
+    head=next(x for x in m.bones if x.name=='head'); body=next(x for x in m.bones if x.name=='body')
+    # deliberately absurd split-statesman silhouette: tall hat + tiny moustache + sash
+    head.cubes += [Cube((-4.5,21.0,-2.4),(9.0,1.0,4.8),'darkgrey'),Cube((-3.0,22.0,-2.0),(6.0,6.0,4.0),'darkgrey'),Cube((-2.3,15.3,-4.1),(4.6,0.5,0.5),'darkgrey')]
+    body.cubes += [Cube((-4.2,13.6,-2.9),(8.4,1.0,5.8),'red'),Cube((-1.0,9.0,-3.2),(2.0,5.0,0.8),'blue')]
+    return scale_model(m,0.98,1.04,0.98)
+
+
+def model_council_rich():
+    m=Model('council_rich',1.1,2.0)
+    add_humanoid(m,skin='skin_rich',hair='hair_rich',torso='citadel',pants='darkgrey',elder=True,coat=True)
+    head=next(x for x in m.bones if x.name=='head'); body=next(x for x in m.bones if x.name=='body')
+    head.cubes += [Cube((-5.0,22.0,-2.4),(10.0,1.0,4.8),'yellow'),Cube((-4.0,23.0,-1.8),(2.0,2.5,3.6),'yellow'),Cube((2.0,23.0,-1.8),(2.0,2.5,3.6),'yellow')]
+    body.cubes += [Cube((-4.5,13.6,-3.0),(9.0,1.1,0.8),'yellow'),Cube((-1.6,9.0,-3.2),(3.2,3.2,0.9),'citadel')]
+    return scale_model(m,0.96,1.05,0.96)
+
+
+# Expand from the vertical-slice ten to a broader featured parody ensemble.
+CHAR_MODELS = [
+    model_rich(), model_shorty(), model_shorty(True), model_bess(), model_gerry(),
+    model_sundae(), model_bird_dude(), model_scronchy(), model_needs_it(), model_professor_poop(),
+    model_captain_drizzle(), model_nightmare_larry(), model_sprocket_face(), model_consensus(),
+    model_cucumber_rich(), model_killer_krombo(), model_shorty_jr(), model_validator_prime(),
+    model_franky_lincolnstein(), model_council_rich()
+]
+DISPLAY_NAMES = {
+ 'rich':'Rich','shorty':'Shorty','evil_shorty':'Evil Shorty','bess':'Bess','gerry':'Gerry','sundae':'Sundae',
+ 'bird_dude':'Bird Dude','scronchy':'Scronchy','mr_needs_it':'Mr. Needs-It','professor_poop':'Professor Poop',
+ 'captain_drizzle':'Captain Drizzle','nightmare_larry':'Nightmare Larry','sprocket_face':'Sprocket Face','consensus':'Consensus',
+ 'cucumber_rich':'Cucumber Rich','killer_krombo':'Killer Krombo','shorty_jr':'Shorty Jr.','validator_prime':'Validator Prime',
+ 'franky_lincolnstein':'Franky Lincolnstein','council_rich':'Council Rich'
+}
+
+# Populate the realities with the expanded cast and give them actual dialogue.
+SCRIPT = SCRIPT.replace(
+    'if(zoneKey==="glorp") dim.runCommand(`summon rs:sundae ${p.x+5} ${p.y+1} ${p.z+2}`);',
+    'if(zoneKey==="glorp"){ dim.runCommand(`summon rs:sundae ${p.x+5} ${p.y+1} ${p.z+2}`); dim.runCommand(`summon rs:consensus ${p.x-7} ${p.y+1} ${p.z+5}`); dim.runCommand(`summon rs:cucumber_rich ${p.x+8} ${p.y+1} ${p.z-7}`); }'
+)
+SCRIPT = SCRIPT.replace(
+    'if(zoneKey==="fizz") dim.runCommand(`summon rs:scronchy ${p.x+5} ${p.y+1} ${p.z+2}`);',
+    'if(zoneKey==="fizz"){ dim.runCommand(`summon rs:scronchy ${p.x+5} ${p.y+1} ${p.z+2}`); dim.runCommand(`summon rs:nightmare_larry ${p.x-8} ${p.y+1} ${p.z+4}`); dim.runCommand(`summon rs:killer_krombo ${p.x+9} ${p.y+1} ${p.z-6}`); }'
+)
+SCRIPT = SCRIPT.replace(
+    'if(zoneKey==="chrono") dim.runCommand(`summon rs:bird_dude ${p.x+5} ${p.y+1} ${p.z+2}`);',
+    'if(zoneKey==="chrono"){ dim.runCommand(`summon rs:bird_dude ${p.x+5} ${p.y+1} ${p.z+2}`); dim.runCommand(`summon rs:captain_drizzle ${p.x-8} ${p.y+1} ${p.z+5}`); dim.runCommand(`summon rs:franky_lincolnstein ${p.x+8} ${p.y+1} ${p.z-5}`); }'
+)
+SCRIPT = SCRIPT.replace(
+    "if(zoneKey===\"scrap\"){ dim.runCommand(`summon rs:mr_needs_it ${p.x+5} ${p.y+1} ${p.z+2}`); dim.runCommand(`summon rs:gerry ${p.x-5} ${p.y+1} ${p.z+2}`); }",
+    "if(zoneKey===\"scrap\"){ dim.runCommand(`summon rs:mr_needs_it ${p.x+5} ${p.y+1} ${p.z+2}`); dim.runCommand(`summon rs:gerry ${p.x-5} ${p.y+1} ${p.z+2}`); dim.runCommand(`summon rs:sprocket_face ${p.x+8} ${p.y+1} ${p.z-6}`); dim.runCommand(`summon rs:shorty_jr ${p.x-8} ${p.y+1} ${p.z-6}`); }"
+)
+SCRIPT = SCRIPT.replace(
+    "dim.runCommand(`summon rs:evil_shorty ${p.x} ${p.y+4} ${p.z}`);",
+    "dim.runCommand(`summon rs:validator_prime ${p.x-12} ${p.y+2} ${p.z+8}`); dim.runCommand(`summon rs:council_rich ${p.x+12} ${p.y+2} ${p.z+8}`); dim.runCommand(`summon rs:evil_shorty ${p.x} ${p.y+4} ${p.z}`);"
+)
+SCRIPT += r'''
+
+world.afterEvents.playerInteractWithEntity.subscribe(e=>{
+  const id=e.target.typeId, p=e.player;
+  if(id==="rs:captain_drizzle") msg(p,"Captain Drizzle: The ocean recognizes exactly one sovereign: the moon. I am suing it.");
+  else if(id==="rs:nightmare_larry") msg(p,"Nightmare Larry: You can run, but this reality has extremely permissive zoning laws!");
+  else if(id==="rs:sprocket_face") msg(p,"Sprocket Face: Please stop calling these gears decorative. I can hear my own warranty expiring.");
+  else if(id==="rs:consensus") msg(p,"Consensus: We are all in agreement that Rich should not own this machine. Rich has voted no.");
+  else if(id==="rs:cucumber_rich") msg(p,"Cucumber Rich: This seemed funnier before I had to engineer knees out of trash.");
+  else if(id==="rs:killer_krombo") msg(p,"Killer Krombo: I love a clean contract. This is not one of those.");
+  else if(id==="rs:shorty_jr") msg(p,"Shorty Jr.: Nobody asked whether the multiverse needed a crafting economy.");
+  else if(id==="rs:validator_prime") msg(p,"Validator Prime: Your paperwork has zero warnings and forty-four recommendations. I have killed for less.");
+  else if(id==="rs:franky_lincolnstein") msg(p,"Franky Lincolnstein: A reality divided against itself can absolutely stand if you use enough scaffolding.");
+  else if(id==="rs:council_rich") msg(p,"Council Rich: The Council has reviewed your complaint and promoted it to a committee that does not exist.");
+});
+'''
