@@ -1,0 +1,119 @@
+
+# ---------------------------------------------------------------------------
+# PORTAL REMOTE FAIL-CLOSED BASELINE
+# Retail testing proved the previous travel implementation was not a dimension
+# system at all: it built/teleported inside player.dimension, normally the
+# Overworld. Until a supported architecture is chosen, destination travel must
+# refuse rather than silently masquerade as another reality.
+#
+# Keep the Remote usable for its ledger/recipe/manual UI, give it a visible
+# handheld activation, and make Home explicitly target the Overworld garage.
+# ---------------------------------------------------------------------------
+import re as _remote_fail_closed_re
+
+_remote_fail_closed_previous_make_pack = make_pack
+_remote_fail_closed_previous_validate = validate
+
+
+def _remote_fail_closed_reseal(addon: Path):
+    bp_mcpack = _zip_pack_dir(BP, OUT/'RichShorty_BP.mcpack')
+    rp_mcpack = _zip_pack_dir(RP, OUT/'RichShorty_RP.mcpack')
+    if addon.exists(): addon.unlink()
+    with zipfile.ZipFile(addon, 'w', zipfile.ZIP_DEFLATED) as outer:
+        outer.write(bp_mcpack, bp_mcpack.name)
+        outer.write(rp_mcpack, rp_mcpack.name)
+    return addon
+
+
+def make_pack():
+    addon = _remote_fail_closed_previous_make_pack()
+
+    # Give the remote a visible native mobile/controller use interaction even
+    # while destination travel is intentionally offline.
+    remote_path = BP/'items/busted_portal_remote.json'
+    remote = json.loads(remote_path.read_text(encoding='utf-8'))
+    components = remote['minecraft:item'].setdefault('components', {})
+    components['minecraft:interact_button'] = 'Open Portal Remote'
+    components['minecraft:use_animation'] = 'spyglass'
+    components['minecraft:use_modifiers'] = {
+        'use_duration':0.7,
+        'movement_modifier':0.75,
+        'start_using':'always',
+        'emit_vibrations':True,
+    }
+    jwrite(remote_path, remote)
+
+    script_path = BP/'scripts/main.js'
+    script = script_path.read_text(encoding='utf-8')
+
+    # Home is never "current dimension". It is the garage in the Overworld.
+    script = script.replace(
+        'player.teleport(home,{dimension:player.dimension});',
+        "player.teleport(home,{dimension:world.getDimension('minecraft:overworld')});"
+    )
+
+    # Delete the false reality behavior itself. Do not fall back to another far
+    # Overworld coordinate, and do not call buildZone() as if that were a custom
+    # dimension. The UI can remain so existing progression/ledger/manual work is
+    # still testable, but selecting a reality now states the verified boundary.
+    old = _remote_fail_closed_re.compile(
+        r'const z=ZONES\[key\];\s*buildZone\(player\.dimension,key\);\s*player\.teleport\(z\.pos,\{dimension:player\.dimension\}\);\s*msg\(player,`Portal stapled to \$\{z\.label\}\. Try not to lick anything\.`\);',
+        _remote_fail_closed_re.S,
+    )
+    replacement = '''const z=ZONES[key];
+  msg(player,`§cREALITY ROUTING OFFLINE§r: ${z.label} is disabled in this test build. The previous implementation only teleported inside the current vanilla dimension, so it has been removed rather than misrepresented as portal travel.`);'''
+    script, count = old.subn(replacement, script, count=1)
+    if count != 1:
+        raise RuntimeError(f'expected to remove exactly one fake same-dimension travel path, removed {count}')
+
+    twrite(script_path, script)
+    return _remote_fail_closed_reseal(addon)
+
+
+def validate(addon: Path):
+    report = _remote_fail_closed_previous_validate(addon)
+    errors = list(report.get('errors', [])); checks = int(report.get('checks', 0))
+
+    script = (BP/'scripts/main.js').read_text(encoding='utf-8')
+    remote = json.loads((BP/'items/busted_portal_remote.json').read_text(encoding='utf-8'))
+    comps = remote.get('minecraft:item',{}).get('components',{})
+
+    required = {
+        'fail-closed reality response':'§cREALITY ROUTING OFFLINE§r',
+        'explicit Overworld Home':"world.getDimension('minecraft:overworld')",
+        'remote touch action':'Open Portal Remote',
+    }
+    for label,needle in required.items():
+        checks += 1
+        haystack = script if label != 'remote touch action' else str(comps.get('minecraft:interact_button'))
+        if needle not in haystack:
+            errors.append(f'portal fail-closed regression: missing {label} ({needle!r})')
+
+    checks += 4
+    if 'buildZone(player.dimension,key)' in script:
+        errors.append('portal integrity regression: fake buildZone(player.dimension,key) travel path survived')
+    if 'player.teleport(z.pos,{dimension:player.dimension})' in script:
+        errors.append('portal integrity regression: fake same-dimension destination teleport survived')
+    if comps.get('minecraft:use_animation') != 'spyglass':
+        errors.append('portal UX regression: Remote has no visible use animation')
+    mods = comps.get('minecraft:use_modifiers')
+    if not isinstance(mods,dict) or float(mods.get('use_duration',0)) <= 0:
+        errors.append('portal UX regression: Remote use duration is missing')
+
+    # Failed custom-dimension experiments must not leak into this stable branch.
+    checks += 2
+    if (BP/'dimensions').exists() and any((BP/'dimensions').glob('*.json')):
+        errors.append('portal integrity regression: failed data-driven custom dimension files leaked into stable build')
+    if 'dimensionRegistry.registerCustomDimension' in script:
+        errors.append('portal integrity regression: experimental custom-dimension registration leaked into stable build')
+
+    report['checks'] = checks
+    report['errors'] = errors
+    report['status'] = 'PASS' if not errors else 'FAIL'
+    report['reality_travel_status'] = 'disabled fail-closed; no fake same-dimension travel ships'
+    gates = list(report.get('feature_regression_gates', []))
+    for gate in ('no_fake_overworld_reality_travel','remote_visible_use_animation','home_explicit_overworld'):
+        if gate not in gates: gates.append(gate)
+    report['feature_regression_gates'] = gates
+    jwrite(OUT/'validation_report.json', report)
+    return report
