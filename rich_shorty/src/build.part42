@@ -1,0 +1,346 @@
+
+# ---------------------------------------------------------------------------
+# TEST 72 RETAIL RESPONSE — ATMOSPHERE + DENSITY OVERHAUL
+# Retail feedback: transport works, but every custom reality has an ugly/default
+# void sky and the authored spaces feel sparse/empty. DimensionRegistry currently
+# creates void-generator dimensions without a per-dimension skybox texture hook,
+# so solve the actual client problem with two supported/robust layers:
+#   1) per-player custom fog definitions applied only while inside each reality;
+#   2) much denser authored terrain, vertical layers, satellite masses, skyline
+#      silhouettes, and large celestial/horizon objects inside every sector.
+# The result should read as a place, not a platform floating in default Minecraft.
+# ---------------------------------------------------------------------------
+_reality_density_previous_make_pack = make_pack
+_reality_density_previous_validate = validate
+
+
+def _reality_fog(identifier: str, color: str, start: float, end: float):
+    return {
+      'format_version':'1.16.100',
+      'minecraft:fog_settings':{
+        'description':{'identifier':identifier},
+        'distance':{
+          'air':{
+            'fog_start':start,
+            'fog_end':end,
+            'fog_color':color,
+            'render_distance_type':'fixed'
+          },
+          'weather':{
+            'fog_start':max(8.0,start*0.55),
+            'fog_end':max(32.0,end*0.72),
+            'fog_color':color,
+            'render_distance_type':'fixed'
+          }
+        }
+      }
+    }
+
+
+def make_pack():
+    addon=_reality_density_previous_make_pack()
+
+    # Reality-specific atmosphere. These are pushed on the player's fog stack by
+    # script only while they are inside the corresponding custom dimension.
+    fogs={
+      'glorp':('keepinitkrispy_rs:fog_glorp','#123D3A',42.0,118.0),
+      'fizz':('keepinitkrispy_rs:fog_fizz','#6B2D1F',48.0,128.0),
+      'chrono':('keepinitkrispy_rs:fog_chrono','#20264F',52.0,138.0),
+      'scrap':('keepinitkrispy_rs:fog_scrap','#30343B',40.0,112.0),
+      'citadel':('keepinitkrispy_rs:fog_citadel','#244851',58.0,150.0),
+    }
+    for key,(identifier,color,start,end) in fogs.items():
+        jwrite(RP/f'fogs/{key}.fog.json',_reality_fog(identifier,color,start,end))
+
+    script_path=BP/'scripts/main.js'
+    script=script_path.read_text(encoding='utf-8')
+
+    old="""  rsScatterResources(dim,key,c.x,y,c.z,theme,sx,sz);\n  rsAuthorSectorGameplay(dim,key,sx,sz,c.x,y,c.z,theme);\n  // Persistent in-world marker for this sector, independent of script-session Sets."""
+    new="""  rsScatterResources(dim,key,c.x,y,c.z,theme,sx,sz);\n  rsEnrichRealitySector(dim,key,sx,sz,c.x,y,c.z,theme);\n  rsAuthorSectorGameplay(dim,key,sx,sz,c.x,y,c.z,theme);\n  // Persistent in-world marker for this sector, independent of script-session Sets."""
+    if old not in script:
+        raise RuntimeError('final reality-sector hook not found for density overhaul')
+    script=script.replace(old,new,1)
+
+    script += r'''
+
+// -------------------------------------------------------------------------
+// REALITY ATMOSPHERE
+// Custom DimensionRegistry dimensions currently expose a void generator but no
+// per-dimension skybox texture property. We therefore own the visible atmosphere
+// through the player's fog stack. A single tagged entry is replaced when the
+// player changes realities and removed immediately on return to a vanilla world.
+// -------------------------------------------------------------------------
+const RS_REALITY_FOG={
+  glorp:'keepinitkrispy_rs:fog_glorp',
+  fizz:'keepinitkrispy_rs:fog_fizz',
+  chrono:'keepinitkrispy_rs:fog_chrono',
+  scrap:'keepinitkrispy_rs:fog_scrap',
+  citadel:'keepinitkrispy_rs:fog_citadel'
+};
+const RS_REALITY_FOG_TAG='keepinitkrispy_rs:reality_atmosphere';
+const rsPlayerAtmosphere=new Map();
+
+function rsRealityKeyForDimension(dimensionId){
+  return Object.keys(RS_REALITY_DIMENSIONS).find(k=>RS_REALITY_DIMENSIONS[k]===dimensionId)??null;
+}
+function rsApplyRealityAtmosphere(player,key){
+  const wanted=key?RS_REALITY_FOG[key]:null;
+  const previous=rsPlayerAtmosphere.get(player.id)??null;
+  if(previous===wanted) return;
+  try{
+    const fog=player.getComponent('minecraft:player.fog');
+    if(fog){
+      fog.remove(RS_REALITY_FOG_TAG);
+      if(wanted) fog.push(wanted,RS_REALITY_FOG_TAG);
+    }
+  }catch{}
+  rsPlayerAtmosphere.set(player.id,wanted);
+}
+
+system.runInterval(()=>{
+  for(const player of world.getAllPlayers()){
+    rsApplyRealityAtmosphere(player,rsRealityKeyForDimension(player.dimension.id));
+  }
+},10);
+
+// -------------------------------------------------------------------------
+// DENSITY / SKYLINE TOOLKIT
+// All authored content stays deterministic per sector. Geometry is deliberately
+// layered above AND below the walkable surface so the void no longer reads as
+// empty space around one flat island.
+// -------------------------------------------------------------------------
+function rsTerrace(dim,cx,y,cz,r,block){
+  for(let level=0;level<3;level++){
+    const rr=Math.max(2,r-level*2);
+    fillb(dim,cx-rr,y+level,cz-rr,cx+rr,y+level,cz+rr,block);
+  }
+}
+function rsHangingMass(dim,cx,y,cz,block,glow,depth=12){
+  for(let i=0;i<depth;i+=2){
+    const r=Math.max(1,5-Math.floor(i/3));
+    fillb(dim,cx-r,y-i,cz-r,cx+r,y-i,cz+r,block);
+  }
+  setb(dim,cx,y-depth-1,cz,glow);
+}
+function rsArch(dim,cx,y,cz,span,height,block,glow,axis='x'){
+  for(let i=-span;i<=span;i++){
+    const rise=Math.max(0,Math.floor(height*(1-(i*i)/(span*span))));
+    if(axis==='x'){
+      fillb(dim,cx+i,y+1,cz,cx+i,y+rise+1,cz,block);
+      if(Math.abs(i)%5===0) setb(dim,cx+i,y+rise+2,cz,glow);
+    }else{
+      fillb(dim,cx,y+1,cz+i,cx,y+rise+1,cz+i,block);
+      if(Math.abs(i)%5===0) setb(dim,cx,y+rise+2,cz+i,glow);
+    }
+  }
+}
+function rsSkyRing(dim,cx,y,cz,r,block,glow,plane='xz'){
+  // Thick block ring: enough segments to read as a celestial object from the
+  // ground without thousands of commands/cubes.
+  for(let i=0;i<48;i++){
+    const a=(Math.PI*2*i)/48;
+    const u=Math.round(Math.cos(a)*r), v=Math.round(Math.sin(a)*r);
+    let x=cx,z=cz,yy=y;
+    if(plane==='xz'){x=cx+u;z=cz+v;}
+    else if(plane==='xy'){x=cx+u;yy=y+v;}
+    else {z=cz+u;yy=y+v;}
+    setb(dim,x,yy,z,block);
+    if(i%6===0) setb(dim,x,yy+1,z,glow);
+  }
+}
+function rsSatellite(dim,cx,y,cz,block,accent,glow,size=4){
+  fillb(dim,cx-size,y,cz-size,cx+size,y+1,cz+size,block);
+  fillb(dim,cx-size+1,y+2,cz-size+1,cx+size-1,y+3,cz+size-1,accent);
+  rsHangingMass(dim,cx,y-1,cz,block,glow,8+size);
+  setb(dim,cx,y+4,cz,glow);
+}
+function rsDensePylons(dim,cx,y,cz,block,accent,glow,salt,key,sx,sz){
+  for(let i=0;i<8;i++){
+    const h=rsDeterministic(`${key}_${salt}`,sx,sz,i);
+    let dx=(h%29)-14, dz=((h>>>8)%29)-14;
+    if(Math.abs(dx)<7&&Math.abs(dz)<7){dx+=(dx<0?-8:8);dz+=(dz<0?-8:8);}
+    const ht=5+((h>>>16)%11);
+    fillb(dim,cx+dx-1,y+1,cz+dz-1,cx+dx+1,y+ht,cz+dz+1,i%3===0?accent:block);
+    setb(dim,cx+dx,y+ht+1,cz+dz,glow);
+  }
+}
+
+function rsEnrichGlorp(dim,sx,sz,cx,y,cz,t){
+  // Dense wet fungal jungle: raised root terraces, canopy arches, bulb gardens,
+  // hanging under-roots and satellite bog islands.
+  rsTerrace(dim,cx-10,y+1,cz-9,7,'minecraft:moss_block');
+  rsTerrace(dim,cx+10,y+1,cz+8,6,'minecraft:warped_nylium');
+  rsArch(dim,cx,y+2,cz-9,13,15,'minecraft:warped_stem','minecraft:sea_lantern','x');
+  rsArch(dim,cx-10,y+1,cz,10,12,'minecraft:dark_prismarine','minecraft:amethyst_block','z');
+  for(const [dx,dz] of [[-15,13],[14,-13],[15,14]]) rsSatellite(dim,cx+dx,y+4+(Math.abs(dx+dz)%4),cz+dz,'minecraft:dark_prismarine','minecraft:warped_nylium','minecraft:sea_lantern',3);
+  for(const [dx,dz] of [[-12,-12],[12,11],[-3,14]]) rsHangingMass(dim,cx+dx,y-3,cz+dz,'minecraft:blackstone','minecraft:sea_lantern',14);
+  rsDensePylons(dim,cx,y,cz,'minecraft:warped_stem','minecraft:warped_wart_block','minecraft:sea_lantern','flora','glorp',sx,sz);
+  // Central district gets a huge tilted-looking luminous ring in the sky.
+  if(sx===0&&sz===0){
+    rsSkyRing(dim,cx+18,y+39,cz-17,16,'minecraft:amethyst_block','minecraft:sea_lantern','yz');
+    rsSkyRing(dim,cx+18,y+39,cz-17,10,'minecraft:dark_prismarine','minecraft:sea_lantern','yz');
+  }
+}
+
+function rsEnrichFizz(dim,sx,sz,cx,y,cz,t){
+  // Dense volcanic city-desert: stepped mesas, basalt arches, lava channels,
+  // hanging furnace-rock and an enormous false sun/ring on the horizon.
+  rsTerrace(dim,cx-10,y+1,cz+8,8,'minecraft:red_sandstone');
+  rsTerrace(dim,cx+10,y+1,cz-8,7,'minecraft:orange_terracotta');
+  rsArch(dim,cx,y+2,cz+11,14,18,'minecraft:basalt','minecraft:shroomlight','x');
+  rsArch(dim,cx+11,y+1,cz,11,14,'minecraft:blackstone','minecraft:magma','z');
+  fillb(dim,cx-14,y+2,cz-3,cx+14,y+2,cz-1,'minecraft:magma');
+  fillb(dim,cx-3,y+2,cz-14,cx-1,y+2,cz+14,'minecraft:orange_terracotta');
+  for(const [dx,dz] of [[-15,-14],[15,13],[14,-15]]) rsSatellite(dim,cx+dx,y+6,cz+dz,'minecraft:blackstone','minecraft:basalt','minecraft:shroomlight',3);
+  for(const [dx,dz] of [[-12,12],[11,-11]]) rsHangingMass(dim,cx+dx,y-3,cz+dz,'minecraft:basalt','minecraft:shroomlight',16);
+  rsDensePylons(dim,cx,y,cz,'minecraft:basalt','minecraft:orange_terracotta','minecraft:shroomlight','spires','fizz',sx,sz);
+  if(sx===0&&sz===0){
+    rsSkyRing(dim,cx-22,y+42,cz-19,18,'minecraft:magma','minecraft:shroomlight','xy');
+    rsSkyRing(dim,cx-22,y+42,cz-19,12,'minecraft:blackstone','minecraft:shroomlight','xy');
+  }
+}
+
+function rsEnrichChrono(dim,sx,sz,cx,y,cz,t){
+  // Layered impossible archive: elevated shelves, crossed clock arches, suspended
+  // ice prisms and multiple floating satellite galleries.
+  rsTerrace(dim,cx-10,y+2,cz-8,7,'minecraft:smooth_quartz');
+  rsTerrace(dim,cx+9,y+3,cz+9,7,'minecraft:calcite');
+  rsArch(dim,cx,y+3,cz-11,14,17,'minecraft:amethyst_block','minecraft:end_rod','x');
+  rsArch(dim,cx+11,y+2,cz,12,15,'minecraft:blue_ice','minecraft:sea_lantern','z');
+  for(const [dx,dz,yy] of [[-15,14,8],[15,-13,11],[14,15,6],[-14,-15,10]]) rsSatellite(dim,cx+dx,y+yy,cz+dz,'minecraft:smooth_quartz','minecraft:blue_ice','minecraft:sea_lantern',3);
+  for(let i=-14;i<=14;i+=4){
+    fillb(dim,cx+i,y+5,cz-15,cx+i,y+13+(Math.abs(i)%5),cz-15,'minecraft:amethyst_block');
+    setb(dim,cx+i,y+14+(Math.abs(i)%5),cz-15,'minecraft:end_rod');
+  }
+  rsDensePylons(dim,cx,y,cz,'minecraft:calcite','minecraft:amethyst_block','minecraft:end_rod','ticks','chrono',sx,sz);
+  if(sx===0&&sz===0){
+    rsSkyRing(dim,cx+20,y+43,cz+18,17,'minecraft:blue_ice','minecraft:end_rod','xy');
+    rsSkyRing(dim,cx+20,y+43,cz+18,11,'minecraft:amethyst_block','minecraft:sea_lantern','xy');
+  }
+}
+
+function rsEnrichScrap(dim,sx,sz,cx,y,cz,t){
+  // Multi-level junk metropolis: stacked decks, hulls, crane cages, pipe corridors
+  // and hanging wreck sections instead of a sparse flat salvage field.
+  fillb(dim,cx-15,y+2,cz-15,cx-6,y+7,cz-6,'minecraft:iron_block hollow');
+  fillb(dim,cx+6,y+2,cz+6,cx+15,y+9,cz+15,'minecraft:oxidized_cut_copper hollow');
+  fillb(dim,cx-14,y+8,cz+6,cx+14,y+9,cz+9,'minecraft:deepslate_tiles');
+  fillb(dim,cx+6,y+6,cz-14,cx+9,y+7,cz+14,'minecraft:cut_copper');
+  rsArch(dim,cx,y+2,cz-11,14,16,'minecraft:iron_block','minecraft:redstone_lamp','x');
+  for(const [dx,dz,yy] of [[-15,14,5],[15,-14,9],[-15,-14,7]]) rsSatellite(dim,cx+dx,y+yy,cz+dz,'minecraft:polished_deepslate','minecraft:oxidized_cut_copper','minecraft:redstone_lamp',4);
+  for(const [dx,dz] of [[-10,11],[11,-10],[13,9]]) rsHangingMass(dim,cx+dx,y-3,cz+dz,'minecraft:deepslate_tiles','minecraft:redstone_lamp',17);
+  rsDensePylons(dim,cx,y,cz,'minecraft:iron_block','minecraft:oxidized_cut_copper','minecraft:redstone_lamp','industrial','scrap',sx,sz);
+  if(sx===0&&sz===0){
+    // Huge broken orbital hoop / derelict station silhouette.
+    rsSkyRing(dim,cx-20,y+40,cz+18,18,'minecraft:iron_block','minecraft:redstone_lamp','yz');
+    for(let i=-10;i<=10;i+=4) fillb(dim,cx-20,y+30+i,cz+18-2,cx-20,y+30+i+1,cz+18+12,'minecraft:chain');
+  }
+}
+
+function rsEnrichCitadel(dim,sx,sz,cx,y,cz,t){
+  // Dense bureaucratic megacity. Every outer sector gets multiple occupied-looking
+  // tower masses, plazas, elevated roads and a skyline beacon cluster.
+  if(sx===0&&sz===0){
+    rsSkyRing(dim,cx+24,y+48,cz-22,20,'minecraft:oxidized_cut_copper','minecraft:sea_lantern','yz');
+    return;
+  }
+  for(const [dx,dz,h] of [[-12,-11,28],[11,-10,22],[-10,11,19],[12,12,31]]){
+    fillb(dim,cx+dx-4,y+2,cz+dz-4,cx+dx+4,y+h,cz+dz+4,'minecraft:dark_prismarine hollow');
+    for(let yy=y+6;yy<y+h;yy+=5) fillb(dim,cx+dx-4,yy,cz+dz-4,cx+dx+4,yy,cz+dz-4,'minecraft:sea_lantern');
+    setb(dim,cx+dx,y+h+1,cz+dz,'minecraft:beacon');
+  }
+  fillb(dim,cx-16,y+5,cz-3,cx+16,y+7,cz+3,'minecraft:quartz_bricks');
+  fillb(dim,cx-3,y+5,cz-16,cx+3,y+7,cz+16,'minecraft:oxidized_cut_copper');
+  rsArch(dim,cx,y+8,cz-13,15,18,'minecraft:quartz_bricks','minecraft:sea_lantern','x');
+}
+
+function rsEnrichRealitySector(dim,key,sx,sz,cx,y,cz,theme){
+  // Shared underside gives every island visible mass/depth from bridges and edges.
+  for(const [dx,dz] of [[-12,-12],[12,-12],[-12,12],[12,12]]){
+    rsHangingMass(dim,cx+dx,y-3,cz+dz,theme.sub,theme.glow,10+((Math.abs(dx+dz)+Math.abs(sx)+Math.abs(sz))%6));
+  }
+  if(key==='glorp') rsEnrichGlorp(dim,sx,sz,cx,y,cz,theme);
+  else if(key==='fizz') rsEnrichFizz(dim,sx,sz,cx,y,cz,theme);
+  else if(key==='chrono') rsEnrichChrono(dim,sx,sz,cx,y,cz,theme);
+  else if(key==='scrap') rsEnrichScrap(dim,sx,sz,cx,y,cz,theme);
+  else if(key==='citadel') rsEnrichCitadel(dim,sx,sz,cx,y,cz,theme);
+}
+'''
+    twrite(script_path,script)
+    return _beta_dimension_reseal(addon)
+
+
+def validate(addon:Path):
+    report=_reality_density_previous_validate(addon)
+    errors=list(report.get('errors',[])); checks=int(report.get('checks',0))
+    script=(BP/'scripts/main.js').read_text(encoding='utf-8')
+
+    # Fog files must exist, parse, use unique creator identifiers, and expose air
+    # distance fog so a default void horizon cannot dominate the presentation.
+    fog_expect={
+      'glorp':'keepinitkrispy_rs:fog_glorp',
+      'fizz':'keepinitkrispy_rs:fog_fizz',
+      'chrono':'keepinitkrispy_rs:fog_chrono',
+      'scrap':'keepinitkrispy_rs:fog_scrap',
+      'citadel':'keepinitkrispy_rs:fog_citadel'
+    }
+    for key,identifier in fog_expect.items():
+        checks+=4
+        f=RP/f'fogs/{key}.fog.json'
+        if not f.exists():
+            errors.append(f'atmosphere regression: missing {key} fog file')
+            continue
+        try: data=json.loads(f.read_text(encoding='utf-8'))
+        except Exception as e:
+            errors.append(f'atmosphere regression: invalid {key} fog json: {e}')
+            continue
+        fog=data.get('minecraft:fog_settings',{})
+        if fog.get('description',{}).get('identifier')!=identifier:
+            errors.append(f'atmosphere regression: {key} fog identifier mismatch')
+        air=fog.get('distance',{}).get('air',{})
+        if air.get('render_distance_type')!='fixed':
+            errors.append(f'atmosphere regression: {key} fog is not fixed-distance')
+        if not isinstance(air.get('fog_color'),str):
+            errors.append(f'atmosphere regression: {key} fog color missing')
+
+    required={
+      'fog player component':"player.getComponent('minecraft:player.fog')",
+      'tagged fog replacement':'fog.remove(RS_REALITY_FOG_TAG)',
+      'dimension fog push':'fog.push(wanted,RS_REALITY_FOG_TAG)',
+      'atmosphere polling':'rsApplyRealityAtmosphere(player,rsRealityKeyForDimension(player.dimension.id))',
+      'sector density hook':'rsEnrichRealitySector(dim,key,sx,sz,c.x,y,c.z,theme)',
+      'hanging vertical mass':'function rsHangingMass',
+      'satellite islands':'function rsSatellite',
+      'celestial rings':'function rsSkyRing',
+      'Glorp dense pass':'function rsEnrichGlorp',
+      'Fizz dense pass':'function rsEnrichFizz',
+      'Chrono dense pass':'function rsEnrichChrono',
+      'Scrap dense pass':'function rsEnrichScrap',
+      'Citadel dense pass':'function rsEnrichCitadel',
+      'Glorp celestial object':"rsSkyRing(dim,cx+18,y+39,cz-17,16",
+      'Fizz celestial object':"rsSkyRing(dim,cx-22,y+42,cz-19,18",
+      'Chrono celestial object':"rsSkyRing(dim,cx+20,y+43,cz+18,17",
+      'Scrap orbital object':"rsSkyRing(dim,cx-20,y+40,cz+18,18",
+      'Citadel orbital object':"rsSkyRing(dim,cx+24,y+48,cz-22,20"
+    }
+    for label,needle in required.items():
+        checks+=1
+        if needle not in script: errors.append(f'reality presentation regression: missing {label} ({needle!r})')
+
+    checks+=1
+    if script.count('rsEnrichRealitySector(dim,key,sx,sz,c.x,y,c.z,theme)')!=1:
+        errors.append('reality presentation regression: enrichment hook missing or duplicated')
+
+    report['checks']=checks
+    report['errors']=errors
+    report['status']='PASS' if not errors else 'FAIL'
+    report['retail_test_72_result']='TRANSPORT_PASS_VISUAL_DESIGN_FAIL'
+    report['reality_presentation_profile']='atmosphere_fog_plus_dense_vertical_worlds_v1'
+    report['skybox_strategy']='per-reality fog stack plus authored celestial/horizon geometry; DimensionRegistry exposes void generation but no direct skybox texture parameter'
+    report['density_strategy']='terraces, arches, satellites, hanging masses, pylons, multi-level structures, celestial landmarks in every reality'
+    gates=list(report.get('feature_regression_gates',[]))
+    for g in ('per_reality_fog_atmosphere','fog_removed_outside_realities','dense_vertical_reality_authoring','celestial_horizon_landmarks','nonempty_multilevel_sector_silhouettes'):
+        if g not in gates: gates.append(g)
+    report['feature_regression_gates']=gates
+    jwrite(OUT/'validation_report.json',report)
+    return report
