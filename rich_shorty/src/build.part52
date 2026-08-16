@@ -1,0 +1,107 @@
+
+# ---------------------------------------------------------------------------
+# TEST 83 — PS5 CONTROLLER ITEM RUNTIME REPAIR
+# Give every active item a real use phase, keep custom-component callbacks, and
+# add a WorldAfterEvents.itemUse fallback. Both routes share one de-duplicating
+# dispatcher. Starter recovery now checks actual inventory, not only an old tag.
+# ---------------------------------------------------------------------------
+_retail83_runtime_previous_make_pack = make_pack
+_retail83_runtime_previous_validate = validate
+
+_RS83_ACTIVE_ITEMS = (
+    'busted_portal_remote','garage_deployment_capsule','gravity_spanner',
+    'phase_pick','freeze_ray','time_skip_watch','scaffold_printer',
+    'matter_swap_glove','pocket_black_hole','chaos_bonker',
+)
+
+
+def make_pack():
+    addon=_retail83_runtime_previous_make_pack()
+    for item_id in _RS83_ACTIVE_ITEMS:
+        item_path=BP/f'items/{item_id}.json'
+        obj=json.loads(item_path.read_text(encoding='utf-8'))
+        comps=obj['minecraft:item']['components']
+        comps['minecraft:use_modifiers']={
+            'use_duration':0.10,'movement_modifier':1.0,
+            'start_using':'always','emit_vibrations':True,
+        }
+        if item_id=='busted_portal_remote':
+            comps['minecraft:use_animation']='spyglass'; comps['minecraft:interact_button']='Open Portal Remote'
+        elif item_id=='garage_deployment_capsule': comps['minecraft:interact_button']='Deploy Garage'
+        else: comps['minecraft:interact_button']='Use Reality Tool'
+        jwrite(item_path,obj)
+
+    script_path=BP/'scripts/main.js'
+    script=script_path.read_text(encoding='utf-8')
+    old='ev.itemComponentRegistry.registerCustomComponent("keepinitkrispy_rs:portal_remote",{onUse(e){ system.run(()=>travelMenu(e.source)); }});'
+    new='ev.itemComponentRegistry.registerCustomComponent("keepinitkrispy_rs:portal_remote",{onUse(e){ system.run(()=>rsRetail83Dispatch(e.source,e.itemStack?.typeId)); }});'
+    if old not in script: raise RuntimeError('TEST83 portal registration target missing')
+    script=script.replace(old,new,1)
+    old='ev.itemComponentRegistry.registerCustomComponent("keepinitkrispy_rs:world_tool",{onUse(e){ if(e.itemStack) system.run(()=>useTool(e.source,e.itemStack.typeId)); },onUseOn(e){ system.run(()=>useTool(e.source,e.itemStack.typeId,e.block)); }});'
+    new='ev.itemComponentRegistry.registerCustomComponent("keepinitkrispy_rs:world_tool",{onUse(e){ if(e.itemStack) system.run(()=>rsRetail83Dispatch(e.source,e.itemStack.typeId)); },onUseOn(e){ system.run(()=>rsRetail83Dispatch(e.source,e.itemStack.typeId,e.block)); }});'
+    if old not in script: raise RuntimeError('TEST83 world-tool registration target missing')
+    script=script.replace(old,new,1)
+
+    script += r'''
+
+// TEST83 retail/controller fallback. Custom component onUse and the global
+// itemUse signal share this dispatcher and two-tick de-dupe window.
+const RS83_ACTIVE_ITEM_IDS=new Set([
+ "keepinitkrispy_rs:busted_portal_remote","keepinitkrispy_rs:garage_deployment_capsule",
+ "keepinitkrispy_rs:gravity_spanner","keepinitkrispy_rs:phase_pick","keepinitkrispy_rs:freeze_ray",
+ "keepinitkrispy_rs:time_skip_watch","keepinitkrispy_rs:scaffold_printer","keepinitkrispy_rs:matter_swap_glove",
+ "keepinitkrispy_rs:pocket_black_hole","keepinitkrispy_rs:chaos_bonker"
+]);
+const rs83LastUse=new Map();
+function rsRetail83Block(player){try{return player.getBlockFromViewDirection({maxDistance:12})?.block;}catch{return undefined;}}
+function rsRetail83Dispatch(player,id,block){
+ if(!player||!id||!RS83_ACTIVE_ITEM_IDS.has(id)) return;
+ const k=`${player.id}|${id}`, now=system.currentTick, prev=rs83LastUse.get(k)??-999;
+ if(now-prev<=2) return; rs83LastUse.set(k,now);
+ if(id==="keepinitkrispy_rs:busted_portal_remote"){travelMenu(player);return;}
+ if(id==="keepinitkrispy_rs:garage_deployment_capsule"){beginGarageDeploymentFromUse(player,block??rsRetail83Block(player));return;}
+ useTool(player,id,block??rsRetail83Block(player));
+}
+world.afterEvents.itemUse.subscribe(e=>{
+ const id=e.itemStack?.typeId;
+ if(id&&RS83_ACTIVE_ITEM_IDS.has(id)) system.run(()=>rsRetail83Dispatch(e.source,id));
+});
+world.afterEvents.playerSpawn.subscribe(e=>{
+ system.runTimeout(()=>{
+  const p=e.player;
+  if(countItem(p,"keepinitkrispy_rs:busted_portal_remote")<1) give(p,"keepinitkrispy_rs:busted_portal_remote",1);
+  if(!Boolean(p.getDynamicProperty("keepinitkrispy_rs:base_deployed")??false)&&countItem(p,"keepinitkrispy_rs:garage_deployment_capsule")<1)
+   give(p,"keepinitkrispy_rs:garage_deployment_capsule",1);
+ },10);
+});
+'''
+    twrite(script_path,script)
+    return _beta_dimension_reseal(addon)
+
+
+def validate(addon:Path):
+    report=_retail83_runtime_previous_validate(addon)
+    errors=list(report.get('errors',[])); checks=int(report.get('checks',0))
+    for item_id in _RS83_ACTIVE_ITEMS:
+        checks+=1
+        obj=json.loads((BP/f'items/{item_id}.json').read_text(encoding='utf-8'))
+        use=obj['minecraft:item']['components'].get('minecraft:use_modifiers',{})
+        if use.get('start_using')!='always' or float(use.get('use_duration',0))<0.05:
+            errors.append(f'PS5 controller-use regression: {item_id} has no valid use phase')
+    script=(BP/'scripts/main.js').read_text(encoding='utf-8')
+    for token in (
+        'world.afterEvents.itemUse.subscribe','function rsRetail83Dispatch','RS83_ACTIVE_ITEM_IDS',
+        'rsRetail83Dispatch(e.source,e.itemStack?.typeId)','rsRetail83Dispatch(e.source,e.itemStack.typeId,e.block)',
+        'countItem(p,"keepinitkrispy_rs:busted_portal_remote")<1',
+        'countItem(p,"keepinitkrispy_rs:garage_deployment_capsule")<1',
+    ):
+        checks+=1
+        if token not in script: errors.append(f'PS5 item runtime regression: missing {token}')
+    report['checks']=checks; report['errors']=errors; report['status']='PASS' if not errors else 'FAIL'
+    report['retail_test82_runtime_result']='FAIL_ITEMS_NOOP_ON_PS5'
+    gates=list(report.get('feature_regression_gates',[]))
+    for g in ('ps5_controller_itemuse_fallback','active_item_use_modifiers','inventory_state_starter_recovery'):
+        if g not in gates: gates.append(g)
+    report['feature_regression_gates']=gates
+    jwrite(OUT/'validation_report.json',report)
+    return report
