@@ -2,63 +2,83 @@
 
 **Branch:** `gpt/rich-and-shorty`
 
-**Purpose:** Durable authoritative handoff. Read this before changing Rich & Shorty. Do not ask Ryan to reconstruct information already recorded here. If older chat context conflicts with this file, this file wins unless a newer commit or retail observation proves otherwise.
+**Purpose:** Authoritative durable handoff. Read this before changing Rich & Shorty. Do not ask Ryan to reconstruct facts already recorded here. Newer retail observations beat older assumptions. Do not weaken regression gates just to make a build pass.
 
-## CURRENT TARGET — TEST 76
+## CURRENT CANDIDATE — TEST 78
 
-Current code candidate:
+Code candidate:
 
-`c19ec10b64f1ab8d707ae85154dccab807699fc9`
+`ee5edc9fc3ed2076a7247af1d2a3906e098a18be`
 
-GitHub Actions **Rich & Shorty release gate #76** passed for that exact commit.
+GitHub Actions **Rich & Shorty release gate #78** passed for this exact commit.
 
-Current mobile identity:
+Mobile identity:
 
-- TEST: **76**
-- pack version: **0.3.76**
-- BP UUID: `c85f1b6c-cd5a-54e2-a71b-7e7becd00d83`
-- RP UUID: `309f7ec9-2311-562b-8d8b-f296d326b65e`
-- user-facing artifact: `Rich_and_Shorty_TEST76_REALITY_OVERHAUL.mcaddon`
-- SHA-256: `5e13d57012aa125376ac2ed0fbd2aae1a502c31ae29feaf99399ae88540556dc`
-- size: **121,340 bytes**
+- TEST: **78**
+- pack version: **0.3.78**
+- BP UUID: `32fb4598-7ac1-5eb5-a7d3-b27aa25eef95`
+- RP UUID: `8c6ea352-2df7-5d90-b6dc-ec1e5cfe0f0b`
+- user-facing artifact: `Rich_and_Shorty_TEST78_SCI_FI_ENEMIES.mcaddon`
+- SHA-256: `db7bc5c16f1112cbf5f86cb5ee509c017374d8b4e59552642e9ebdd9a4b065c1`
+- size: **148,691 bytes**
 - namespace: `keepinitkrispy_rs`
 
-Release gate #76:
+Release gate #78:
 
-- deterministic validation: **1,100 checks PASS / 0 errors**
+- deterministic validation: **1,376 checks PASS / 0 errors**
 - JavaScript syntax: PASS
-- archive CRC/integrity: PASS
+- archive integrity: PASS
 - build-specific BP/RP identity: PASS
 - visual regression suite: PASS
-- Mojang Creator Tools: PASS under the existing narrow Beta-manifest parser exception
+- Mojang Creator Tools: PASS under the existing narrowly documented Beta-manifest parser exception
 - experimental custom-dimension boundary checks: PASS
 - artifact/report upload: PASS
 
-The dedicated-server runtime stages remain intentionally skipped for the Beta custom-dimension candidate because vanilla BDS is not decisive proof of the required Beta APIs experiment.
+Vanilla BDS runtime stages remain intentionally skipped for this Beta custom-dimension candidate; retail Minecraft with Beta APIs is the decisive runtime test.
 
-## VERIFIED RETAIL HISTORY
+## RETAIL HISTORY — VERIFIED
 
 ### TEST 58
 
 - True custom-dimension transport works on Android retail with Beta APIs enabled.
-- Original destination content failed quality acceptance: too tiny/plain.
-- Original fine-layered character geometry also failed visual acceptance and was replaced.
+- Old destination content failed quality acceptance because it was tiny/plain.
+- Old fine-layered character geometry failed visual acceptance and was replaced.
 
 ### TEST 71
 
-- Expanded Glorp-9 could be reached.
-- **FAIL:** player immediately suffocated inside arrival geometry.
-- Root cause: teleport feet were placed at `y+1`, while the central pad occupied `y+1` and the center lodestone occupied `y+2`.
+- Glorp-9 was reachable.
+- **FAIL:** immediate suffocation inside arrival geometry.
+- Cause: player feet teleported into the authored central pad/lodestone collision volume.
 
 ### TEST 72
 
-- **PASS:** transport / arrival repair works in retail.
-- **FAIL VISUAL/DESIGN ACCEPTANCE:** Ryan reported that every dimension's skybox looked bad and the dimensions were poorly designed, very empty, and boring.
-- This is a real retail quality failure. TEST 72 is retired as a visual acceptance candidate.
+- **PASS:** repaired transport/arrival works in retail.
+- **FAIL VISUAL/DESIGN ACCEPTANCE:** every dimension's sky presentation looked bad and the realities were poorly designed, very empty, and boring.
+- TEST 72 is retired as a visual candidate.
 
-## TRUE CUSTOM DIMENSION ARCHITECTURE
+### TEST 76
 
-Rich & Shorty uses five true custom void dimensions registered with experimental Bedrock `DimensionRegistry` / Beta APIs:
+- Current atmosphere/density/landmark overhaul candidate before the enemy pass.
+- It introduced reality-specific fog/volumetric atmosphere, dense vertical authoring, major landmarks and deliberate traversal composition.
+- Retail result is not yet recorded here.
+
+### TEST 77
+
+- **REJECTED BEFORE RETAIL.** First custom-enemy build failed the release gate.
+- Gate correctly caught legacy `minecraft:pushable` on all ten new enemies after Bedrock's 1.26.10 component split.
+- Gate also caught Late-Fee Drone at 11 cubes, below the 12-cube enemy visual floor.
+- No TEST 77 client artifact should be used.
+
+### TEST 78
+
+- Fixes TEST 77 without weakening gates.
+- All ten enemies use `format_version: 1.26.10` plus `minecraft:pushable_by_block` and `minecraft:pushable_by_entity`.
+- Late-Fee Drone gained a rear chronometer housing and now clears the visual floor.
+- Full applicable release pipeline passes.
+
+## TRUE CUSTOM DIMENSIONS
+
+Five true custom void dimensions registered through experimental Bedrock `DimensionRegistry` / Beta APIs:
 
 1. Glorp-9
 2. Fizz Desert
@@ -66,198 +86,233 @@ Rich & Shorty uses five true custom void dimensions registered with experimental
 4. Scrap Moon
 5. Citadel-ish
 
-This is not the old fake Overworld teleport architecture.
+This is not the removed fake same-dimension Overworld teleport system.
 
-Required deployment path remains:
+Deployment path remains:
 
 **Android local Beta world → Realm transfer bridge → PS5 download → local play**
 
-Realm is a transfer bridge; the experimental runtime is judged in the downloaded/local world.
+Realm is a courier/bridge; experimental runtime is judged in the local/downloaded world.
 
 ## SKY / ATMOSPHERE BOUNDARY
 
-Current Bedrock `DimensionRegistry.registerCustomDimension(typeId)` creates a void-generator custom dimension but does not expose a per-dimension vanilla skybox/cubemap parameter like Mojang's internal End rendering.
+The custom dimension registration path creates void-generator dimensions but does not expose Mojang's internal End-style skybox/cubemap control directly.
 
-Do not claim otherwise.
-
-TEST 76 therefore uses the supported controllable layers available to this add-on:
+Current presentation strategy:
 
 - per-player reality-specific fog stack
-- current `player.fogSettings` API, with `minecraft:player.fog` compatibility fallback
+- `player.fogSettings` with `minecraft:player.fog` compatibility fallback
 - five custom fog definitions
-- distance fog plus volumetric air scattering/absorption where the renderer supports it
-- fog is removed when the player leaves a custom reality
-- large celestial/horizon geometry to break up the default void-sky presentation
+- distance fog + volumetric media where supported
+- fog removed outside custom realities
+- large celestial/horizon structures
+- dense upper/lower silhouettes so realities do not read as flat islands in empty void
 
-The End having a black/special sky does not prove that the custom-dimension registration API exposes the End's internal renderer controls.
+Do not claim a nonexistent direct custom-dimension skybox hook.
 
-## TEST 76 REALITY ART OVERHAUL
+## REALITY ART / WORLD DESIGN — TEST 76+
 
-TEST 76 is a major response to the TEST 72 visual/design failure, not a small decoration pass.
-
-### Base world scale
+Base generation:
 
 - 40x40 authored sectors
-- 3x3 initial district before first arrival (~120x120 blocks)
-- neighboring sectors stream as the player explores
-- serialized ticking-area work to reduce mobile pressure
-- persistent physical sector markers prevent needless rebuilding
+- 3x3 initial district (~120x120) before first arrival
+- adjacent sectors stream as players explore
+- serialized ticking-area generation for mobile pressure
+- persistent physical sector markers prevent unnecessary rebuilding
 
-### Atmosphere
+Every reality now has layered density: terraces, arches, hanging under-island masses, satellite platforms/islands, pylons/spires, upper/lower silhouettes and large horizon/celestial structures.
 
-Five distinct fog treatments:
+Every streamed sector gets one major deterministic landmark from a four-variant kit.
 
-- Glorp: deep teal/green atmosphere
-- Fizz: hot red/brown atmosphere
-- Chrono: cold indigo atmosphere
-- Scrap: industrial gray atmosphere
-- Citadel: cool cyan/teal atmosphere
-
-Volumetric air density/media coefficients are included in addition to distance fog.
-
-### Density / vertical depth
-
-Part42 added multi-level terrain and skyline enrichment throughout every reality:
-
-- terraces
-- arches
-- hanging under-island masses
-- satellite islands/platforms
-- dense pylons/spires
-- large celestial rings/horizon objects
-- additional upper and lower silhouettes so the world does not read as a single flat platform in empty void
-
-### Signature landmarks
-
-Every streamed sector now receives **one major deterministic authored focal landmark**, selected from four variants for its reality.
-
-Glorp landmark kit:
-
+Glorp:
 - Root Cathedral
 - Bubble Bog
 - Shard Grove
 - Giant Cap
 
-Fizz landmark kit:
-
+Fizz:
 - Furnace Temple
 - Impact Crater
 - Basalt Ribs
 - Suspended Smeltery
 
-Chrono landmark kit:
-
+Chrono:
 - Broken Hourglass
 - Archive Stack
 - Clock Face Plaza
 - Frozen Switchyard
 
-Scrap landmark kit:
-
+Scrap:
 - Crashed Ship
 - Crusher Pit
 - Antenna Farm
 - Factory Spine
 
-Citadel outer-district kit:
-
+Citadel outer districts:
 - Records Tower
 - Bureaucratic Plaza
 - Customs Hall
 - Transit Tower
 
-The Citadel central sector remains owned by the existing story Citadel instead of being overwritten by an outer-district landmark.
+Composition is deliberate rather than pure scatter:
 
-### Composition / traversal
-
-Density is not allowed to become random clutter.
-
-Every sector now has deliberate four-way composition:
-
-- 5-wide north/south route from center to bridges
-- 5-wide east/west route from center to bridges
-- four blocks of cleared headroom above those routes
-- rhythm lighting along the routes
+- 5-wide north/south route from sector center to bridges
+- 5-wide east/west route
+- four blocks of headroom carved over routes
+- route rhythm lighting
 - clear central orientation node
-- landmarks are authored first, then traversal spines carve readable entrances/sightlines through them
+- landmarks authored first, then routes carve readable entrances/sightlines
 
-The intent is that each sector has a visible destination and a readable way to reach the next sector rather than being a pile of decorative blocks.
+## SAFE ARRIVAL — LOCKED
 
-### Ambient motion
+TEST 71 regression fix is mandatory in all five realities.
 
-A lightweight reality-only ambient particle loop adds local motion around players without spawning permanent entities or adding a heavy mob system.
+Before every portal teleport:
 
-## SAFE ARRIVAL — LOCKED REGRESSION
+1. Offset arrival from center lodestone.
+2. Reassert 3x3 solid landing floor.
+3. Clear 3x3 x four-block-high headroom pocket.
+4. Place player feet just above floor.
+5. Repair the pocket on every trip, including old authored worlds.
 
-The TEST 71 suffocation fix remains mandatory for all five dimensions.
-
-Before every portal teleport the runtime:
-
-1. Uses an arrival point offset from the center lodestone.
-2. Reasserts a 3x3 solid floor.
-3. Clears a 3x3 x four-block-high headroom pocket.
-4. Places player feet just above the floor.
-5. Repairs already-authored dimensions on every trip.
-
-Do not remove or weaken:
+Never remove or weaken:
 
 - `retail_test71_arrival_suffocation_regression`
 - `safe_custom_dimension_arrival_clearance`
 - `existing_world_arrival_repair`
 
-## REALITY CONTRACT GAMEPLAY
+## TEST 78 — TEN CUSTOM SCI-FI ENEMIES
 
-Non-central Glorp/Fizz/Chrono/Scrap sectors contain persistent Reality Contracts.
+Two original custom enemies per reality. These are custom entity stacks with unique geometry, textures, animations, behavior definitions, spawn eggs, combat effects and quips—not renamed vanilla mobs.
 
-- deterministic four-threat contract
-- exact sector-tagged mobs
+### Glorp-9
+
+**Glorp Compliance Slug**
+- broad alien slug/scanner silhouette
+- applies brief Slowness
+- quip: “Your moisture permit expired three molts ago.”
+
+**Spore Taxman**
+- mushroom-mech silhouette with oversized cap and machinery
+- applies brief Poison
+- quip: “This infection is deductible. Probably.”
+
+### Fizz Desert
+
+**Warranty Wasp**
+- mechanical wasp silhouette with wings/stinger
+- applies brief Weakness
+- quip: “Damage detected. Warranty voided by damage.”
+
+**Heat Repo Bot**
+- heavy industrial repossession robot
+- applies brief Hunger
+- quip: “Repossessing approximately all of your warmth.”
+
+### Chrono Shelf
+
+**Late-Fee Drone**
+- walking clock/drone body with clock hands and chronometer housing
+- applies stronger short Slowness
+- quip: “You are 3.7 seconds overdue.”
+
+**Secondhand Assassin**
+- tall clockwork killer with oversized time-hand silhouette
+- applies brief Darkness
+- quip: “Killing time. Professionally.”
+
+### Scrap Moon
+
+**Forklift Crab**
+- wide six-legged forklift/crab chassis with twin forks
+- physically knocks players back with an impulse
+- quip: “Beep beep. OSHA has left this dimension.”
+
+**Unlicensed Recycler**
+- trash-compactor/recycler robot
+- applies stronger brief Weakness
+- quip: “You have been classified as mixed waste.”
+
+### Citadel-ish
+
+**Form 27-B**
+- mobile bureaucratic printer/stamp robot
+- applies brief Mining Fatigue
+- quip: “Combat request denied. Combat will continue.”
+
+**Queue Enforcement Unit**
+- tall enforcement/stanchion robot
+- applies brief Slowness
+- quip: “Please remain violently in line.”
+
+### Enemy integration
+
+Glorp/Fizz/Chrono/Scrap Reality Contracts now use their two custom native enemies directly. The old vanilla contract rosters are removed.
+
+Citadel has no resource-sector contract loop, so its two enemies spawn as capped patrols:
+
+- max three Citadel patrol enemies around an occupied sector
+- co-op players in the same sector do not independently multiply the patrol cap
+- central portal arrival remains safe
+- patrols do not activate in the central sector until a player moves at least 12 blocks away from the arrival center
+
+Enemy quips are throttled per attacker so co-op combat does not become chat spam.
+
+Current enemy regression gates include:
+
+- `ten_custom_reality_enemies`
+- `two_enemies_per_dimension`
+- `no_vanilla_reality_contract_roster`
+- `custom_enemy_geometry_stack`
+- `custom_enemy_special_hits`
+- `citadel_capped_enemy_patrols`
+- `citadel_arrival_stays_safe`
+- `reality_enemy_pushable_split_1_26_10`
+- `late_fee_drone_minimum_visual_mass`
+
+## REALITY CONTRACTS
+
+Non-central Glorp/Fizz/Chrono/Scrap sectors retain persistent four-threat Reality Contracts:
+
+- exact sector-tagged threats
 - unrelated mobs do not count
 - physical hidden-block kill-state persistence
 - missing threats recover after unload/reload
-- four kills permanently stabilize the sector
-- stabilization exposes a physical reality-resource cache
+- four kills permanently stabilize sector
+- completion exposes reality-resource cache
 - `keepinitkrispy_rs:reality_sectors_cleared` tracks stabilized sectors
-- central landing sectors are safe from contracts
+- central landing sectors remain contract-safe
 
-Current combat rosters remain vanilla-themed and are a future quality target:
-
-- Glorp: slimes / cave spiders / spiders / zombies
-- Fizz: husks / blazes / magma cubes / zombies
-- Chrono: strays / skeletons / endermen
-- Scrap: zombies / pillagers / skeletons / spiders
-
-Unique reality creatures are not yet implemented.
+TEST 78 replaces the vanilla contract enemies with each reality's two custom enemies; persistence/reward mechanics remain unchanged.
 
 ## CORE ADD-ON CONTENT
 
-20 featured custom characters remain:
+20 featured parody characters remain:
 
 Rich, Shorty, Evil Shorty, Bess, Gerry, Sundae, Bird Dude, Scronchy, Mr. Needs-It, Professor Poop, Captain Drizzle, Nightmare Larry, Sprocket Face, Consensus, Cucumber Rich, Killer Krombo, Shorty Jr., Validator Prime, Franky Lincolnstein, Council Rich.
 
-Current geometry profile: `retail_clean_forms_v3`. Do not restore TEST-58 fine-layered/wafer geometry.
+Character geometry profile remains `retail_clean_forms_v3`; never restore TEST-58 wafer/layer-cake geometry.
 
 Reality Fabricator remains a custom 48-cube machine.
 
-Starter property profile remains:
-
-`furnished_two_level_house_full_workshop_clear_driveway_lab_v2`
+Starter property remains `furnished_two_level_house_full_workshop_clear_driveway_lab_v2` with furnished two-level house, full garage/workshop, clear driveway, finished underground lab, Fabricator and persistent Home recovery.
 
 Core loop remains:
 
 1. Busted Portal Remote + Reality Fabricator.
 2. Persistent Home coordinates.
-3. Travel to four resource realities.
-4. Fabricator rolls a multi-resource recipe.
-5. Recipe remains locked until fulfilled.
-6. UI shows have/need counts and suggested route.
-7. Successful fabrication awards one of eight world-manipulation tools.
+3. Travel through four resource realities.
+4. Fabricator rolls multi-resource recipe.
+5. Recipe stays locked until fulfilled.
+6. UI shows have/need + suggested route.
+7. Fabrication awards one of eight world-manipulation tools.
 8. Immediate previous tool cannot repeat.
-9. Side liabilities award tokens/tools and create persistent world consequences.
-10. Three Citadel Tokens permanently unlock Citadel-ish.
-11. Council Rich interaction stages Evil Shorty.
+9. Side liabilities award tokens/tools and persistent world consequences.
+10. Three Citadel Tokens unlock Citadel-ish permanently.
+11. Council Rich stages Evil Shorty encounter.
 12. Evil Shorty is multi-phase.
-13. Epilogue persists while the Fabricator loop remains replayable.
-14. Streamed Reality Contracts add repeatable exploration/combat.
+13. Epilogue persists; Fabricator loop remains replayable.
+14. Streamed Reality Contracts provide repeatable combat/exploration.
 
 World tools:
 
@@ -270,64 +325,11 @@ World tools:
 - Pocket Black Hole
 - Chaos Bonker
 
-Side liabilities:
-
-- Sundae: 8 Glorp + 8 Fizzium → Citadel Token + Glorp coolant-garden consequence
-- Bird Dude: 10 Chronodust → Citadel Token + time-roost consequence
-- Mr. Needs-It: 12 Scrap → Citadel Token + receiver-tower consequence
-- Gerry: 4 of every reality resource → Chaos Bonker + shelf consequence
-
-## IMPORTANT HARD GATES
-
-Do not weaken existing gates merely to make a build pass. Current gates include, among others:
-
-- locked recipe until fulfilled
-- Liability Ledger
-- persistent Citadel unlock
-- Tool Manual
-- Fabricator <=50 cubes
-- world-tool native cooldown
-- staged Council hearing / Evil Shorty boss
-- persistent sidequest world changes
-- recipe have/need + route UI
-- build-specific mobile TEST identities
-- true custom dimensions
-- awaited destination chunk loading
-- no fake Overworld reality route
-- retail-clean character forms
-- no layer-cake heads/torsos
-- starter house/garage/lab
-- existing-base migration
-- expanded 120x120 initial realities
-- streamed reality expansion
-- distinct reality skylines
-- sector ticking-area serialization
-- Reality Contracts
-- persistent contract kill state
-- reload recovery
-- sector cache reward
-- safe central landing sectors
-- TEST 71 suffocation regression
-- per-reality fog atmosphere
-- fog removal outside realities
-- dense vertical reality authoring
-- celestial/horizon landmarks
-- current Player fogSettings API
-- volumetric reality atmosphere
-- signature landmark every sector
-- four landmark variants per reality
-- ambient reality motion
-- generated-JS finalization
-- authored traversal spines
-- four-bridge sightlines
-- dense-geometry headroom carve
-
 ## HARD QUALITY RULES
 
 - Read current branch head and this file before editing.
 - Never regress to fake Overworld dimensions.
-- Never regress realities to tiny pads, sparse scenery, or flat resource rooms.
-- Never treat "more blocks" as a substitute for composition/readable traversal.
+- Never regress realities to tiny pads, sparse scenery, flat resource rooms or procedural clutter without composition.
 - Never replace retail-clean cast with generic box people or TEST-58 wafer geometry.
 - Never claim schema/static validation proves Beta runtime behavior.
 - Never collapse UNKNOWN retail behavior into PASS.
@@ -335,61 +337,65 @@ Do not weaken existing gates merely to make a build pass. Current gates include,
 - Preserve build-specific TEST identities so Android imports coexist.
 - Preserve Android/mobile-first deployment.
 - Use `keepinitkrispy_rs` for new content/state.
-- Every retail failure must be recorded exactly, repaired from evidence, and protected by a regression gate.
+- Every retail failure must be recorded exactly, repaired from evidence and protected by a regression gate.
 - User-facing downloadable candidates must include their TEST number in the filename.
+- Failed CI test numbers are retired; do not hand them to Ryan as client candidates.
 
 ## CURRENT VERIFICATION BOUNDARY
 
 **VERIFIED by retail observation:**
 
-- custom-dimension transport works
+- true custom-dimension transport works
 - TEST 71 arrival geometry was unsafe
 - TEST 72 arrival/transport repair works
-- TEST 72 reality sky/presentation/design quality was unacceptable: bad skybox presentation, poorly designed, empty, boring
+- TEST 72 visual/world design was unacceptable: bad sky presentation, poorly designed, empty, boring
 
-**VERIFIED automatically for TEST 76:**
+**VERIFIED automatically for TEST 78:**
 
-- 1,100 deterministic checks / 0 errors
+- 1,376 checks / 0 errors
 - JS syntax
 - archive integrity
-- exact TEST identity
-- Creator Tools under documented Beta boundary
-- true custom-dimension registration and cross-dimension target signatures
-- safe-arrival regression logic
-- five custom fog definitions
-- Player fog stack application/removal signatures
-- volumetric fog definitions
-- dense vertical-environment authoring signatures
-- signature landmark kits
-- deterministic landmark selection
-- four-way traversal composition
+- exact TEST 78 BP/RP identity
 - current hard regression suite
+- Creator Tools under documented Beta boundary
+- custom dimension registration/transport signatures
+- safe-arrival regression logic
+- TEST 76 atmosphere/density/landmark/traversal systems retained
+- ten complete custom enemy asset stacks
+- two enemies per dimension
+- resource contracts contain no old vanilla enemy roster
+- ten custom hostile behavior definitions
+- custom enemy special-hit dispatch and quips
+- Citadel capped patrol logic + safe-arrival exclusion
+- 1.26.10 pushability split on all ten enemies
+- Late-Fee Drone >=12-cube visual floor
 
-**UNKNOWN until TEST 76 retail:**
+**UNKNOWN until retail/co-op TEST 78:**
 
-- whether custom fog visibly improves the retail sky/atmosphere enough
-- whether volumetric fog is active on Ryan's device/render mode
-- whether TEST 76 looks materially less empty/boring in retail
-- whether landmark density is attractive rather than cluttered
-- whether initial 3x3 generation remains performant on Android after the density increase
-- whether streamed sector generation remains smooth enough during exploration
-- Reality Contract actual runtime behavior and persistence
-- current cast rendering/animation quality in retail
-- Fabricator/player UI runtime behavior
-- side-liability runtime completion
-- Council hearing/Evil Shorty runtime
-- Realm transfer → PS5 local behavior for TEST 76
+- whether all ten custom enemies render/animate correctly in retail
+- whether all ten pathfind and attack correctly in actual custom dimensions
+- whether special hit effects feel fun rather than annoying in two-player combat
+- whether Reality Contract counting works correctly when either co-op player gets a kill
+- whether Citadel patrol density feels right with two players
+- whether TEST 76 atmosphere/landmark overhaul is visually acceptable in retail
+- Android performance with denser realities plus custom enemies
+- full two-player portal/Fabricator/story progression behavior
+- Realm transfer → PS5 local co-op behavior
 
-## NEXT TEST
+## NEXT PLAYTHROUGH
 
-Import **TEST 76** on Android with Beta APIs enabled.
+Use **TEST 78** for Ryan + Ollie's first co-op playthrough.
 
-First acceptance target is not story progression. It is the reality overhaul itself:
+Do not turn the playthrough into formal QA. Play normally and record concrete observations when something breaks, looks bad, feels boring, feels unfair, or is especially fun.
 
-1. Enter Glorp, Fizz, Chrono and Scrap.
-2. Judge atmosphere/sky presentation immediately.
-3. Look across the initial district: there should be multiple large silhouettes/landmarks and vertical layers, not mostly empty void.
-4. Walk a sector route to a bridge and into a neighboring sector; paths should be readable and headroom should remain clear.
-5. Judge landmark quality: authored focal structures should feel intentional, not random block scatter.
-6. Watch phone performance while the initial district and one streamed sector generate.
-7. Report observed failures exactly; fix from retail evidence before expanding scope.
+High-value observations:
+
+- both players can portal safely
+- both players see the intended reality atmosphere
+- custom enemies visibly match their names/silhouettes
+- custom enemies do not overwhelm arrival areas
+- Reality Contracts work when either player lands kills
+- resource caches appear after contract completion
+- Citadel patrols stay capped and do not spawn directly on arrival
+- no player gets stranded by the other's travel/progression state
+- Fabricator and story progression remain usable in co-op
