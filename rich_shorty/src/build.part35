@@ -1,24 +1,43 @@
 
-# TEST 58 retail fix: remove the original raised driveway stripe command rather
-# than relying on the later furnishing pass to erase it after construction.
-SCRIPT = SCRIPT.replace(
-    "  for(let dz=-15;dz<=-10;dz+=2) fillb(d,x+4,y,z+dz,x+11,y,z+dz,'minecraft:light_gray_concrete');\n",
-    "  // Driveway surface pattern is authored flush at y-1 by polishStarterBase.\n",
-    1
-)
+# ---------------------------------------------------------------------------
+# REBUILT BASE GATE MIGRATION
+# The full property rebuild in part34 supersedes the original y-8 Fabricator
+# coordinate and the original raised-driveway source. Keep the retail driveway
+# prohibition, retire only stale exact-string checks, and positively verify the
+# new lab/Home targets instead.
+# ---------------------------------------------------------------------------
+_base_gate_migration_previous_validate = validate
 
-_driveway_source_previous_validate = validate
 
 def validate(addon:Path):
-    report=_driveway_source_previous_validate(addon)
+    report=_base_gate_migration_previous_validate(addon)
     errors=list(report.get('errors',[])); checks=int(report.get('checks',0))
-    script=(BP/'scripts/main.js').read_text(encoding='utf-8')
-    checks+=1
+
+    stale_fabricator = "garage onboarding regression: missing underground Fabricator placement (\"setb(d,x,y-8,z,'keepinitkrispy_rs:reality_fabricator')\")"
+    stale_home = "base acceptance regression: missing garage Home persistence (\"setDynamicProperty('rs:home_x'\")"
+    errors=[e for e in errors if e not in (stale_fabricator,stale_home)]
+
+    script=(BP/'scripts/main.js').read_text(encoding='utf-8') if (BP/'scripts/main.js').exists() else ''
+
+    checks += 1
     bad="fillb(d,x+4,y,z+dz,x+11,y,z+dz,'minecraft:light_gray_concrete')"
     if bad in script:
-        errors.append('driveway source regression: raised stripe command survives final shipping script')
+        errors.append('driveway source regression: TEST 58 raised stripe command survives final shipping script')
+
+    checks += 1
+    if "setb(d,x,y-9,z,'keepinitkrispy_rs:reality_fabricator')" not in script:
+        errors.append('base gate migration: rebuilt lab missing Fabricator at authoritative y-9 position')
+
+    checks += 1
+    if not all(key in script for key in ('home_x','home_y','home_z')):
+        errors.append('base gate migration: rebuilt property missing persistent Home coordinate keys')
+
     report['checks']=checks
     report['errors']=errors
     report['status']='PASS' if not errors else 'FAIL'
+    gates=list(report.get('feature_regression_gates',[]))
+    for gate in ('rebuilt_base_coordinate_gates','raised_driveway_source_forbidden'):
+        if gate not in gates: gates.append(gate)
+    report['feature_regression_gates']=gates
     jwrite(OUT/'validation_report.json',report)
     return report
