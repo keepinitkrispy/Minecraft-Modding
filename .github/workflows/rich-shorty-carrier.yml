@@ -1,0 +1,115 @@
+name: Rich & Shorty Realm carrier
+
+on:
+  push:
+    branches: [gpt/rich-and-shorty]
+    paths:
+      - 'rich_shorty/build_carrier_world.py'
+      - '.github/workflows/rich-shorty-carrier.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-carrier:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build exact Rich & Shorty packs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check pillow
+          python rich_shorty/build.py
+          node --check rich_shorty/dist/RichShorty_BP/scripts/main.js
+          unzip -t rich_shorty/dist/Rich_and_Shorty_v0.1.0.mcaddon
+          jq -e '.status=="PASS" and .errors==[]' rich_shorty/dist/validation_report.json >/dev/null
+          TEST_RUN=$(jq -r '.mobile_test_run' rich_shorty/dist/validation_report.json)
+          test -n "$TEST_RUN" && test "$TEST_RUN" != "null"
+          echo "TEST_RUN=$TEST_RUN" >> "$GITHUB_ENV"
+
+      - name: Download current official Bedrock Dedicated Server
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/rs-carrier
+          cd /tmp/rs-carrier
+          api='https://net-secondary.web.minecraft-services.net/api/v1.0/download/links'
+          curl -fsSL "$api" -o download-links.json
+          url=$(jq -r '.result.links[] | select(.downloadType=="serverBedrockLinux") | .downloadUrl' download-links.json | head -1)
+          test -n "$url" && test "$url" != "null"
+          curl -fL --retry 3 --retry-delay 2 -A 'Mozilla/5.0' "$url" -o bedrock-server.zip
+          mkdir bds
+          unzip -q bedrock-server.zip -d bds
+          test -x bds/bedrock_server
+
+      - name: Generate clean valid Bedrock carrier world database
+        shell: bash
+        run: |
+          set -euo pipefail
+          BDS=/tmp/rs-carrier/bds
+          sed -i 's/^level-name=.*/level-name=RichShortyCarrier/' "$BDS/server.properties"
+          sed -i 's/^online-mode=.*/online-mode=false/' "$BDS/server.properties"
+          sed -i 's/^allow-list=.*/allow-list=false/' "$BDS/server.properties"
+          cd "$BDS"
+          {
+            sleep 12
+            echo 'stop'
+          } | timeout --signal=INT --kill-after=5s 30s env LD_LIBRARY_PATH=. ./bedrock_server 2>&1 | tee /tmp/rs-carrier/bds-generation.log || code=$?
+          code=${code:-0}
+          echo "BDS exit code: $code"
+          grep -F 'Server started.' /tmp/rs-carrier/bds-generation.log
+          WORLD="$BDS/worlds/RichShortyCarrier"
+          test -f "$WORLD/level.dat"
+          test -d "$WORLD/db"
+          test -n "$(find "$WORLD/db" -type f -print -quit)"
+
+      - name: Embed exact TEST packs and build mcworld
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORLD=/tmp/rs-carrier/bds/worlds/RichShortyCarrier
+          OUT="rich_shorty/dist/Rich_and_Shorty_TEST${TEST_RUN}_REALM_CARRIER.mcworld"
+          python rich_shorty/build_carrier_world.py \
+            --world "$WORLD" \
+            --bp rich_shorty/dist/RichShorty_BP \
+            --rp rich_shorty/dist/RichShorty_RP \
+            --out "$OUT" \
+            --name "Rich & Shorty TEST ${TEST_RUN} Realm Carrier" | tee rich_shorty/dist/carrier-validation.json
+          unzip -t "$OUT" | tee rich_shorty/dist/carrier-archive.log
+          sha256sum "$OUT" | tee rich_shorty/dist/carrier-sha256.txt
+
+          # Fail closed on the exact world-bound pack references and embedded manifests.
+          rm -rf /tmp/rs-carrier/check
+          mkdir -p /tmp/rs-carrier/check
+          unzip -q "$OUT" -d /tmp/rs-carrier/check
+          BP_UUID=$(jq -r '.header.uuid' rich_shorty/dist/RichShorty_BP/manifest.json)
+          RP_UUID=$(jq -r '.header.uuid' rich_shorty/dist/RichShorty_RP/manifest.json)
+          BP_VER=$(jq -c '.header.version' rich_shorty/dist/RichShorty_BP/manifest.json)
+          RP_VER=$(jq -c '.header.version' rich_shorty/dist/RichShorty_RP/manifest.json)
+          jq -e --arg id "$BP_UUID" --argjson ver "$BP_VER" '. == [{"pack_id":$id,"version":$ver}]' /tmp/rs-carrier/check/world_behavior_packs.json >/dev/null
+          jq -e --arg id "$RP_UUID" --argjson ver "$RP_VER" '. == [{"pack_id":$id,"version":$ver}]' /tmp/rs-carrier/check/world_resource_packs.json >/dev/null
+          test "$(jq -r '.header.uuid' /tmp/rs-carrier/check/behavior_packs/RSBP/manifest.json)" = "$BP_UUID"
+          test "$(jq -r '.header.uuid' /tmp/rs-carrier/check/resource_packs/RSRP/manifest.json)" = "$RP_UUID"
+          test -f /tmp/rs-carrier/check/level.dat
+          test -d /tmp/rs-carrier/check/db
+          grep -F 'dimensionRegistry.registerCustomDimension' /tmp/rs-carrier/check/behavior_packs/RSBP/scripts/main.js >/dev/null
+
+      - name: Upload Realm carrier world
+        uses: actions/upload-artifact@v4
+        with:
+          name: Rich-and-Shorty-TEST${{ env.TEST_RUN }}-Realm-Carrier
+          path: |
+            rich_shorty/dist/Rich_and_Shorty_TEST${{ env.TEST_RUN }}_REALM_CARRIER.mcworld
+            rich_shorty/dist/carrier-validation.json
+            rich_shorty/dist/carrier-archive.log
+            rich_shorty/dist/carrier-sha256.txt
+            rich_shorty/dist/validation_report.json
+          if-no-files-found: error
