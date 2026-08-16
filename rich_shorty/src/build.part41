@@ -1,0 +1,98 @@
+
+# ---------------------------------------------------------------------------
+# TEST 71 RETAIL FIX — SAFE CUSTOM-DIMENSION ARRIVAL
+# Retail Android TEST 71 proved a real spawn-collision bug in Glorp-9: the
+# transport landed the player's feet at y+1 even though the expanded central
+# landing pad itself occupies y+1, and the center also contains a lodestone at
+# y+2. That can place the player inside solid geometry. Fix the transport for
+# every custom reality, including already-authored worlds, by cutting a small
+# guaranteed-clear arrival pocket immediately before every teleport and landing
+# the player one block above its floor.
+# ---------------------------------------------------------------------------
+_safe_arrival_previous_make_pack = make_pack
+_safe_arrival_previous_validate = validate
+
+
+def make_pack():
+    addon=_safe_arrival_previous_make_pack()
+    script_path=BP/'scripts/main.js'
+    script=script_path.read_text(encoding='utf-8')
+
+    old="""    player.teleport(\n      {x:z.pos.x+0.5,y:z.pos.y+1,z:z.pos.z+0.5},\n      {dimension:prepared.dimension}\n    );"""
+    new="""    const safeArrival=rsPrepareSafeRealityArrival(prepared.dimension,key,z);\n    player.teleport(\n      safeArrival,\n      {dimension:prepared.dimension}\n    );"""
+    if old not in script:
+        raise RuntimeError('unsafe custom-dimension teleport target not found for TEST 71 arrival fix')
+    script=script.replace(old,new,1)
+
+    script += r'''
+
+// TEST 71 RETAIL REGRESSION: NEVER teleport directly onto the authored center.
+// Expanded sectors place their central pad at y+1 and a lodestone at center
+// y+2. This helper runs on EVERY portal trip, not only first generation, so an
+// existing TEST-71-authored dimension is repaired in place before the player
+// enters it. The pocket sits inside the central 13x13 landing pad but offset
+// from the center lodestone.
+function rsPrepareSafeRealityArrival(dim,key,z){
+  const ax=z.pos.x;
+  const ay=z.pos.y;
+  const az=z.pos.z+4;
+
+  // Reassert a solid 3x3 floor, then guarantee four blocks of headroom. Running
+  // after reality authoring also clears any deterministic tree/tower/debris that
+  // happened to intersect this exact arrival pocket.
+  fillb(dim,ax-1,ay+1,az-1,ax+1,ay+1,az+1,'minecraft:smooth_stone');
+  fillb(dim,ax-1,ay+2,az-1,ax+1,ay+5,az+1,'minecraft:air');
+
+  // Two edge lights make the safe return point visually readable without
+  // occupying the player's collision column.
+  const theme=RS_REALITY_THEME[key];
+  if(theme){
+    setb(dim,ax-1,ay+2,az-1,theme.glow);
+    setb(dim,ax+1,ay+2,az-1,theme.glow);
+  }
+
+  return {x:ax+0.5,y:ay+2.01,z:az+0.5};
+}
+'''
+    twrite(script_path,script)
+    return _beta_dimension_reseal(addon)
+
+
+def validate(addon:Path):
+    report=_safe_arrival_previous_validate(addon)
+    errors=list(report.get('errors',[])); checks=int(report.get('checks',0))
+    script=(BP/'scripts/main.js').read_text(encoding='utf-8')
+
+    required={
+      'safe arrival helper':'function rsPrepareSafeRealityArrival(dim,key,z)',
+      'safe pocket floor':"fillb(dim,ax-1,ay+1,az-1,ax+1,ay+1,az+1,'minecraft:smooth_stone')",
+      'four-block headroom':"fillb(dim,ax-1,ay+2,az-1,ax+1,ay+5,az+1,'minecraft:air')",
+      'arrival offset from center lodestone':'const az=z.pos.z+4',
+      'teleport uses prepared safe coordinate':'safeArrival,',
+      'feet above floor':'y:ay+2.01'
+    }
+    for label,needle in required.items():
+        checks+=1
+        if needle not in script:
+            errors.append(f'safe-arrival regression: missing {label} ({needle!r})')
+
+    checks+=1
+    if "{x:z.pos.x+0.5,y:z.pos.y+1,z:z.pos.z+0.5}" in script:
+        errors.append('safe-arrival regression: TEST 71 solid-block teleport coordinate survived finalization')
+
+    checks+=1
+    if "setb(dim,c.x,y+2,c.z,'minecraft:lodestone')" not in script:
+        errors.append('safe-arrival regression: expected central lodestone signature disappeared; arrival offset gate needs reevaluation')
+
+    report['checks']=checks
+    report['errors']=errors
+    report['status']='PASS' if not errors else 'FAIL'
+    report['retail_test_71_result']='FAIL_GLORP_ARRIVAL_SUFFOCATION'
+    report['retail_test_71_failure']='player teleported at y+1 into expanded central pad geometry; center also occupied by lodestone at y+2'
+    report['safe_reality_arrival_profile']='offset_3x3_floor_plus_four_block_headroom_every_portal_trip'
+    gates=list(report.get('feature_regression_gates',[]))
+    for g in ('retail_test71_arrival_suffocation_regression','safe_custom_dimension_arrival_clearance','existing_world_arrival_repair'):
+        if g not in gates: gates.append(g)
+    report['feature_regression_gates']=gates
+    jwrite(OUT/'validation_report.json',report)
+    return report
