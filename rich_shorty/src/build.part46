@@ -1,0 +1,450 @@
+
+# ---------------------------------------------------------------------------
+# TEST 77 — TEN CUSTOM SCI-FI REALITY ENEMIES
+# Two original enemies per custom dimension. The four resource realities replace
+# their vanilla Reality Contract rosters with these mobs. Citadel-ish gets two
+# capped ambient enforcement enemies that only activate after players move away
+# from the safe arrival pocket. Every enemy has custom geometry, texture, client
+# definition, animation, behavior, spawn egg, dimension family, special combat
+# effect, and a deliberately dumb sci-fi bureaucratic quip.
+# ---------------------------------------------------------------------------
+_reality_enemy_previous_make_pack = make_pack
+_reality_enemy_previous_validate = validate
+
+RS_REALITY_ENEMIES = [
+    # id, display, dimension, archetype, base, accent, hp, damage, speed, width, height
+    ('glorp_compliance_slug','Glorp Compliance Slug','glorp','slug','#245f55','#89f0bb',32,5,0.24,1.15,0.85),
+    ('spore_taxman','Spore Taxman','glorp','mushroom_mech','#5d416d','#d7ff78',36,6,0.27,0.82,1.75),
+    ('warranty_wasp','Warranty Wasp','fizz','wasp','#502d22','#ffb72f',28,6,0.34,1.10,1.15),
+    ('heat_repo_bot','Heat Repo Bot','fizz','repo_bot','#4a332d','#ff6440',44,8,0.25,0.92,1.80),
+    ('late_fee_drone','Late-Fee Drone','chrono','clock_drone','#273456','#7fe8ff',30,5,0.31,1.05,1.30),
+    ('secondhand_assassin','Secondhand Assassin','chrono','clock_killer','#30304b','#d69cff',38,7,0.33,0.76,1.92),
+    ('forklift_crab','Forklift Crab','scrap','forklift_crab','#4d555d','#e1a84d',46,8,0.29,1.55,0.95),
+    ('unlicensed_recycler','Unlicensed Recycler','scrap','recycler','#394047','#79d39d',50,7,0.23,1.05,1.65),
+    ('form_27b','Form 27-B','citadel','printer_bot','#34545b','#8ff7e4',34,6,0.30,0.82,1.55),
+    ('queue_enforcer','Queue Enforcement Unit','citadel','queue_bot','#273d48','#ff5b67',48,8,0.28,0.88,2.05),
+]
+
+RS_ENEMY_QUIPS = {
+    'glorp_compliance_slug':'Your moisture permit expired three molts ago.',
+    'spore_taxman':'This infection is deductible. Probably.',
+    'warranty_wasp':'Damage detected. Warranty voided by damage.',
+    'heat_repo_bot':'Repossessing approximately all of your warmth.',
+    'late_fee_drone':'You are 3.7 seconds overdue.',
+    'secondhand_assassin':'Killing time. Professionally.',
+    'forklift_crab':'Beep beep. OSHA has left this dimension.',
+    'unlicensed_recycler':'You have been classified as mixed waste.',
+    'form_27b':'Combat request denied. Combat will continue.',
+    'queue_enforcer':'Please remain violently in line.',
+}
+
+
+def _ec(origin,size,uv=(0,0)):
+    return {'origin':list(origin),'size':list(size),'uv':list(uv)}
+
+
+def _enemy_geometry(eid, archetype):
+    bones=[{'name':'root','pivot':[0,0,0]}]
+    def bone(name,pivot,cubes,parent='root'):
+        bones.append({'name':name,'parent':parent,'pivot':list(pivot),'cubes':cubes})
+
+    if archetype=='slug':
+        bone('body',[0,5,0],[
+            _ec((-8,2,-7),(16,5,14)),_ec((-6,6,-6),(12,3,12)),
+            _ec((-10,2,4),(6,3,8)),_ec((4,2,5),(5,3,7)),
+            _ec((-7,1,-5),(3,2,4)),_ec((-2,1,-6),(4,2,4)),_ec((3,1,-5),(3,2,4)),
+            _ec((-5,7,-3),(10,2,7)),
+        ])
+        bone('head',[0,7,-5],[
+            _ec((-5,6,-10),(10,5,6)),_ec((-4,8,-12),(3,2,3)),_ec((1,8,-12),(3,2,3)),
+            _ec((-1,10,-10),(2,5,2)),_ec((-5,11,-8),(2,4,2)),_ec((3,11,-8),(2,4,2)),
+            _ec((-3,12,-9),(6,2,2)),
+        ])
+        for n,x,z in [('leg1',-6,-4),('leg2',0,-5),('leg3',6,-4),('leg4',-5,3),('leg5',5,3)]:
+            bone(n,[x,2,z],[_ec((x-1,0,z-1),(2,3,3))])
+    elif archetype=='mushroom_mech':
+        bone('body',[0,9,0],[
+            _ec((-5,6,-4),(10,8,8)),_ec((-7,12,-6),(14,3,12)),_ec((-9,14,-8),(18,3,16)),
+            _ec((-6,17,-6),(12,2,12)),_ec((-2,4,-2),(4,3,4)),
+            _ec((5,7,-5),(5,7,3)),_ec((7,5,-4),(4,3,5)),
+        ])
+        bone('head',[0,13,-1],[_ec((-3,10,-5),(6,4,5)),_ec((-2,11,-7),(2,2,2)),_ec((1,11,-7),(2,2,2))])
+        for n,x in [('leg1',-4),('leg2',4)]: bone(n,[x,6,0],[_ec((x-2,0,-2),(4,7,4))])
+        for n,x in [('arm1',-7),('arm2',7)]: bone(n,[x,11,0],[_ec((x-2,6,-2),(4,7,4))])
+    elif archetype=='wasp':
+        bone('body',[0,8,0],[
+            _ec((-4,5,-6),(8,6,12)),_ec((-3,6,5),(6,5,7)),_ec((-2,7,12),(4,3,5)),
+            _ec((-1,8,17),(2,2,6)),_ec((-8,8,-2),(6,2,10)),_ec((2,8,-2),(6,2,10)),
+            _ec((-10,9,0),(5,1,9)),_ec((5,9,0),(5,1,9)),
+        ])
+        bone('head',[0,9,-6],[_ec((-5,6,-10),(10,7,5)),_ec((-4,8,-12),(3,3,3)),_ec((1,8,-12),(3,3,3)),_ec((-1,12,-10),(2,4,2))])
+        for i,(x,z) in enumerate([(-5,-3),(5,-3),(-5,2),(5,2),(-4,7),(4,7)],1):
+            bone(f'leg{i}',[x,6,z],[_ec((x-1,1,z-1),(2,6,2))])
+    elif archetype=='repo_bot':
+        bone('body',[0,10,0],[
+            _ec((-6,5,-5),(12,11,10)),_ec((-7,8,-6),(14,5,12)),_ec((-5,16,-4),(10,3,8)),
+            _ec((-4,10,-7),(8,4,2)),_ec((-2,11,-8),(4,2,1)),
+            _ec((-7,17,-3),(3,4,6)),_ec((4,17,-3),(3,4,6)),
+        ])
+        bone('head',[0,18,0],[_ec((-4,18,-4),(8,5,8)),_ec((-3,20,-6),(2,2,2)),_ec((1,20,-6),(2,2,2)),_ec((-1,23,-1),(2,3,2))])
+        for n,x in [('leg1',-4),('leg2',4)]: bone(n,[x,5,0],[_ec((x-2,0,-3),(4,6,6))])
+        for n,x in [('arm1',-8),('arm2',8)]: bone(n,[x,13,0],[_ec((x-2,5,-2),(4,9,4)),_ec((x-3,3,-3),(6,3,6))])
+    elif archetype=='clock_drone':
+        bone('body',[0,10,0],[
+            _ec((-7,4,-2),(14,14,4)),_ec((-9,7,-1),(18,8,2)),_ec((-5,2,-3),(10,4,6)),
+            _ec((-1,6,-5),(2,10,2)),_ec((-1,10,-6),(7,2,2)),
+            _ec((-10,9,-2),(3,5,4)),_ec((7,9,-2),(3,5,4)),
+        ])
+        bone('head',[0,12,-2],[_ec((-3,9,-5),(6,6,3)),_ec((-2,11,-7),(4,2,2))])
+        for n,x in [('leg1',-4),('leg2',4)]: bone(n,[x,4,0],[_ec((x-1,0,-1),(2,5,2))])
+    elif archetype=='clock_killer':
+        bone('body',[0,11,0],[
+            _ec((-4,7,-3),(8,10,6)),_ec((-6,16,-2),(12,2,4)),
+            _ec((-1,8,-5),(2,12,2)),_ec((-1,13,-6),(10,2,2)),
+            _ec((-5,5,-2),(10,3,4)),
+        ])
+        bone('head',[0,19,0],[_ec((-4,18,-4),(8,6,8)),_ec((-3,20,-6),(6,2,2)),_ec((-1,24,-1),(2,4,2))])
+        for n,x in [('leg1',-3),('leg2',3)]: bone(n,[x,7,0],[_ec((x-2,0,-2),(4,8,4))])
+        for n,x in [('arm1',-6),('arm2',6)]: bone(n,[x,15,0],[_ec((x-1,7,-1),(2,9,2)),_ec((x-2,5,-2),(4,3,4))])
+    elif archetype=='forklift_crab':
+        bone('body',[0,5,0],[
+            _ec((-10,3,-7),(20,7,14)),_ec((-7,9,-5),(14,3,10)),
+            _ec((-8,5,-10),(16,4,4)),_ec((-9,6,-13),(3,3,5)),_ec((6,6,-13),(3,3,5)),
+            _ec((-9,4,-18),(3,2,9)),_ec((6,4,-18),(3,2,9)),
+            _ec((-3,10,-7),(6,3,3)),
+        ])
+        bone('head',[0,9,-5],[_ec((-4,8,-10),(8,5,5)),_ec((-3,10,-12),(2,2,2)),_ec((1,10,-12),(2,2,2))])
+        for i,(x,z) in enumerate([(-9,-3),(9,-3),(-10,3),(10,3),(-8,7),(8,7)],1):
+            bone(f'leg{i}',[x,4,z],[_ec((x-2,0,z-1),(4,5,2))])
+    elif archetype=='recycler':
+        bone('body',[0,9,0],[
+            _ec((-7,3,-6),(14,14,12)),_ec((-6,6,-8),(12,7,3)),_ec((-5,8,-9),(10,3,2)),
+            _ec((-4,17,-4),(8,3,8)),_ec((-2,20,-2),(4,2,4)),
+            _ec((-8,2,-5),(4,4,10)),_ec((4,2,-5),(4,4,10)),
+        ])
+        bone('head',[0,16,-4],[_ec((-4,14,-8),(8,5,4)),_ec((-3,16,-10),(2,2,2)),_ec((1,16,-10),(2,2,2))])
+        for n,x in [('leg1',-4),('leg2',4)]: bone(n,[x,3,0],[_ec((x-2,0,-3),(4,4,6))])
+        for n,x in [('arm1',-9),('arm2',9)]: bone(n,[x,12,0],[_ec((x-2,5,-2),(4,8,4)),_ec((x-3,3,-3),(6,3,6))])
+    elif archetype=='printer_bot':
+        bone('body',[0,10,0],[
+            _ec((-6,4,-5),(12,13,10)),_ec((-7,13,-6),(14,4,12)),_ec((-5,7,-7),(10,5,3)),
+            _ec((-4,8,-9),(8,3,3)),_ec((-3,17,-3),(6,3,6)),
+            _ec((5,10,-3),(6,3,6)),_ec((8,8,-2),(3,8,4)),
+        ])
+        bone('head',[0,19,0],[_ec((-4,18,-4),(8,5,8)),_ec((-3,20,-6),(6,2,2)),_ec((-2,23,-2),(4,2,4))])
+        for n,x in [('leg1',-4),('leg2',4)]: bone(n,[x,4,0],[_ec((x-2,0,-2),(4,5,4))])
+        bone('arm1',[-8,13,0],[_ec((-10,7,-2),(4,7,4)),_ec((-11,5,-3),(6,3,6))])
+    else:  # queue_bot
+        bone('body',[0,12,0],[
+            _ec((-5,6,-4),(10,12,8)),_ec((-6,16,-5),(12,4,10)),_ec((-3,20,-3),(6,3,6)),
+            _ec((-2,3,-2),(4,4,4)),_ec((-6,4,-5),(12,3,10)),
+            _ec((-10,12,-2),(5,3,4)),_ec((5,12,-2),(5,3,4)),
+            _ec((-13,13,-1),(8,2,2)),_ec((5,13,-1),(8,2,2)),
+        ])
+        bone('head',[0,23,0],[_ec((-4,22,-4),(8,6,8)),_ec((-3,24,-6),(6,2,2)),_ec((-1,28,-1),(2,3,2))])
+        for n,x in [('leg1',-3),('leg2',3)]: bone(n,[x,6,0],[_ec((x-2,0,-2),(4,7,4))])
+        for n,x in [('arm1',-8),('arm2',8)]: bone(n,[x,15,0],[_ec((x-2,7,-2),(4,9,4))])
+
+    return {'format_version':'1.12.0','minecraft:geometry':[{
+      'description':{
+        'identifier':f'geometry.keepinitkrispy_rs.{eid}',
+        'texture_width':64,'texture_height':64,
+        'visible_bounds_width':4.0,'visible_bounds_height':4.0,'visible_bounds_offset':[0,1.2,0]
+      },
+      'bones':bones
+    }]}
+
+
+def _enemy_animation(eid, geo):
+    names={b['name'] for b in geo['minecraft:geometry'][0]['bones']}
+    walk={}
+    legs=sorted(n for n in names if n.startswith('leg'))
+    for i,n in enumerate(legs):
+        a=20 if i%2==0 else -20
+        walk[n]={'rotation':{'0.0':[a,0,0],'0.5':[-a,0,0],'1.0':[a,0,0]}}
+    if 'arm1' in names: walk['arm1']={'rotation':{'0.0':[-18,0,0],'0.5':[18,0,0],'1.0':[-18,0,0]}}
+    if 'arm2' in names: walk['arm2']={'rotation':{'0.0':[18,0,0],'0.5':[-18,0,0],'1.0':[18,0,0]}}
+    idle={'body':{'rotation':{'0.0':[0,-2,0],'1.2':[0,2,0],'2.4':[0,-2,0]}}}
+    if 'head' in names: idle['head']={'rotation':{'0.0':[0,-5,0],'1.2':[2,5,0],'2.4':[0,-5,0]}}
+    return {'format_version':'1.8.0','animations':{
+      f'animation.keepinitkrispy_rs.{eid}.idle':{'loop':True,'animation_length':2.4,'bones':idle},
+      f'animation.keepinitkrispy_rs.{eid}.walk':{'loop':True,'animation_length':1.0,'bones':walk}
+    }}
+
+
+def _enemy_client(eid):
+    return {'format_version':'1.10.0','minecraft:client_entity':{'description':{
+      'identifier':f'keepinitkrispy_rs:{eid}',
+      'materials':{'default':'entity_alphatest'},
+      'textures':{'default':f'textures/entity/keepinitkrispy_rs/{eid}'},
+      'geometry':{'default':f'geometry.keepinitkrispy_rs.{eid}'},
+      'animations':{
+        'idle':f'animation.keepinitkrispy_rs.{eid}.idle',
+        'walk':f'animation.keepinitkrispy_rs.{eid}.walk'
+      },
+      'scripts':{'animate':['idle',{'walk':'query.modified_move_speed > 0.02'}]},
+      'render_controllers':['controller.render.rs_default']
+    }}}
+
+
+def _enemy_behavior(eid,dimension,hp,damage,speed,width,height,base,accent):
+    return {'format_version':'1.20.80','minecraft:entity':{
+      'description':{
+        'identifier':f'keepinitkrispy_rs:{eid}',
+        'is_spawnable':True,'is_summonable':True,'is_experimental':False,
+        'spawn_egg':{'base_color':base,'overlay_color':accent}
+      },
+      'component_groups':{},
+      'components':{
+        'minecraft:type_family':{'family':['keepinitkrispy_rs_enemy',f'keepinitkrispy_rs_enemy_{dimension}','monster','mob']},
+        'minecraft:health':{'value':hp,'max':hp},
+        'minecraft:movement':{'value':speed},
+        'minecraft:movement.basic':{},
+        'minecraft:navigation.walk':{'can_path_over_water':True,'avoid_damage_blocks':False,'can_path_from_air':True},
+        'minecraft:physics':{},
+        'minecraft:pushable':{'is_pushable':True,'is_pushable_by_piston':True},
+        'minecraft:collision_box':{'width':width,'height':height},
+        'minecraft:attack':{'damage':damage},
+        'minecraft:behavior.nearest_attackable_target':{
+          'priority':2,'must_see':True,'reselect_targets':True,
+          'entity_types':[{'filters':{'test':'is_family','subject':'other','value':'player'},'max_dist':34}]
+        },
+        'minecraft:behavior.melee_attack':{'priority':3,'speed_multiplier':1.15,'track_target':True,'reach_multiplier':1.1},
+        'minecraft:behavior.hurt_by_target':{'priority':4},
+        'minecraft:behavior.random_stroll':{'priority':8,'speed_multiplier':0.7},
+        'minecraft:behavior.look_at_player':{'priority':9,'look_distance':10,'probability':0.08},
+        'minecraft:behavior.random_look_around':{'priority':10}
+      },
+      'events':{}
+    }}
+
+
+def _paint_enemy_texture(path,base,accent,eid):
+    path.parent.mkdir(parents=True,exist_ok=True)
+    b=tuple(int(base[i:i+2],16) for i in (1,3,5))
+    a=tuple(int(accent[i:i+2],16) for i in (1,3,5))
+    im=Image.new('RGBA',(64,64),b+(255,)); d=ImageDraw.Draw(im)
+    # Opaque sci-fi paneling: stripes, warning blocks, eyes/screens, bolts.
+    for y in range(0,64,8): d.line((0,y,63,y),fill=tuple(max(0,c-22) for c in b)+(255,),width=1)
+    for x in range(4,64,12): d.rectangle((x,2,x+2,61),fill=a+(255,))
+    d.rectangle((8,8,28,14),fill=(18,24,29,255)); d.rectangle((11,10,25,12),fill=a+(255,))
+    d.rectangle((36,7,56,18),outline=a+(255,),width=2)
+    for x,y in [(6,28),(19,35),(32,27),(47,38),(57,26),(11,53),(39,55)]: d.rectangle((x,y,x+2,y+2),fill=(220,225,220,255))
+    # Deterministic hazard marks give each skin a different panel layout.
+    seed=sum(ord(c) for c in eid)
+    for i in range(6):
+        x=(seed+i*17)%56+4; y=(seed*3+i*11)%48+12
+        d.rectangle((x,y,min(63,x+5),min(63,y+2)),fill=a+(255,))
+    im.save(path)
+
+
+def make_pack():
+    addon=_reality_enemy_previous_make_pack()
+
+    # Author all ten custom enemies after every legacy namespace/visual layer so
+    # nothing later can silently rewrite them back to the old rs: namespace.
+    lang_path=RP/'texts/en_US.lang'
+    lang=lang_path.read_text(encoding='utf-8') if lang_path.exists() else ''
+    for eid,display,dimension,archetype,base,accent,hp,damage,speed,width,height in RS_REALITY_ENEMIES:
+        geo=_enemy_geometry(eid,archetype)
+        jwrite(RP/f'models/entity/{eid}.geo.json',geo)
+        jwrite(RP/f'animations/{eid}.animation.json',_enemy_animation(eid,geo))
+        jwrite(RP/f'entity/{eid}.entity.json',_enemy_client(eid))
+        jwrite(BP/f'entities/{eid}.json',_enemy_behavior(eid,dimension,hp,damage,speed,width,height,base,accent))
+        _paint_enemy_texture(RP/f'textures/entity/keepinitkrispy_rs/{eid}.png',base,accent,eid)
+        lang += f'entity.keepinitkrispy_rs:{eid}.name={display}\n'
+    twrite(lang_path,lang)
+
+    script_path=BP/'scripts/main.js'
+    script=script_path.read_text(encoding='utf-8')
+
+    # Replace only the Reality Contract roster object. Contracts remain four-kill
+    # encounters, but all four threats now come from the two native enemies for
+    # that reality instead of vanilla zombies/spiders/etc.
+    roster_start=script.find('const RS_SECTOR_ROSTERS={')
+    if roster_start<0:
+        raise RuntimeError('Reality Contract roster object not found for custom enemy replacement')
+    roster_end=script.find('\n};',roster_start)
+    if roster_end<0:
+        raise RuntimeError('Reality Contract roster object terminator not found')
+    roster_end+=3
+    custom_rosters=r'''const RS_SECTOR_ROSTERS={
+  glorp:[
+    ['keepinitkrispy_rs:glorp_compliance_slug','keepinitkrispy_rs:spore_taxman','keepinitkrispy_rs:glorp_compliance_slug','keepinitkrispy_rs:spore_taxman'],
+    ['keepinitkrispy_rs:spore_taxman','keepinitkrispy_rs:glorp_compliance_slug','keepinitkrispy_rs:spore_taxman','keepinitkrispy_rs:glorp_compliance_slug']
+  ],
+  fizz:[
+    ['keepinitkrispy_rs:warranty_wasp','keepinitkrispy_rs:heat_repo_bot','keepinitkrispy_rs:warranty_wasp','keepinitkrispy_rs:heat_repo_bot'],
+    ['keepinitkrispy_rs:heat_repo_bot','keepinitkrispy_rs:warranty_wasp','keepinitkrispy_rs:heat_repo_bot','keepinitkrispy_rs:warranty_wasp']
+  ],
+  chrono:[
+    ['keepinitkrispy_rs:late_fee_drone','keepinitkrispy_rs:secondhand_assassin','keepinitkrispy_rs:late_fee_drone','keepinitkrispy_rs:secondhand_assassin'],
+    ['keepinitkrispy_rs:secondhand_assassin','keepinitkrispy_rs:late_fee_drone','keepinitkrispy_rs:secondhand_assassin','keepinitkrispy_rs:late_fee_drone']
+  ],
+  scrap:[
+    ['keepinitkrispy_rs:forklift_crab','keepinitkrispy_rs:unlicensed_recycler','keepinitkrispy_rs:forklift_crab','keepinitkrispy_rs:unlicensed_recycler'],
+    ['keepinitkrispy_rs:unlicensed_recycler','keepinitkrispy_rs:forklift_crab','keepinitkrispy_rs:unlicensed_recycler','keepinitkrispy_rs:forklift_crab']
+  ]
+};'''
+    script=script[:roster_start]+custom_rosters+script[roster_end:]
+
+    script += r'''
+
+// -------------------------------------------------------------------------
+// CUSTOM REALITY ENEMY PERSONALITIES + SPECIAL HITS
+// Quips are throttled globally per attacker so co-op combat stays funny instead
+// of becoming chat spam. Effects are short and readable rather than stun-locks.
+// -------------------------------------------------------------------------
+const RS_ENEMY_QUIPS={
+  'keepinitkrispy_rs:glorp_compliance_slug':'§2Glorp Compliance Slug§r: Your moisture permit expired three molts ago.',
+  'keepinitkrispy_rs:spore_taxman':'§5Spore Taxman§r: This infection is deductible. Probably.',
+  'keepinitkrispy_rs:warranty_wasp':'§6Warranty Wasp§r: Damage detected. Warranty voided by damage.',
+  'keepinitkrispy_rs:heat_repo_bot':'§cHeat Repo Bot§r: Repossessing approximately all of your warmth.',
+  'keepinitkrispy_rs:late_fee_drone':'§bLate-Fee Drone§r: You are 3.7 seconds overdue.',
+  'keepinitkrispy_rs:secondhand_assassin':'§dSecondhand Assassin§r: Killing time. Professionally.',
+  'keepinitkrispy_rs:forklift_crab':'§eForklift Crab§r: Beep beep. OSHA has left this dimension.',
+  'keepinitkrispy_rs:unlicensed_recycler':'§7Unlicensed Recycler§r: You have been classified as mixed waste.',
+  'keepinitkrispy_rs:form_27b':'§3Form 27-B§r: Combat request denied. Combat will continue.',
+  'keepinitkrispy_rs:queue_enforcer':'§cQueue Enforcement Unit§r: Please remain violently in line.'
+};
+const rsEnemyLastQuip=new Map();
+
+function rsEnemySpecialHit(attacker,target){
+  const id=attacker?.typeId??'';
+  try{
+    if(id==='keepinitkrispy_rs:glorp_compliance_slug') target.addEffect('minecraft:slowness',50,{amplifier:0});
+    else if(id==='keepinitkrispy_rs:spore_taxman') target.addEffect('minecraft:poison',40,{amplifier:0});
+    else if(id==='keepinitkrispy_rs:warranty_wasp') target.addEffect('minecraft:weakness',70,{amplifier:0});
+    else if(id==='keepinitkrispy_rs:heat_repo_bot') target.addEffect('minecraft:hunger',80,{amplifier:0});
+    else if(id==='keepinitkrispy_rs:late_fee_drone') target.addEffect('minecraft:slowness',40,{amplifier:1});
+    else if(id==='keepinitkrispy_rs:secondhand_assassin') target.addEffect('minecraft:darkness',35,{amplifier:0});
+    else if(id==='keepinitkrispy_rs:forklift_crab'){
+      const dx=target.location.x-attacker.location.x,dz=target.location.z-attacker.location.z;
+      const m=Math.max(0.1,Math.hypot(dx,dz));
+      target.applyImpulse({x:(dx/m)*0.48,y:0.22,z:(dz/m)*0.48});
+    }
+    else if(id==='keepinitkrispy_rs:unlicensed_recycler') target.addEffect('minecraft:weakness',80,{amplifier:1});
+    else if(id==='keepinitkrispy_rs:form_27b') target.addEffect('minecraft:mining_fatigue',90,{amplifier:0});
+    else if(id==='keepinitkrispy_rs:queue_enforcer') target.addEffect('minecraft:slowness',90,{amplifier:0});
+  }catch{}
+
+  const q=RS_ENEMY_QUIPS[id];
+  if(!q) return;
+  const last=Number(rsEnemyLastQuip.get(attacker.id)??-99999);
+  if(system.currentTick-last<180) return;
+  rsEnemyLastQuip.set(attacker.id,system.currentTick);
+  try{ target.sendMessage(q); }catch{}
+}
+
+world.afterEvents.entityHurt.subscribe(e=>{
+  const target=e.hurtEntity, attacker=e.damageSource?.damagingEntity;
+  if(target?.typeId!=='minecraft:player'||!attacker) return;
+  if(!RS_ENEMY_QUIPS[attacker.typeId]) return;
+  rsEnemySpecialHit(attacker,target);
+});
+
+// Citadel has no resource-sector contract loop, so its two native enemies live
+// as capped patrols. Arrival remains safe: patrols do not activate until the
+// player has moved at least 12 blocks from the central portal coordinate.
+const RS_CITADEL_ENEMIES=['keepinitkrispy_rs:form_27b','keepinitkrispy_rs:queue_enforcer'];
+system.runInterval(()=>{
+  const seenSectors=new Set();
+  for(const player of world.getAllPlayers()){
+    if(player.dimension.id!==RS_REALITY_DIMENSIONS.citadel) continue;
+    const z=ZONES.citadel;
+    const sx=Math.round((player.location.x-z.pos.x)/REALITY_SECTOR_SIZE);
+    const sz=Math.round((player.location.z-z.pos.z)/REALITY_SECTOR_SIZE);
+    const sk=`${sx}:${sz}`;
+    if(seenSectors.has(sk)) continue;
+    seenSectors.add(sk);
+    if(sx===0&&sz===0 && Math.hypot(player.location.x-z.pos.x,player.location.z-z.pos.z)<12) continue;
+    const c=rsSectorCenter(z,sx,sz);
+    let active=0;
+    try{
+      for(const ent of player.dimension.getEntities({location:{x:c.x,y:c.y+3,z:c.z},maxDistance:30})){
+        if(RS_CITADEL_ENEMIES.includes(ent.typeId)) active++;
+      }
+    }catch{}
+    if(active>=3) continue;
+    const pick=RS_CITADEL_ENEMIES[rsDeterministic('citadel_patrol',sx,sz,system.currentTick>>7)%2];
+    const offsets=[[11,8],[-11,8],[10,-10],[-10,-10]];
+    const off=offsets[rsDeterministic('citadel_patrol_pos',sx,sz,active)%offsets.length];
+    try{ player.dimension.spawnEntity(pick,{x:c.x+off[0],y:c.y+2,z:c.z+off[1]}); }catch{}
+  }
+},100);
+'''
+
+    twrite(script_path,script)
+    return _beta_dimension_reseal(addon)
+
+
+def validate(addon:Path):
+    report=_reality_enemy_previous_validate(addon)
+    errors=list(report.get('errors',[])); checks=int(report.get('checks',0))
+    script=(BP/'scripts/main.js').read_text(encoding='utf-8')
+
+    # Ten complete custom mob asset stacks, not renamed vanilla entities.
+    for eid,display,dimension,archetype,base,accent,hp,damage,speed,width,height in RS_REALITY_ENEMIES:
+        for path in (
+            BP/f'entities/{eid}.json',
+            RP/f'entity/{eid}.entity.json',
+            RP/f'models/entity/{eid}.geo.json',
+            RP/f'animations/{eid}.animation.json',
+            RP/f'textures/entity/keepinitkrispy_rs/{eid}.png',
+        ):
+            checks+=1
+            if not path.exists(): errors.append(f'reality enemy regression: missing {path}')
+        if (RP/f'models/entity/{eid}.geo.json').exists():
+            checks+=1
+            geo=json.loads((RP/f'models/entity/{eid}.geo.json').read_text(encoding='utf-8'))
+            cube_count=sum(len(b.get('cubes',[])) for b in geo['minecraft:geometry'][0]['bones'])
+            if cube_count<12: errors.append(f'reality enemy visual regression: {eid} has only {cube_count} cubes')
+        if (BP/f'entities/{eid}.json').exists():
+            checks+=2
+            ent=json.loads((BP/f'entities/{eid}.json').read_text(encoding='utf-8'))['minecraft:entity']
+            if ent['description'].get('identifier')!=f'keepinitkrispy_rs:{eid}':
+                errors.append(f'reality enemy namespace regression: {eid} identifier incorrect')
+            fam=ent['components'].get('minecraft:type_family',{}).get('family',[])
+            if f'keepinitkrispy_rs_enemy_{dimension}' not in fam:
+                errors.append(f'reality enemy family regression: {eid} missing {dimension} family')
+
+    required={
+      'Glorp Compliance Slug contract':'keepinitkrispy_rs:glorp_compliance_slug',
+      'Spore Taxman contract':'keepinitkrispy_rs:spore_taxman',
+      'Warranty Wasp contract':'keepinitkrispy_rs:warranty_wasp',
+      'Heat Repo Bot contract':'keepinitkrispy_rs:heat_repo_bot',
+      'Late-Fee Drone contract':'keepinitkrispy_rs:late_fee_drone',
+      'Secondhand Assassin contract':'keepinitkrispy_rs:secondhand_assassin',
+      'Forklift Crab contract':'keepinitkrispy_rs:forklift_crab',
+      'Unlicensed Recycler contract':'keepinitkrispy_rs:unlicensed_recycler',
+      'Form 27-B patrol':'keepinitkrispy_rs:form_27b',
+      'Queue Enforcement patrol':'keepinitkrispy_rs:queue_enforcer',
+      'custom enemy quips':'const RS_ENEMY_QUIPS={',
+      'special-hit dispatch':'function rsEnemySpecialHit(attacker,target)',
+      'Citadel patrol cap':'if(active>=3) continue;',
+      'Citadel safe-arrival exclusion':"Math.hypot(player.location.x-z.pos.x,player.location.z-z.pos.z)<12",
+    }
+    for label,needle in required.items():
+        checks+=1
+        if needle not in script: errors.append(f'reality enemy regression: missing {label} ({needle!r})')
+
+    checks+=1
+    roster_start=script.find('const RS_SECTOR_ROSTERS={')
+    roster_end=script.find('\n};',roster_start)
+    roster=script[roster_start:roster_end+3] if roster_start>=0 and roster_end>=0 else ''
+    vanilla_contract_ids=('minecraft:slime','minecraft:cave_spider','minecraft:zombie','minecraft:husk','minecraft:blaze','minecraft:stray','minecraft:pillager')
+    if any(v in roster for v in vanilla_contract_ids):
+        errors.append('reality enemy regression: vanilla mobs survived inside Reality Contract roster')
+
+    report['checks']=checks
+    report['errors']=errors
+    report['status']='PASS' if not errors else 'FAIL'
+    report['reality_enemy_profile']='ten_custom_sci_fi_mobs_two_per_dimension_v1'
+    report['reality_enemy_count']=10
+    report['reality_enemy_distribution']='2 Glorp + 2 Fizz + 2 Chrono + 2 Scrap + 2 Citadel'
+    gates=list(report.get('feature_regression_gates',[]))
+    for g in ('ten_custom_reality_enemies','two_enemies_per_dimension','no_vanilla_reality_contract_roster','custom_enemy_geometry_stack','custom_enemy_special_hits','citadel_capped_enemy_patrols','citadel_arrival_stays_safe'):
+        if g not in gates: gates.append(g)
+    report['feature_regression_gates']=gates
+    jwrite(OUT/'validation_report.json',report)
+    return report
