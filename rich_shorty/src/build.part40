@@ -1,0 +1,48 @@
+
+# ---------------------------------------------------------------------------
+# REALITY SECTOR NAMESPACE MIGRATION
+# part39 introduced one late dynamic-property key using the retired rs: prefix.
+# The global namespace validator correctly rejected it. Rewrite that key after
+# part39 authors the shipping script, retire only part39's exact old-key check,
+# and positively require the creator namespace instead of weakening the gate.
+# ---------------------------------------------------------------------------
+_sector_namespace_previous_make_pack = make_pack
+_sector_namespace_previous_validate = validate
+
+
+def make_pack():
+    addon=_sector_namespace_previous_make_pack()
+    script_path=BP/'scripts/main.js'
+    script=script_path.read_text(encoding='utf-8')
+    old="rs:reality_sectors_cleared"
+    new="keepinitkrispy_rs:reality_sectors_cleared"
+    if old not in script:
+        raise RuntimeError('reality sector completion property not found for namespace migration')
+    script=script.replace(old,new)
+    twrite(script_path,script)
+    return _beta_dimension_reseal(addon)
+
+
+def validate(addon:Path):
+    report=_sector_namespace_previous_validate(addon)
+    errors=list(report.get('errors',[])); checks=int(report.get('checks',0))
+
+    stale="reality gameplay regression: missing sector completion stat ('rs:reality_sectors_cleared')"
+    errors=[e for e in errors if e!=stale]
+
+    script=(BP/'scripts/main.js').read_text(encoding='utf-8')
+    checks+=2
+    if 'rs:reality_sectors_cleared' in script:
+        errors.append('reality sector namespace regression: legacy rs: completion key survived finalization')
+    if 'keepinitkrispy_rs:reality_sectors_cleared' not in script:
+        errors.append('reality sector namespace regression: namespaced completion key missing')
+
+    report['checks']=checks
+    report['errors']=errors
+    report['status']='PASS' if not errors else 'FAIL'
+    gates=list(report.get('feature_regression_gates',[]))
+    if 'reality_sector_creator_namespace' not in gates:
+        gates.append('reality_sector_creator_namespace')
+    report['feature_regression_gates']=gates
+    jwrite(OUT/'validation_report.json',report)
+    return report
