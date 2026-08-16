@@ -1,0 +1,288 @@
+
+# ---------------------------------------------------------------------------
+# REALITY SECTOR GAMEPLAY OVERHAUL
+# part37 fixed the dimensions' scale and skyline problem, but exploration still
+# resolved mostly to scenery + exposed resource blocks. This layer turns every
+# non-central resource sector into a persistent combat/exploration contract:
+# themed encounter pylons, deterministic threat rosters, reload-safe progress,
+# automatic recovery after unload/restart, and a physical resource cache that
+# appears only when the sector is stabilized.
+# ---------------------------------------------------------------------------
+_dimension_gameplay_previous_validate = validate
+_dimension_gameplay_make_pack_previous = make_pack
+
+
+def make_pack():
+    addon=_dimension_gameplay_make_pack_previous()
+    script_path=BP/'scripts/main.js'
+    script=script_path.read_text(encoding='utf-8')
+
+    old="""  rsScatterResources(dim,key,c.x,y,c.z,theme,sx,sz);\n  // Persistent in-world marker for this sector, independent of script-session Sets.\n  setb(dim,c.x,y-1,c.z,'keepinitkrispy_rs:zone_anchor');"""
+    new="""  rsScatterResources(dim,key,c.x,y,c.z,theme,sx,sz);\n  rsAuthorSectorGameplay(dim,key,sx,sz,c.x,y,c.z,theme);\n  // Persistent in-world marker for this sector, independent of script-session Sets.\n  setb(dim,c.x,y-1,c.z,'keepinitkrispy_rs:zone_anchor');"""
+    if old not in script:
+        raise RuntimeError('expanded reality sector author hook not found for gameplay layer')
+    script=script.replace(old,new,1)
+
+    script += r'''
+
+// -------------------------------------------------------------------------
+// REALITY SECTOR CONTRACTS
+// Central landing sectors stay safe. Every other resource-reality sector gains
+// a deterministic four-threat encounter around its lodestone. Progress is
+// stored physically under the sector floor so it survives reloads without an
+// ever-growing set of dynamic-property keys as exploration expands.
+// -------------------------------------------------------------------------
+const RS_SECTOR_KILL_STATES=[
+  'minecraft:coal_block',
+  'minecraft:iron_block',
+  'minecraft:gold_block',
+  'minecraft:diamond_block',
+  'minecraft:emerald_block'
+];
+const RS_SECTOR_TARGET_KILLS=4;
+
+const RS_SECTOR_ENCOUNTER_NAMES={
+  glorp:'ooze breach',
+  fizz:'thermal breach',
+  chrono:'time fracture',
+  scrap:'salvage ambush'
+};
+
+const RS_SECTOR_ROSTERS={
+  glorp:[
+    ['minecraft:slime','minecraft:cave_spider','minecraft:zombie','minecraft:slime'],
+    ['minecraft:cave_spider','minecraft:slime','minecraft:spider','minecraft:zombie'],
+    ['minecraft:slime','minecraft:slime','minecraft:cave_spider','minecraft:spider']
+  ],
+  fizz:[
+    ['minecraft:husk','minecraft:husk','minecraft:blaze','minecraft:magma_cube'],
+    ['minecraft:husk','minecraft:blaze','minecraft:husk','minecraft:zombie'],
+    ['minecraft:magma_cube','minecraft:husk','minecraft:blaze','minecraft:husk']
+  ],
+  chrono:[
+    ['minecraft:stray','minecraft:stray','minecraft:enderman','minecraft:skeleton'],
+    ['minecraft:skeleton','minecraft:stray','minecraft:enderman','minecraft:stray'],
+    ['minecraft:stray','minecraft:skeleton','minecraft:stray','minecraft:enderman']
+  ],
+  scrap:[
+    ['minecraft:zombie','minecraft:pillager','minecraft:zombie','minecraft:pillager'],
+    ['minecraft:pillager','minecraft:zombie','minecraft:spider','minecraft:pillager'],
+    ['minecraft:zombie','minecraft:pillager','minecraft:skeleton','minecraft:zombie']
+  ]
+};
+
+const RS_SECTOR_REWARD_BLOCK={
+  glorp:'keepinitkrispy_rs:glorp_ore',
+  fizz:'keepinitkrispy_rs:fizzium_ore',
+  chrono:'keepinitkrispy_rs:chronodust_cluster',
+  scrap:'keepinitkrispy_rs:scrap_node'
+};
+
+const RS_SECTOR_ARENA_BLOCK={
+  glorp:'minecraft:slime',
+  fizz:'minecraft:magma',
+  chrono:'minecraft:blue_ice',
+  scrap:'minecraft:iron_block'
+};
+
+const rsSectorIntroSeen=new Map();
+
+function rsSignedSector(v){ return v<0?`n${Math.abs(v)}`:`p${v}`; }
+function rsUnsignedSector(v){
+  if(!v||v.length<2) return 0;
+  const n=Number(v.slice(1));
+  return v[0]==='n'?-n:n;
+}
+function rsEncounterTag(key,sx,sz){ return `rsenc_${key}_${rsSignedSector(sx)}_${rsSignedSector(sz)}`; }
+function rsEncounterTagData(tag){
+  const m=/^rsenc_(glorp|fizz|chrono|scrap)_([np]\d+)_([np]\d+)$/.exec(tag);
+  if(!m) return null;
+  return {key:m[1],sx:rsUnsignedSector(m[2]),sz:rsUnsignedSector(m[3])};
+}
+function rsSectorProgressLocation(key,sx,sz){
+  const c=rsSectorCenter(ZONES[key],sx,sz);
+  return {x:c.x+1,y:c.y-1,z:c.z};
+}
+function rsSectorCenterLocation(key,sx,sz){ return rsSectorCenter(ZONES[key],sx,sz); }
+
+function rsAuthorSectorGameplay(dim,key,sx,sz,cx,y,cz,theme){
+  if(key==='citadel'||(sx===0&&sz===0)) return;
+  const arena=RS_SECTOR_ARENA_BLOCK[key]??theme.edge;
+  for(const [dx,dz] of [[-5,-5],[5,-5],[-5,5],[5,5]]){
+    setb(dim,cx+dx,y+1,cz+dz,arena);
+    setb(dim,cx+dx,y+2,cz+dz,theme.edge);
+    setb(dim,cx+dx,y+3,cz+dz,theme.glow);
+  }
+  setb(dim,cx+1,y-1,cz,RS_SECTOR_KILL_STATES[0]);
+}
+
+function rsSectorKills(dim,key,sx,sz){
+  const loc=rsSectorProgressLocation(key,sx,sz);
+  try{
+    const block=dim.getBlock(loc);
+    const idx=RS_SECTOR_KILL_STATES.indexOf(block?.typeId??'');
+    if(idx>=0) return idx;
+    // Lazy migration for sectors already authored by part37 before this layer.
+    const c=rsSectorCenterLocation(key,sx,sz);
+    rsAuthorSectorGameplay(dim,key,sx,sz,c.x,c.y,c.z,RS_REALITY_THEME[key]);
+  }catch{}
+  return 0;
+}
+
+function rsWriteSectorKills(dim,key,sx,sz,kills){
+  const loc=rsSectorProgressLocation(key,sx,sz);
+  const clamped=Math.max(0,Math.min(RS_SECTOR_TARGET_KILLS,Math.floor(kills)));
+  setb(dim,loc.x,loc.y,loc.z,RS_SECTOR_KILL_STATES[clamped]);
+}
+
+function rsSectorRoster(key,sx,sz){
+  const variants=RS_SECTOR_ROSTERS[key]??[];
+  if(!variants.length) return [];
+  return variants[rsDeterministic(`encounter_${key}`,sx,sz,71)%variants.length];
+}
+
+function rsSpawnMissingSectorThreats(dim,key,sx,sz,kills){
+  if(key==='citadel'||(sx===0&&sz===0)||kills>=RS_SECTOR_TARGET_KILLS) return;
+  const tag=rsEncounterTag(key,sx,sz);
+  let active=[];
+  try{ active=dim.getEntities({tags:[tag]}); }catch{}
+  const needed=Math.max(0,RS_SECTOR_TARGET_KILLS-kills-active.length);
+  if(needed<=0) return;
+  const c=rsSectorCenterLocation(key,sx,sz);
+  const roster=rsSectorRoster(key,sx,sz);
+  const offsets=[[-8,-6],[8,-6],[-8,6],[8,6],[-9,0],[9,0]];
+  for(let i=0;i<needed;i++){
+    const type=roster[(kills+active.length+i)%roster.length];
+    const off=offsets[(kills+active.length+i)%offsets.length];
+    try{
+      const mob=dim.spawnEntity(type,{x:c.x+off[0],y:c.y+2,z:c.z+off[1]});
+      mob.addTag(tag);
+      mob.addTag('rs_reality_contract');
+    }catch{}
+  }
+}
+
+function rsExposeSectorCache(dim,key,sx,sz){
+  const reward=RS_SECTOR_REWARD_BLOCK[key];
+  if(!reward) return;
+  const c=rsSectorCenterLocation(key,sx,sz);
+  // Cache surrounds the sector lodestone so completion reads clearly on mobile.
+  for(const [dx,dz] of [[-2,0],[2,0],[0,-2],[0,2]]) setb(dim,c.x+dx,c.y+2,c.z+dz,reward);
+  setb(dim,c.x,c.y+3,c.z,RS_REALITY_THEME[key].glow);
+}
+
+function rsCompleteSector(dim,key,sx,sz){
+  const current=rsSectorKills(dim,key,sx,sz);
+  if(current>=RS_SECTOR_TARGET_KILLS) return;
+  rsWriteSectorKills(dim,key,sx,sz,RS_SECTOR_TARGET_KILLS);
+  rsExposeSectorCache(dim,key,sx,sz);
+  const c=rsSectorCenterLocation(key,sx,sz);
+  let nearby=[];
+  try{ nearby=dim.getPlayers({location:{x:c.x,y:c.y+2,z:c.z},maxDistance:34}); }catch{}
+  for(const p of nearby){
+    const total=Number(p.getDynamicProperty('rs:reality_sectors_cleared')??0)+1;
+    p.setDynamicProperty('rs:reality_sectors_cleared',total);
+    msg(p,`§aSECTOR STABILIZED§r §7${key.toUpperCase()} [${sx}, ${sz}]§r — anomaly cache exposed. Reality sectors cleared: §f${total}§r.`);
+  }
+}
+
+function rsCheckSectorContract(player,key,sx,sz){
+  if(key==='citadel'||(sx===0&&sz===0)) return;
+  const dim=player.dimension;
+  const kills=rsSectorKills(dim,key,sx,sz);
+  if(kills>=RS_SECTOR_TARGET_KILLS) return;
+  const sectorId=`${key}:${sx}:${sz}`;
+  const last=rsSectorIntroSeen.get(player.id);
+  if(last!==sectorId){
+    rsSectorIntroSeen.set(player.id,sectorId);
+    const name=RS_SECTOR_ENCOUNTER_NAMES[key]??'reality anomaly';
+    const remain=RS_SECTOR_TARGET_KILLS-kills;
+    msg(player,`§dREALITY CONTRACT§r: ${name} detected at sector §f[${sx}, ${sz}]§r. Clear ${remain} remaining threat${remain===1?'':'s'} around the lodestone to expose the cache.`);
+  }
+  rsSpawnMissingSectorThreats(dim,key,sx,sz,kills);
+}
+
+world.afterEvents.entityDie.subscribe(e=>{
+  let data=null;
+  try{
+    for(const tag of e.deadEntity.getTags()){
+      data=rsEncounterTagData(tag);
+      if(data) break;
+    }
+  }catch{}
+  if(!data) return;
+  try{
+    const dim=world.getDimension(RS_REALITY_DIMENSIONS[data.key]);
+    const kills=rsSectorKills(dim,data.key,data.sx,data.sz);
+    const next=Math.min(RS_SECTOR_TARGET_KILLS,kills+1);
+    if(next>=RS_SECTOR_TARGET_KILLS) rsCompleteSector(dim,data.key,data.sx,data.sz);
+    else rsWriteSectorKills(dim,data.key,data.sx,data.sz,next);
+  }catch{}
+});
+
+// Gameplay rides beside part37's streaming loop and activates only in the
+// sector a player is actually occupying.
+system.runInterval(()=>{
+  for(const player of world.getAllPlayers()){
+    const key=Object.keys(RS_REALITY_DIMENSIONS).find(k=>RS_REALITY_DIMENSIONS[k]===player.dimension.id);
+    if(!key||key==='citadel') continue;
+    const z=ZONES[key];
+    const sx=Math.round((player.location.x-z.pos.x)/REALITY_SECTOR_SIZE);
+    const sz=Math.round((player.location.z-z.pos.z)/REALITY_SECTOR_SIZE);
+    rsCheckSectorContract(player,key,sx,sz);
+  }
+},20);
+'''
+    twrite(script_path,script)
+    return _beta_dimension_reseal(addon)
+
+
+def validate(addon:Path):
+    report=_dimension_gameplay_previous_validate(addon)
+    errors=list(report.get('errors',[])); checks=int(report.get('checks',0))
+    script=(BP/'scripts/main.js').read_text(encoding='utf-8')
+
+    required={
+      'sector gameplay author hook':'rsAuthorSectorGameplay(dim,key,sx,sz,c.x,y,c.z,theme)',
+      'safe central landing rule':"if(key==='citadel'||(sx===0&&sz===0)) return;",
+      'persistent five-state kill marker':'RS_SECTOR_KILL_STATES',
+      'lazy migration of existing sectors':'Lazy migration for sectors already authored by part37',
+      'tag-filtered entity query':'dim.getEntities({tags:[tag]})',
+      'stable entity death signal':'world.afterEvents.entityDie.subscribe',
+      'four-threat target':'RS_SECTOR_TARGET_KILLS=4',
+      'Glorp encounter roster':"glorp:[",
+      'Fizz encounter roster':"fizz:[",
+      'Chrono encounter roster':"chrono:[",
+      'Scrap encounter roster':"scrap:[",
+      'physical cache exposure':'function rsExposeSectorCache',
+      'player-facing contract':'REALITY CONTRACT',
+      'player-facing completion':'SECTOR STABILIZED',
+      'sector completion stat':'rs:reality_sectors_cleared',
+      'recovery spawn path':'rsSpawnMissingSectorThreats(dim,key,sx,sz,kills)'
+    }
+    for label,needle in required.items():
+        checks+=1
+        if needle not in script: errors.append(f'reality gameplay regression: missing {label} ({needle!r})')
+
+    for rid in ('glorp_ore','fizzium_ore','chronodust_cluster','scrap_node'):
+        checks+=1
+        if f"keepinitkrispy_rs:{rid}" not in script:
+            errors.append(f'reality gameplay regression: cache missing resource block {rid}')
+
+    checks+=1
+    if "key==='citadel'||(sx===0&&sz===0)" not in script:
+        errors.append('reality gameplay regression: central landing sectors no longer guaranteed safe')
+
+    report['checks']=checks
+    report['errors']=errors
+    report['status']='PASS' if not errors else 'FAIL'
+    report['reality_gameplay_profile']='persistent_sector_contracts_v1'
+    report['reality_sector_objective']='clear four themed threats around non-central lodestones'
+    report['reality_sector_persistence']='hidden block-state kill counter with lazy migration and reload recovery'
+    report['reality_sector_reward']='four-block themed resource cache plus completion beacon'
+    gates=list(report.get('feature_regression_gates',[]))
+    for g in ('reality_sector_contracts','persistent_sector_kill_state','reload_recovery_threat_respawn','sector_resource_cache_reward','safe_central_landing_sectors'):
+        if g not in gates: gates.append(g)
+    report['feature_regression_gates']=gates
+    jwrite(OUT/'validation_report.json',report)
+    return report
