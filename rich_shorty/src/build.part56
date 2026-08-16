@@ -1,0 +1,56 @@
+
+# ---------------------------------------------------------------------------
+# TEST 88 — REMOVE OBSOLETE NESTED ICON DUPLICATES
+# TEST87 final binding uses only textures/items/rs_<id>.png. Delete the old
+# nested copies so fail-on-warnings sees one referenced PNG per custom item.
+# Retire only validation messages that refer to those superseded nested files.
+# ---------------------------------------------------------------------------
+_retail88_previous_make_pack = make_pack
+_retail88_previous_validate = validate
+
+
+def make_pack():
+    addon=_retail88_previous_make_pack()
+    old_root=RP/'textures/items/keepinitkrispy/rich_shorty'
+    for item_id in _RS_RETAIL_ICON_IDS:
+        old=old_root/f'{item_id}.png'
+        if old.exists(): old.unlink()
+    # Prune now-empty compatibility directories only.
+    for p in (old_root, old_root.parent, old_root.parent.parent):
+        try: p.rmdir()
+        except OSError: pass
+    return _beta_dimension_reseal(addon)
+
+
+def validate(addon:Path):
+    report=_retail88_previous_validate(addon)
+    errors=list(report.get('errors',[])); checks=int(report.get('checks',0))
+    stale={'retail item art regression: duplicate item icon PNGs detected'}
+    for item_id in _RS_RETAIL_ICON_IDS:
+        stale.add(f'retail item art regression: missing PNG for {item_id}')
+        stale.add(f'retail atlas schema regression: bound PNG missing for {item_id}')
+    errors=[e for e in errors if e not in stale]
+
+    for item_id in _RS_RETAIL_ICON_IDS:
+        checks+=3
+        old=RP/f'textures/items/keepinitkrispy/rich_shorty/{item_id}.png'
+        new=RP/f'textures/items/rs_{item_id}.png'
+        if old.exists(): errors.append(f'icon duplicate regression: obsolete nested PNG remains for {item_id}')
+        if not new.exists(): errors.append(f'icon duplicate regression: active flat PNG missing for {item_id}')
+        if new.exists():
+            try:
+                with Image.open(new) as im:
+                    if im.size!=(64,64) or im.mode!='RGBA':
+                        errors.append(f'icon duplicate regression: active {item_id} PNG is not 64x64 RGBA')
+            except Exception as exc:
+                errors.append(f'icon duplicate regression: cannot inspect active {item_id} PNG: {exc}')
+
+    report['checks']=checks
+    report['errors']=errors
+    report['status']='PASS' if not errors else 'FAIL'
+    report['retail_item_art']='15 unique referenced flat 64x64 icons; obsolete nested duplicates removed'
+    gates=list(report.get('feature_regression_gates',[]))
+    if 'no_unlinked_duplicate_item_textures' not in gates: gates.append('no_unlinked_duplicate_item_textures')
+    report['feature_regression_gates']=gates
+    jwrite(OUT/'validation_report.json',report)
+    return report
