@@ -1,0 +1,35 @@
+
+# ---------------------------------------------------------------------------
+# EXPANDED REALITY GATE MIGRATION
+# part30's original Beta custom-dimension validator required the prototype
+# buildZone(dimension,key) call. part37 intentionally replaces that call with
+# buildExpandedReality(), so retire only that exact stale failure and require the
+# expanded async authoring path instead.
+# ---------------------------------------------------------------------------
+_expanded_gate_previous_validate=validate
+
+
+def validate(addon:Path):
+    report=_expanded_gate_previous_validate(addon)
+    errors=list(report.get('errors',[])); checks=int(report.get('checks',0))
+
+    stale="beta dimension regression: missing authored reality built in target dimension ('buildZone(dimension,key)')"
+    errors=[e for e in errors if e!=stale]
+
+    script=(BP/'scripts/main.js').read_text(encoding='utf-8')
+    checks+=3
+    if 'await buildExpandedReality(dimension,key)' not in script:
+        errors.append('expanded dimension gate migration: custom dimension no longer awaits expanded reality authoring')
+    if 'async function buildExpandedReality(dim,key)' not in script:
+        errors.append('expanded dimension gate migration: expanded reality builder missing')
+    if 'await rsEnsureRealitySector(dim,key,sx,sz)' not in script:
+        errors.append('expanded dimension gate migration: sector authoring is not awaited')
+
+    report['checks']=checks
+    report['errors']=errors
+    report['status']='PASS' if not errors else 'FAIL'
+    gates=list(report.get('feature_regression_gates',[]))
+    if 'beta_dimension_expanded_authoring_gate' not in gates: gates.append('beta_dimension_expanded_authoring_gate')
+    report['feature_regression_gates']=gates
+    jwrite(OUT/'validation_report.json',report)
+    return report
