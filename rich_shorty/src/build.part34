@@ -1,204 +1,260 @@
 
 # ---------------------------------------------------------------------------
-# RETAIL STARTER-BASE ART PASS
-# Android retail testing accepted deployment mechanics but rejected the authored
-# base visually: house/garage were too empty and the driveway stripe loop placed
-# concrete one block ABOVE the actual drive. Polish the already-proven builder
-# without changing deployment, Home, Fabricator, or portal progression.
+# RETAIL BASE ACCEPTANCE PASS
+# TEST 58: deployment worked, but the house/garage were visibly placeholder-ish,
+# under-furnished, and the driveway had raised light-gray blocks on it. Replace
+# the starter property itself while preserving the proven deployment countdown,
+# native-use capsule, Fabricator, Home persistence, and underground lab access.
 # ---------------------------------------------------------------------------
-_base_art_previous_validate = validate
 
-# Run the art pass after the proven structural shell/lab exists, before Home is
-# saved and the characters are spawned.
-SCRIPT = SCRIPT.replace(
-    "  // Save the authored garage as Home. Portal returns put the player inside the\n",
-    "  polishStarterBase(d,x,y,z);\n\n  // Save the authored garage as Home. Portal returns put the player inside the\n",
-    1
-)
+_base_accept_previous_validate = validate
 
-SCRIPT += r'''
+_base_start = SCRIPT.find('function buildStarterBase(player,a){')
+_base_marker = '\n}\n\n// Dropping the custom capsule is the intentional deployment gesture.'
+_base_end = SCRIPT.find(_base_marker, _base_start)
+if _base_start < 0 or _base_end < 0:
+    raise RuntimeError('starter property function not found for retail acceptance replacement')
 
-function starterSeat(dim,x,y,z,color='minecraft:gray_wool'){
-  setb(dim,x,y,z,color);
-  setb(dim,x,y+1,z,'minecraft:gray_carpet');
-}
-function starterTable(dim,x,y,z){
-  setb(dim,x,y,z,'minecraft:spruce_fence');
-  setb(dim,x,y+1,z,'minecraft:oak_pressure_plate');
-}
-function starterLamp(dim,x,y,z){
-  setb(dim,x,y,z,'minecraft:sea_lantern');
-  setb(dim,x,y+1,z,'minecraft:iron_bars');
-}
+_NEW_STARTER_BASE = r'''function buildStarterBase(player,a){
+  const d=player.dimension;
+  const x=a.x, y=a.y, z=a.z;
 
-function polishStarterBase(d,x,y,z){
-  // -----------------------------------------------------------------------
-  // DRIVEWAY — completely flat. TEST 58 exposed the original y-level stripe
-  // loop as literal blocks sitting on top of the drive. Clear that layer and
-  // put every decorative lane/edge block at the actual y-1 surface instead.
-  // -----------------------------------------------------------------------
-  fillb(d,x+3,y,z-15,x+12,y+3,z-9,'minecraft:air');
-  fillb(d,x+3,y-1,z-15,x+12,y-1,z-9,'minecraft:smooth_stone');
-  fillb(d,x+3,y-1,z-15,x+3,y-1,z-9,'minecraft:polished_andesite');
-  fillb(d,x+12,y-1,z-15,x+12,y-1,z-9,'minecraft:polished_andesite');
-  for(let zz=-15;zz<=-10;zz+=2){
-    fillb(d,x+5,y-1,z+zz,x+10,y-1,z+zz,'minecraft:light_gray_concrete');
+  fillb(d,x-2,y-1,z-20,x+2,y-1,z-16,'minecraft:smooth_stone');
+  fillb(d,x-2,y,z-20,x+2,y+5,z-16,'minecraft:air');
+  try{ player.teleport({x:x+.5,y:y+1,z:z-18+.5},{dimension:d}); }catch{}
+  msg(player,'§6DEPLOYING GARAGE§r: Rich has temporarily reassigned local code enforcement to another reality.');
+
+  // Clear the complete authored property first: no trees, snow, terrain or old
+  // test debris may remain embedded in the finished build.
+  fillb(d,x-17,y,z-15,x+17,y+13,z+13,'minecraft:air');
+
+  // ---------------------------------------------------------------------
+  // SITE / DRIVEWAY / LANDSCAPING
+  // ---------------------------------------------------------------------
+  fillb(d,x-16,y-1,z-12,x+16,y-1,z+12,'minecraft:stone_bricks');
+
+  // TEST 58 bug fix: all driveway material is FLUSH at y-1. The old loop put
+  // decorative blocks at y and literally created obstacles across the drive.
+  fillb(d,x+3,y-1,z-20,x+15,y-1,z-10,'minecraft:gray_concrete');
+  fillb(d,x+4,y-1,z-19,x+14,y-1,z-11,'minecraft:smooth_stone');
+  fillb(d,x+5,y-1,z-19,x+5,y-1,z-11,'minecraft:white_concrete');
+  fillb(d,x+13,y-1,z-19,x+13,y-1,z-11,'minecraft:white_concrete');
+  fillb(d,x+3,y,z-20,x+15,y+5,z-10,'minecraft:air');
+
+  fillb(d,x-16,y-1,z-12,x-15,y-1,z+12,'minecraft:moss_block');
+  fillb(d,x-14,y-1,z+11,x+1,y-1,z+12,'minecraft:moss_block');
+  for(const [dx,dz] of [[-15,-9],[-15,-2],[-15,5],[-11,11],[-4,11],[1,11]]) setb(d,x+dx,y-1,z+dz,'minecraft:sea_lantern');
+
+  // ---------------------------------------------------------------------
+  // TWO-LEVEL HOUSE
+  // ---------------------------------------------------------------------
+  fillb(d,x-14,y,z-10,x+1,y+5,z+10,'minecraft:white_concrete hollow');
+  fillb(d,x-13,y,z-9,x,y,z+9,'minecraft:spruce_planks');
+  fillb(d,x-12,y+6,z-8,x,y+10,z+8,'minecraft:light_gray_concrete hollow');
+  fillb(d,x-11,y+6,z-7,x-1,y+6,z+7,'minecraft:dark_oak_planks');
+  fillb(d,x-13,y+11,z-9,x+1,y+11,z+9,'minecraft:dark_oak_planks');
+  fillb(d,x-10,y+12,z-6,x-2,y+12,z+6,'minecraft:dark_oak_planks');
+
+  // Entry + grouped windows.
+  fillb(d,x-8,y+1,z-10,x-6,y+3,z-10,'minecraft:air');
+  fillb(d,x-13,y+2,z-10,x-10,y+4,z-10,'minecraft:glass');
+  fillb(d,x-4,y+2,z-10,x,y+4,z-10,'minecraft:glass');
+  fillb(d,x-14,y+2,z-6,x-14,y+4,z-2,'minecraft:glass');
+  fillb(d,x-11,y+7,z-8,x-8,y+9,z-8,'minecraft:glass');
+  fillb(d,x-5,y+7,z-8,x-2,y+9,z-8,'minecraft:glass');
+  fillb(d,x,y+7,z-4,x,y+9,z+1,'minecraft:glass');
+
+  // Lower partitions create real living / kitchen / utility rooms.
+  fillb(d,x-6,y+1,z-2,x-6,y+4,z+9,'minecraft:quartz_bricks');
+  fillb(d,x-6,y+1,z+1,x-6,y+3,z+3,'minecraft:air');
+  fillb(d,x-13,y+1,z+3,x-6,y+4,z+3,'minecraft:quartz_bricks');
+  fillb(d,x-10,y+1,z+3,x-8,y+3,z+3,'minecraft:air');
+
+  // Living room: sectional, table, books/media/storage.
+  fillb(d,x-12,y+1,z-7,x-9,y+1,z-5,'minecraft:cyan_wool');
+  fillb(d,x-12,y+2,z-7,x-12,y+2,z-5,'minecraft:cyan_wool');
+  fillb(d,x-8,y+1,z-6,x-6,y+1,z-4,'minecraft:dark_oak_planks');
+  setb(d,x-7,y+2,z-5,'minecraft:lantern');
+  fillb(d,x-13,y+1,z-1,x-13,y+3,z+2,'minecraft:bookshelf');
+  setb(d,x-11,y+1,z,'minecraft:jukebox');
+  setb(d,x-9,y+1,z,'minecraft:chest');
+
+  // Kitchen: counter run, appliances, pantry, island.
+  fillb(d,x-5,y+1,z+7,x-1,y+1,z+8,'minecraft:smooth_quartz');
+  setb(d,x-5,y+2,z+8,'minecraft:smoker');
+  setb(d,x-4,y+2,z+8,'minecraft:furnace');
+  setb(d,x-3,y+2,z+8,'minecraft:barrel');
+  setb(d,x-2,y+2,z+8,'minecraft:barrel');
+  setb(d,x-1,y+2,z+8,'minecraft:crafting_table');
+  fillb(d,x-4,y+1,z+4,x-2,y+1,z+5,'minecraft:polished_andesite');
+  setb(d,x-3,y+2,z+4,'minecraft:lantern');
+  fillb(d,x-1,y+1,z+4,x-1,y+4,z+4,'minecraft:bookshelf');
+
+  // Utility/storage nook.
+  setb(d,x-12,y+1,z+6,'minecraft:barrel');
+  setb(d,x-11,y+1,z+6,'minecraft:barrel');
+  setb(d,x-10,y+1,z+6,'minecraft:ender_chest');
+  setb(d,x-12,y+1,z+8,'minecraft:crafting_table');
+  setb(d,x-10,y+1,z+8,'minecraft:furnace');
+
+  // Upper floor: two bedrooms + study.
+  fillb(d,x-6,y+7,z-7,x-6,y+9,z+7,'minecraft:quartz_bricks');
+  fillb(d,x-6,y+7,z-1,x-6,y+9,z+1,'minecraft:air');
+  fillb(d,x-11,y+7,z+2,x-1,y+9,z+2,'minecraft:quartz_bricks');
+  fillb(d,x-9,y+7,z+2,x-7,y+9,z+2,'minecraft:air');
+  fillb(d,x-4,y+7,z+2,x-2,y+9,z+2,'minecraft:air');
+  fillb(d,x-11,y+7,z-5,x-9,y+7,z-3,'minecraft:red_wool');
+  setb(d,x-11,y+8,z-2,'minecraft:barrel');
+  setb(d,x-8,y+8,z-2,'minecraft:lantern');
+  fillb(d,x-5,y+7,z-5,x-2,y+7,z-4,'minecraft:blue_wool');
+  setb(d,x-2,y+8,z-2,'minecraft:barrel');
+  setb(d,x-5,y+8,z-2,'minecraft:bookshelf');
+  fillb(d,x-10,y+7,z+5,x-7,y+9,z+5,'minecraft:bookshelf');
+  setb(d,x-5,y+7,z+5,'minecraft:lectern');
+  setb(d,x-3,y+7,z+5,'minecraft:cartography_table');
+  setb(d,x-2,y+7,z+5,'minecraft:barrel');
+  for(const [dx,dz] of [[-10,-6],[-3,-6],[-10,6],[-3,6]]) setb(d,x+dx,y+10,z+dz,'minecraft:sea_lantern');
+
+  // ---------------------------------------------------------------------
+  // ATTACHED GARAGE / WORKSHOP
+  // ---------------------------------------------------------------------
+  fillb(d,x+2,y,z-10,x+16,y+7,z+10,'minecraft:gray_concrete hollow');
+  fillb(d,x+3,y,z-9,x+15,y,z+9,'minecraft:smooth_stone');
+  fillb(d,x+4,y+1,z-10,x+14,y+5,z-10,'minecraft:air');
+  fillb(d,x+4,y,z-20,x+14,y+5,z-10,'minecraft:air');
+  fillb(d,x+4,y+6,z-10,x+14,y+6,z-10,'minecraft:iron_block');
+  fillb(d,x+16,y+2,z-5,x+16,y+4,z+1,'minecraft:glass');
+  fillb(d,x+2,y+1,z+1,x+2,y+3,z+3,'minecraft:air');
+  fillb(d,x+2,y+8,z-11,x+17,y+8,z+11,'minecraft:deepslate_tiles');
+
+  // Flush parking bay guides in the floor, not blocks in the driving volume.
+  fillb(d,x+5,y,z-8,x+5,y,z+3,'minecraft:white_concrete');
+  fillb(d,x+11,y,z-8,x+11,y,z+3,'minecraft:white_concrete');
+
+  // Full workshop wall and storage.
+  fillb(d,x+4,y+1,z+7,x+14,y+1,z+8,'minecraft:polished_deepslate');
+  setb(d,x+4,y+2,z+8,'minecraft:crafting_table');
+  setb(d,x+5,y+2,z+8,'minecraft:stonecutter');
+  setb(d,x+6,y+2,z+8,'minecraft:anvil');
+  setb(d,x+7,y+2,z+8,'minecraft:smithing_table');
+  setb(d,x+8,y+2,z+8,'minecraft:grindstone');
+  setb(d,x+9,y+2,z+8,'minecraft:furnace');
+  setb(d,x+10,y+2,z+8,'minecraft:smoker');
+  setb(d,x+11,y+2,z+8,'minecraft:blast_furnace');
+  setb(d,x+12,y+2,z+8,'minecraft:barrel');
+  setb(d,x+13,y+2,z+8,'minecraft:barrel');
+  setb(d,x+14,y+2,z+8,'minecraft:chest');
+  for(let yy=2;yy<=4;yy++){
+    setb(d,x+15,y+yy,z+5,'minecraft:barrel');
+    setb(d,x+15,y+yy,z+3,'minecraft:barrel');
   }
-  // Flush threshold; nothing is allowed to protrude into the vehicle opening.
-  fillb(d,x+4,y-1,z-9,x+11,y-1,z-8,'minecraft:gray_concrete');
-  fillb(d,x+4,y,z-10,x+11,y+4,z-9,'minecraft:air');
+  fillb(d,x+3,y+1,z+5,x+3,y+4,z+8,'minecraft:iron_block');
+  setb(d,x+3,y+2,z+6,'minecraft:redstone_lamp');
+  setb(d,x+3,y+3,z+6,'minecraft:lever');
+  for(let zz=-7;zz<=7;zz+=4) fillb(d,x+5,y+7,z+zz,x+13,y+7,z+zz,'minecraft:sea_lantern');
 
-  // -----------------------------------------------------------------------
-  // HOUSE — real room organization and furniture instead of one empty shell.
-  // Front living room, rear bedroom, kitchen/dining, and a small workstation.
-  // -----------------------------------------------------------------------
-  // Interior partitions, with deliberate door openings.
-  fillb(d,x-6,y+1,z+2,x-6,y+5,z+8,'minecraft:white_concrete');
-  fillb(d,x-6,y+1,z+4,x-6,y+3,z+5,'minecraft:air');
-  fillb(d,x-12,y+1,z+2,x-7,y+5,z+2,'minecraft:white_concrete');
-  fillb(d,x-10,y+1,z+2,x-9,y+3,z+2,'minecraft:air');
+  // ---------------------------------------------------------------------
+  // UNDERGROUND REALITY LAB
+  // ---------------------------------------------------------------------
+  fillb(d,x-13,y-13,z-10,x+13,y-3,z+10,'minecraft:air');
+  fillb(d,x-12,y-12,z-9,x+12,y-3,z+9,'minecraft:polished_deepslate hollow');
+  fillb(d,x-11,y-11,z-8,x+11,y-11,z+8,'minecraft:smooth_quartz');
+  fillb(d,x-11,y-4,z-8,x+11,y-4,z+8,'minecraft:gray_concrete');
+  for(let xx=-9;xx<=9;xx+=3) fillb(d,x+xx,y-4,z-6,x+xx,y-4,z+6,'minecraft:sea_lantern');
+  fillb(d,x-11,y-10,z-8,x-11,y-5,z+8,'minecraft:dark_prismarine');
+  fillb(d,x+11,y-10,z-8,x+11,y-5,z+8,'minecraft:dark_prismarine');
 
-  // Living room: sectional, coffee table, media wall, rug, reading light.
-  fillb(d,x-11,y+1,z-5,x-7,y+1,z-5,'minecraft:gray_wool');
-  fillb(d,x-11,y+1,z-4,x-11,y+1,z-2,'minecraft:gray_wool');
-  fillb(d,x-10,y,z-5,x-7,y,z-2,'minecraft:light_gray_carpet');
-  starterTable(d,x-8,y+1,z-3);
-  fillb(d,x-5,y+1,z-8,x-2,y+2,z-8,'minecraft:black_concrete');
-  fillb(d,x-4,y+1,z-7,x-3,y+1,z-7,'minecraft:bookshelf');
-  starterLamp(d,x-12,y+1,z-1);
+  // Proven Fabricator dais.
+  fillb(d,x-3,y-11,z-2,x+3,y-11,z+3,'minecraft:polished_deepslate');
+  fillb(d,x-2,y-10,z-1,x+2,y-10,z+2,'minecraft:smooth_stone');
+  setb(d,x,y-9,z,'rs:reality_fabricator');
+  for(const [dx,dz] of [[-4,-3],[4,-3],[-4,4],[4,4]]) setb(d,x+dx,y-10,z+dz,'minecraft:sea_lantern');
 
-  // Kitchen: long counter, appliances, pantry/storage, lit backsplash.
-  fillb(d,x-4,y+1,z+5,x,y+1,z+5,'minecraft:smooth_quartz');
-  fillb(d,x-4,y+2,z+5,x,y+2,z+5,'minecraft:white_concrete');
-  setb(d,x-4,y+1,z+7,'minecraft:smoker');
-  setb(d,x-3,y+1,z+7,'minecraft:furnace');
-  setb(d,x-2,y+1,z+7,'minecraft:crafting_table');
-  setb(d,x-1,y+1,z+7,'minecraft:barrel');
-  setb(d,x,y+1,z+7,'minecraft:barrel');
-  fillb(d,x-4,y+3,z+7,x,y+3,z+7,'minecraft:sea_lantern');
-  starterTable(d,x-2,y+1,z+1);
-  starterSeat(d,x-4,y+1,z+1,'minecraft:cyan_wool');
-  starterSeat(d,x,y+1,z+1,'minecraft:cyan_wool');
+  // Portal analysis arch.
+  fillb(d,x-9,y-10,z+7,x-9,y-4,z+7,'minecraft:crying_obsidian');
+  fillb(d,x-3,y-10,z+7,x-3,y-4,z+7,'minecraft:crying_obsidian');
+  fillb(d,x-9,y-4,z+7,x-3,y-4,z+7,'minecraft:crying_obsidian');
+  fillb(d,x-8,y-9,z+7,x-4,y-5,z+7,'minecraft:tinted_glass');
 
-  // Bedroom/storage nook: platform bed silhouette, side tables, wardrobe.
-  fillb(d,x-12,y+1,z+4,x-9,y+1,z+7,'minecraft:dark_oak_planks');
-  fillb(d,x-11,y+2,z+5,x-9,y+2,z+7,'minecraft:white_wool');
-  fillb(d,x-12,y+2,z+7,x-12,y+3,z+7,'minecraft:cyan_wool');
-  setb(d,x-8,y+1,z+7,'minecraft:barrel');
-  setb(d,x-8,y+2,z+7,'minecraft:barrel');
-  setb(d,x-8,y+3,z+7,'minecraft:barrel');
-  starterLamp(d,x-12,y+1,z+3);
-
-  // Small office facing the garage door into the lab workflow.
-  fillb(d,x-5,y+1,z+7,x-2,y+1,z+7,'minecraft:dark_oak_planks');
-  setb(d,x-4,y+2,z+7,'minecraft:bookshelf');
-  setb(d,x-3,y+2,z+7,'minecraft:bookshelf');
-  starterSeat(d,x-3,y+1,z+6,'minecraft:blue_wool');
-
-  // Exterior porch/trim and landscaping to stop the shell reading as a box.
-  fillb(d,x-9,y-1,z-11,x-5,y-1,z-9,'minecraft:smooth_quartz');
-  fillb(d,x-9,y+4,z-11,x-5,y+4,z-10,'minecraft:dark_oak_planks');
-  fillb(d,x-9,y,z-11,x-9,y+3,z-11,'minecraft:dark_oak_log');
-  fillb(d,x-5,y,z-11,x-5,y+3,z-11,'minecraft:dark_oak_log');
-  fillb(d,x-13,y,z-11,x-11,y+1,z-10,'minecraft:azalea_leaves');
-  fillb(d,x-3,y,z-11,x,y+1,z-10,'minecraft:azalea_leaves');
-  setb(d,x-10,y,z-11,'minecraft:sea_lantern');
-  setb(d,x+1,y,z-11,'minecraft:sea_lantern');
-
-  // -----------------------------------------------------------------------
-  // GARAGE — two readable work zones: vehicle bay + fabrication/service wall.
-  // -----------------------------------------------------------------------
-  // Flush bay markings in the floor, never above it.
-  fillb(d,x+4,y,z-7,x+10,y,z-6,'minecraft:gray_concrete');
-  fillb(d,x+4,y,z+2,x+10,y,z+3,'minecraft:gray_concrete');
-  fillb(d,x+4,y,z-5,x+4,y,z+1,'minecraft:yellow_concrete');
-  fillb(d,x+10,y,z-5,x+10,y,z+1,'minecraft:yellow_concrete');
-
-  // Tool wall / bench / cabinets.
-  fillb(d,x+4,y+1,z+7,x+11,y+1,z+7,'minecraft:polished_deepslate');
-  for(let xx=4;xx<=11;xx+=2) setb(d,x+xx,y+2,z+7,'minecraft:barrel');
-  fillb(d,x+5,y+3,z+7,x+10,y+4,z+7,'minecraft:iron_bars');
-  setb(d,x+5,y+1,z+6,'minecraft:crafting_table');
-  setb(d,x+7,y+1,z+6,'minecraft:stonecutter');
-  setb(d,x+9,y+1,z+6,'minecraft:anvil');
-  setb(d,x+11,y+1,z+6,'minecraft:smithing_table');
-
-  // Diagnostic/charging station on side wall.
-  fillb(d,x+12,y+1,z-5,x+12,y+3,z-1,'minecraft:cut_copper');
-  setb(d,x+11,y+2,z-4,'minecraft:redstone_lamp');
-  setb(d,x+11,y+2,z-2,'minecraft:sea_lantern');
-  fillb(d,x+11,y+1,z-5,x+11,y+1,z-1,'minecraft:iron_block');
-
-  // Shelving and parts storage opposite the service shaft.
-  fillb(d,x+3,y+1,z-7,x+3,y+4,z-3,'minecraft:iron_bars');
-  for(let yy=1;yy<=4;yy+=2){
-    fillb(d,x+3,y+yy,z-7,x+3,y+yy,z-3,'minecraft:cut_copper');
+  // Dual control/diagnostic banks and resource storage.
+  for(let zz=-6;zz<=3;zz+=3){
+    fillb(d,x+6,y-10,z+zz,x+10,y-9,z+zz,'minecraft:iron_block');
+    setb(d,x+7,y-8,z+zz,'minecraft:redstone_lamp');
+    setb(d,x+9,y-8,z+zz,'minecraft:lever');
   }
-  setb(d,x+4,y+1,z-3,'minecraft:barrel');
-  setb(d,x+4,y+2,z-3,'minecraft:barrel');
-
-  // -----------------------------------------------------------------------
-  // UNDERGROUND LAB — observation/control/storage spaces around Fabricator.
-  // -----------------------------------------------------------------------
-  // Main control console facing the Fabricator.
-  fillb(d,x-2,y-9,z-6,x+2,y-8,z-6,'minecraft:polished_blackstone');
-  setb(d,x-1,y-7,z-6,'minecraft:sea_lantern');
-  setb(d,x+1,y-7,z-6,'minecraft:redstone_lamp');
-  starterSeat(d,x-1,y-9,z-5,'minecraft:cyan_wool');
-  starterSeat(d,x+1,y-9,z-5,'minecraft:cyan_wool');
-
-  // Sample storage wall and archive bay.
-  for(let zz=-4;zz<=4;zz+=2){
-    setb(d,x-9,y-9,z+zz,'minecraft:barrel');
-    setb(d,x-8,y-9,z+zz,'minecraft:bookshelf');
-    setb(d,x-9,y-8,z+zz,'minecraft:cut_copper');
+  for(let zz=-6;zz<=3;zz+=3){
+    fillb(d,x-10,y-10,z+zz,x-7,y-9,z+zz,'minecraft:cut_copper');
+    setb(d,x-9,y-8,z+zz,'minecraft:barrel');
   }
+  setb(d,x-9,y-10,z+6,'minecraft:ender_chest');
+  setb(d,x+9,y-10,z+6,'minecraft:enchanting_table');
 
-  // Glass containment cell with an illuminated specimen plinth.
-  fillb(d,x+6,y-9,z-5,x+9,y-5,z-2,'minecraft:glass hollow');
-  fillb(d,x+7,y-10,z-4,x+8,y-10,z-3,'minecraft:sea_lantern');
-  setb(d,x+7,y-9,z-3,'minecraft:slime');
+  // Garage-to-lab shaft.
+  fillb(d,x+10,y-10,z+4,x+12,y+2,z+6,'minecraft:air');
+  fillb(d,x+11,y-11,z+5,x+11,y+1,z+5,'minecraft:scaffolding');
+  fillb(d,x+9,y,z+3,x+9,y+2,z+7,'minecraft:iron_bars');
+  fillb(d,x+13,y,z+3,x+13,y+2,z+7,'minecraft:iron_bars');
+  fillb(d,x+10,y,z+7,x+12,y+2,z+7,'minecraft:iron_bars');
+  setb(d,x+11,y-10,z+4,'minecraft:sea_lantern');
 
-  // Overhead cable spine / service corridor detail.
-  fillb(d,x-8,y-4,z,x+8,y-4,z,'minecraft:cut_copper');
-  for(let xx=-8;xx<=8;xx+=4) setb(d,x+xx,y-5,z,'minecraft:end_rod');
-}
-'''
+  player.setDynamicProperty('rs:home_x',x+7.5);
+  player.setDynamicProperty('rs:home_y',y+1);
+  player.setDynamicProperty('rs:home_z',z-1.5);
+  player.setDynamicProperty('rs:base_deployed',true);
+  player.setDynamicProperty('rs:base_deploying',false);
+
+  try{
+    d.spawnEntity('rs:rich',{x:x+5.5,y:y+1,z:z+.5});
+    d.spawnEntity('rs:shorty',{x:x+7.5,y:y+1,z:z+2.5});
+  }catch{}
+
+  msg(player,'§aGARAGE ONLINE§r: Furnished two-level house, full workshop, clear driveway, and underground reality lab deployed. Home now returns here.');
+  system.runTimeout(()=>msg(player,'Rich: Two floors, a workshop, a lab, and not one zoning permit. Efficient land use.'),20);
+  system.runTimeout(()=>msg(player,'Shorty: The driveway is actually clear this time, right?'),45);
+  system.runTimeout(()=>msg(player,'§6ACT I — WARRANTY VOID§r: Check the garage workshop, head down the service shaft, inspect the Reality Fabricator, then use the Portal Remote.'),70);
+}'''
+
+SCRIPT = SCRIPT[:_base_start] + _NEW_STARTER_BASE + SCRIPT[_base_end+2:]
 
 
 def validate(addon:Path):
-    report=_base_art_previous_validate(addon)
+    report=_base_accept_previous_validate(addon)
     errors=list(report.get('errors',[])); checks=int(report.get('checks',0))
-    script=(BP/'scripts/main.js').read_text(encoding='utf-8')
+    script=(BP/'scripts/main.js').read_text(encoding='utf-8') if (BP/'scripts/main.js').exists() else ''
 
     required={
-      'base visual polish pass':'function polishStarterBase(d,x,y,z)',
-      'flat driveway clear':'fillb(d,x+3,y,z-15,x+12,y+3,z-9',
-      'flush driveway stripe':'x+5,y-1,z+zz',
-      'house living room':'Living room: sectional',
-      'house kitchen':'Kitchen: long counter',
-      'house bedroom':'Bedroom/storage nook',
-      'garage tool wall':'Tool wall / bench / cabinets',
-      'garage charging station':'Diagnostic/charging station',
-      'lab control console':'Main control console facing the Fabricator',
-      'lab containment cell':'Glass containment cell'
+      'two-level authored house':'TWO-LEVEL HOUSE',
+      'living room furnishings':'Living room: sectional',
+      'kitchen furnishings':'Kitchen: counter run',
+      'utility storage':'Utility/storage nook',
+      'upper bedrooms and study':'Upper floor: two bedrooms',
+      'full garage workshop':'Full workshop wall',
+      'parts storage racks':'for(let yy=2;yy<=4;yy++)',
+      'finished lab controls':'Dual control/diagnostic banks',
+      'flush driveway design':'all driveway material is FLUSH',
+      'garage Home persistence':"setDynamicProperty('rs:home_x'"
     }
     for label,needle in required.items():
         checks+=1
-        if needle not in script: errors.append(f'starter base art regression: missing {label} ({needle!r})')
+        if needle not in script: errors.append(f'base acceptance regression: missing {label} ({needle!r})')
 
-    # Explicitly prohibit the retail-proven raised driveway stripe command.
     checks+=1
-    if "fillb(d,x+4,y,z+dz,x+11,y,z+dz,'minecraft:light_gray_concrete')" in script:
-        errors.append('starter base art regression: raised driveway stripe loop returned')
+    bad="for(let dz=-15;dz<=-10;dz+=2) fillb(d,x+4,y,z+dz,x+11,y,z+dz,'minecraft:light_gray_concrete');"
+    if bad in script:
+        errors.append('base acceptance regression: TEST 58 raised-driveway obstacle loop returned')
+
+    checks+=1
+    if "fillb(d,x+3,y,z-20,x+15,y+5,z-10,'minecraft:air');" not in script:
+        errors.append('base acceptance regression: driveway does not explicitly clear the volume above its flush surface')
 
     report['checks']=checks
     report['errors']=errors
     report['status']='PASS' if not errors else 'FAIL'
-    report['starter_base_visual_profile']='furnished_suburban_lab_v2'
+    report['starter_base_profile']='furnished_two_level_house_full_workshop_clear_driveway_lab_v2'
+    report['retail_test_58_base_result']='FUNCTIONAL_BUT_VISUALLY_REJECTED_REBUILT'
     gates=list(report.get('feature_regression_gates',[]))
-    for g in ('flat_driveway_surface','furnished_house','functional_garage_interior','furnished_reality_lab'):
-        if g not in gates: gates.append(g)
+    for gate in ('furnished_two_level_house','full_garage_workshop','clear_flush_driveway','finished_reality_lab'):
+        if gate not in gates: gates.append(gate)
     report['feature_regression_gates']=gates
     jwrite(OUT/'validation_report.json',report)
     return report
