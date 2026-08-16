@@ -1,0 +1,49 @@
+
+# ---------------------------------------------------------------------------
+# TEST 89 — REPLACE STALE GARAGE-CAPSULE ICON ASSERTION
+# An older onboarding validator still expects the superseded nested capsule PNG.
+# TEST88 deliberately removed that dead duplicate. Retire only that exact error
+# and positively validate the final active capsule key, atlas entry and flat PNG.
+# ---------------------------------------------------------------------------
+_retail89_previous_validate = validate
+
+
+def validate(addon:Path):
+    report=_retail89_previous_validate(addon)
+    errors=list(report.get('errors',[])); checks=int(report.get('checks',0))
+    errors=[e for e in errors if e!='garage onboarding regression: deployment capsule icon missing']
+
+    checks+=5
+    item_id='garage_deployment_capsule'
+    key=f'keepinitkrispy_rs_{item_id}'
+    tex=f'textures/items/rs_{item_id}'
+    item_path=BP/f'items/{item_id}.json'
+    atlas_path=RP/'textures/item_texture.json'
+    png=RP/f'{tex}.png'
+    if not item_path.exists():
+        errors.append('garage onboarding regression: active deployment capsule item JSON missing')
+    else:
+        obj=json.loads(item_path.read_text(encoding='utf-8'))
+        if obj['minecraft:item']['components'].get('minecraft:icon')!=key:
+            errors.append('garage onboarding regression: active deployment capsule icon key mismatch')
+    if not atlas_path.exists():
+        errors.append('garage onboarding regression: item texture atlas missing')
+    else:
+        data=json.loads(atlas_path.read_text(encoding='utf-8')).get('texture_data',{})
+        if data.get(key,{}).get('textures')!=[tex]:
+            errors.append('garage onboarding regression: active deployment capsule atlas binding mismatch')
+    if not png.exists() or png.stat().st_size<128:
+        errors.append('garage onboarding regression: active deployment capsule flat PNG missing/empty')
+    old=RP/f'textures/items/keepinitkrispy/rich_shorty/{item_id}.png'
+    if old.exists():
+        errors.append('garage onboarding regression: obsolete nested deployment capsule PNG still present')
+
+    report['checks']=checks
+    report['errors']=errors
+    report['status']='PASS' if not errors else 'FAIL'
+    report['garage_capsule_icon_validation']='active simple-string key -> one-entry array atlas -> flat 64px PNG; obsolete nested assertion retired'
+    gates=list(report.get('feature_regression_gates',[]))
+    if 'active_garage_capsule_icon_binding' not in gates: gates.append('active_garage_capsule_icon_binding')
+    report['feature_regression_gates']=gates
+    jwrite(OUT/'validation_report.json',report)
+    return report
