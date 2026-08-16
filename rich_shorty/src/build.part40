@@ -32,8 +32,9 @@ def validate(addon:Path):
 
     script=(BP/'scripts/main.js').read_text(encoding='utf-8')
     checks+=2
-    if 'rs:reality_sectors_cleared' in script:
-        errors.append('reality sector namespace regression: legacy rs: completion key survived finalization')
+    legacy_exact=("'rs:reality_sectors_cleared'" in script or '"rs:reality_sectors_cleared"' in script)
+    if legacy_exact:
+        errors.append('reality sector namespace regression: exact legacy rs: completion key survived finalization')
     if 'keepinitkrispy_rs:reality_sectors_cleared' not in script:
         errors.append('reality sector namespace regression: namespaced completion key missing')
 
