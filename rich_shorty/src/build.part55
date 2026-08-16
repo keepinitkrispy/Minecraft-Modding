@@ -1,0 +1,33 @@
+
+# ---------------------------------------------------------------------------
+# TEST 87 — REMOVE PARTIAL TEXTURE_LIST
+# A texture_list is all-or-nothing: once present, Creator Tools requires every
+# non-Vibrant texture in the RP to be listed. We only added it as a speculative
+# console preload for the 15 item icons, so it created 56 unrelated failures.
+# Remove the file entirely; ordinary item_texture bindings do not require it.
+# ---------------------------------------------------------------------------
+_retail87_previous_make_pack = make_pack
+_retail87_previous_validate = validate
+
+
+def make_pack():
+    addon=_retail87_previous_make_pack()
+    texture_list=RP/'textures/textures_list.json'
+    if texture_list.exists(): texture_list.unlink()
+    return _beta_dimension_reseal(addon)
+
+
+def validate(addon:Path):
+    report=_retail87_previous_validate(addon)
+    errors=list(report.get('errors',[])); checks=int(report.get('checks',0))+1
+    if (RP/'textures/textures_list.json').exists():
+        errors.append('retail texture regression: partial textures_list.json must not ship')
+    report['checks']=checks
+    report['errors']=errors
+    report['status']='PASS' if not errors else 'FAIL'
+    report['retail_texture_discovery']='standard item_texture/terrain_texture/entity references; no partial textures_list'
+    gates=list(report.get('feature_regression_gates',[]))
+    if 'no_partial_texture_list' not in gates: gates.append('no_partial_texture_list')
+    report['feature_regression_gates']=gates
+    jwrite(OUT/'validation_report.json',report)
+    return report
