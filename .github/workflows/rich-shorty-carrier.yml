@@ -22,18 +22,28 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Resolve authoritative current TEST identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          TEST_RUN=$(grep -m1 -oE 'CURRENT CANDIDATE — TEST [0-9]+' RICH_SHORTY_STATE.md | grep -oE '[0-9]+$')
+          test -n "$TEST_RUN"
+          echo "Authoritative Rich & Shorty candidate: TEST $TEST_RUN"
+          echo "TEST_RUN=$TEST_RUN" >> "$GITHUB_ENV"
+
       - name: Build exact Rich & Shorty packs
         shell: bash
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check pillow
-          python rich_shorty/build.py
+          GITHUB_RUN_NUMBER="$TEST_RUN" python rich_shorty/build.py
           node --check rich_shorty/dist/RichShorty_BP/scripts/main.js
           unzip -t rich_shorty/dist/Rich_and_Shorty_v0.1.0.mcaddon
           jq -e '.status=="PASS" and .errors==[]' rich_shorty/dist/validation_report.json >/dev/null
-          TEST_RUN=$(jq -r '.mobile_test_run' rich_shorty/dist/validation_report.json)
-          test -n "$TEST_RUN" && test "$TEST_RUN" != "null"
-          echo "TEST_RUN=$TEST_RUN" >> "$GITHUB_ENV"
+          BUILT_TEST=$(jq -r '.mobile_test_run' rich_shorty/dist/validation_report.json)
+          test "$BUILT_TEST" = "$TEST_RUN"
+          test "$(jq -r '.header.name' rich_shorty/dist/RichShorty_BP/manifest.json)" = "Rich & Shorty BP [TEST $TEST_RUN]"
+          test "$(jq -r '.header.name' rich_shorty/dist/RichShorty_RP/manifest.json)" = "Rich & Shorty RP [TEST $TEST_RUN]"
 
       - name: Download current official Bedrock Dedicated Server
         shell: bash
@@ -86,7 +96,6 @@ jobs:
           unzip -t "$OUT" | tee rich_shorty/dist/carrier-archive.log
           sha256sum "$OUT" | tee rich_shorty/dist/carrier-sha256.txt
 
-          # Fail closed on the exact world-bound pack references and embedded manifests.
           rm -rf /tmp/rs-carrier/check
           mkdir -p /tmp/rs-carrier/check
           unzip -q "$OUT" -d /tmp/rs-carrier/check
@@ -94,6 +103,8 @@ jobs:
           RP_UUID=$(jq -r '.header.uuid' rich_shorty/dist/RichShorty_RP/manifest.json)
           BP_VER=$(jq -c '.header.version' rich_shorty/dist/RichShorty_BP/manifest.json)
           RP_VER=$(jq -c '.header.version' rich_shorty/dist/RichShorty_RP/manifest.json)
+          test "$BP_VER" = "[0,3,$TEST_RUN]"
+          test "$RP_VER" = "[0,3,$TEST_RUN]"
           jq -e --arg id "$BP_UUID" --argjson ver "$BP_VER" '. == [{"pack_id":$id,"version":$ver}]' /tmp/rs-carrier/check/world_behavior_packs.json >/dev/null
           jq -e --arg id "$RP_UUID" --argjson ver "$RP_VER" '. == [{"pack_id":$id,"version":$ver}]' /tmp/rs-carrier/check/world_resource_packs.json >/dev/null
           test "$(jq -r '.header.uuid' /tmp/rs-carrier/check/behavior_packs/RSBP/manifest.json)" = "$BP_UUID"
