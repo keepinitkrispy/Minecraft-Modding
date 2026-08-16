@@ -1,0 +1,344 @@
+
+# ---------------------------------------------------------------------------
+# EXPANDED INTERDIMENSIONAL REALITIES
+# TEST 58 proved the Beta custom-dimension transport works on retail Android,
+# but the original buildZone() content was only a 49x49 flat prototype pad.
+# Keep the verified dimension/portal architecture and replace only destination
+# authoring with 40x40 streamed sectors. A 3x3 region (~120x120) is built before
+# first arrival, then adjacent sectors generate as the player explores.
+# ---------------------------------------------------------------------------
+_dimension_scale_previous_validate = validate
+
+_dimension_scale_make_pack_previous = make_pack
+
+def make_pack():
+    addon=_dimension_scale_make_pack_previous()
+    script_path=BP/'scripts/main.js'
+    script=script_path.read_text(encoding='utf-8')
+
+    # The true-dimension runtime in part30 previously called the tiny prototype
+    # builder once. Route only that custom-dimension call to the expanded async
+    # builder. Old buildZone remains available to legacy/non-shipping code but is
+    # no longer the reality that the player enters.
+    old='''  if(!Boolean(world.getDynamicProperty(rsRealityBuiltKey(key))??false)){\n    buildZone(dimension,key);\n    world.setDynamicProperty(rsRealityBuiltKey(key),true);\n    await rsPortalWait(4);\n  }'''
+    new='''  if(!Boolean(world.getDynamicProperty(rsRealityBuiltKey(key))??false)){\n    await buildExpandedReality(dimension,key);\n    world.setDynamicProperty(rsRealityBuiltKey(key),true);\n    await rsPortalWait(4);\n  }'''
+    if old not in script:
+        raise RuntimeError('true-dimension tiny buildZone call not found for expanded-reality replacement')
+    script=script.replace(old,new,1)
+
+    script += r'''
+
+// -------------------------------------------------------------------------
+// EXPANDED REALITY AUTHORING
+// Every registered custom dimension starts as void. These sectors turn each
+// one into a large, traversable place with a unique visual grammar. We load one
+// sector at a time through TickingAreaManager so mobile never needs the entire
+// explored dimension held active at once.
+// -------------------------------------------------------------------------
+const REALITY_SECTOR_SIZE=40;
+const REALITY_INITIAL_RADIUS=1; // 3x3 sectors => ~120x120 authored before arrival
+const rsBuiltRealitySectors=new Set();
+const rsQueuedRealitySectors=new Set();
+let rsRealitySectorQueue=Promise.resolve();
+
+const RS_REALITY_THEME={
+  glorp:{
+    top:'minecraft:warped_nylium', sub:'minecraft:blackstone', edge:'minecraft:dark_prismarine',
+    glow:'minecraft:sea_lantern', accent:'minecraft:amethyst_block', resource:'keepinitkrispy_rs:glorp_ore'
+  },
+  fizz:{
+    top:'minecraft:red_sandstone', sub:'minecraft:terracotta', edge:'minecraft:basalt',
+    glow:'minecraft:shroomlight', accent:'minecraft:magma', resource:'keepinitkrispy_rs:fizzium_ore'
+  },
+  chrono:{
+    top:'minecraft:calcite', sub:'minecraft:smooth_quartz', edge:'minecraft:blue_ice',
+    glow:'minecraft:end_rod', accent:'minecraft:amethyst_block', resource:'keepinitkrispy_rs:chronodust_cluster'
+  },
+  scrap:{
+    top:'minecraft:polished_deepslate', sub:'minecraft:deepslate_tiles', edge:'minecraft:oxidized_cut_copper',
+    glow:'minecraft:redstone_lamp', accent:'minecraft:iron_block', resource:'keepinitkrispy_rs:scrap_node'
+  },
+  citadel:{
+    top:'minecraft:polished_deepslate', sub:'minecraft:dark_prismarine', edge:'minecraft:oxidized_cut_copper',
+    glow:'minecraft:sea_lantern', accent:'minecraft:quartz_bricks', resource:null
+  }
+};
+
+function rsSectorKey(key,sx,sz){ return `${key}:${sx}:${sz}`; }
+function rsSectorCenter(z,sx,sz){
+  return {x:z.pos.x+sx*REALITY_SECTOR_SIZE,y:z.pos.y,z:z.pos.z+sz*REALITY_SECTOR_SIZE};
+}
+function rsDeterministic(key,sx,sz,salt=0){
+  let h=2166136261;
+  const s=`${key}:${sx}:${sz}:${salt}`;
+  for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619); }
+  return h>>>0;
+}
+
+function rsCutIslandCorners(dim,cx,y,cz){
+  // Main mass is 35x35 but corners are void-cut, keeping the place visibly
+  // suspended/interdimensional instead of becoming another square superflat.
+  for(const [dx,dz] of [[-17,-17],[12,-17],[-17,12],[12,12]]){
+    fillb(dim,cx+dx,y-3,cz+dz,cx+dx+5,y+3,cz+dz+5,'minecraft:air');
+  }
+}
+
+function rsBuildSectorBridges(dim,cx,y,cz,theme){
+  // Cardinal bridges reach the next sector island. Raised side rails and glow
+  // marks make the route readable from a distance without boxing the player in.
+  fillb(dim,cx-2,y,cz-23,cx+2,y,cz-17,theme.edge);
+  fillb(dim,cx-2,y,cz+17,cx+2,y,cz+23,theme.edge);
+  fillb(dim,cx-23,y,cz-2,cx-17,y,cz+2,theme.edge);
+  fillb(dim,cx+17,y,cz-2,cx+23,y,cz+2,theme.edge);
+  for(const [dx,dz] of [[0,-20],[0,20],[-20,0],[20,0]]) setb(dim,cx+dx,y+1,cz+dz,theme.glow);
+}
+
+function rsScatterResources(dim,key,cx,y,cz,theme,sx,sz){
+  if(!theme.resource) return;
+  const spots=[];
+  for(let i=0;i<16;i++){
+    const h=rsDeterministic(key,sx,sz,i);
+    let dx=(h%29)-14, dz=((h>>>8)%29)-14;
+    if(Math.abs(dx)<5 && Math.abs(dz)<5){ dx+=dx<0?-6:6; dz+=dz<0?-6:6; }
+    spots.push([dx,dz]);
+  }
+  for(const [dx,dz] of spots){
+    setb(dim,cx+dx,y+1,cz+dz,theme.resource);
+    if((Math.abs(dx)+Math.abs(dz))%3===0) setb(dim,cx+dx,y+2,cz+dz,theme.accent);
+  }
+}
+
+function rsGlorpSector(dim,cx,y,cz,sx,sz,theme){
+  // Warped fungal archipelago, translucent slime ponds and giant crystal trees.
+  for(let i=0;i<5;i++){
+    const h=rsDeterministic('glorp',sx,sz,i), dx=(h%25)-12, dz=((h>>>7)%25)-12;
+    const height=10+((h>>>14)%17);
+    fillb(dim,cx+dx-1,y+1,cz+dz-1,cx+dx+1,y+height,cz+dz+1,'minecraft:warped_stem');
+    fillb(dim,cx+dx-4,y+height-2,cz+dz-4,cx+dx+4,y+height,cz+dz+4,'minecraft:warped_wart_block');
+    setb(dim,cx+dx,y+height+1,cz+dz,'minecraft:sea_lantern');
+  }
+  fillb(dim,cx-11,y+1,cz+8,cx-5,y+1,cz+14,'minecraft:slime');
+  fillb(dim,cx+7,y+1,cz-14,cx+13,y+1,cz-8,'minecraft:water');
+  // Floating luminous shards above the island sell the impossible skybox.
+  for(let i=0;i<7;i++){
+    const h=rsDeterministic('glorp_float',sx,sz,i), dx=(h%31)-15, dz=((h>>>9)%31)-15, yy=y+18+((h>>>17)%18);
+    fillb(dim,cx+dx-1,yy,cz+dz-1,cx+dx+1,yy+3,cz+dz+1,'minecraft:amethyst_block');
+  }
+}
+
+function rsFizzSector(dim,cx,y,cz,sx,sz,theme){
+  // Broken red desert mesas with basalt needles, magma fissures and suspended
+  // furnace-rock. Safe central routes remain solid sandstone.
+  for(let i=0;i<7;i++){
+    const h=rsDeterministic('fizz',sx,sz,i), dx=(h%29)-14, dz=((h>>>8)%29)-14;
+    const height=7+((h>>>15)%24), w=2+((h>>>20)%3);
+    fillb(dim,cx+dx-w,y+1,cz+dz-w,cx+dx+w,y+height,cz+dz+w,i%2?'minecraft:basalt':'minecraft:terracotta');
+    if(i%2===0) setb(dim,cx+dx,y+height+1,cz+dz,'minecraft:shroomlight');
+  }
+  fillb(dim,cx-15,y+1,cz+6,cx-5,y+1,cz+8,'minecraft:magma');
+  fillb(dim,cx+5,y+1,cz-9,cx+15,y+1,cz-7,'minecraft:magma');
+  for(const [dx,dz] of [[-10,7],[10,-8]]) setb(dim,cx+dx,y+2,cz+dz,'minecraft:lava');
+  // Airborne chunks make the horizon visibly non-Overworld.
+  for(let i=0;i<5;i++){
+    const h=rsDeterministic('fizz_float',sx,sz,i), dx=(h%29)-14, dz=((h>>>7)%29)-14, yy=y+16+((h>>>15)%15);
+    fillb(dim,cx+dx-2,yy,cz+dz-2,cx+dx+2,yy+2,cz+dz+2,'minecraft:blackstone');
+    setb(dim,cx+dx,yy+3,cz+dz,'minecraft:shroomlight');
+  }
+}
+
+function rsChronoSector(dim,cx,y,cz,sx,sz,theme){
+  // Fractured museum-of-time shelves: quartz terraces, hovering clock rings,
+  // blue-ice seams and amethyst timing markers.
+  fillb(dim,cx-14,y+1,cz-14,cx-7,y+3,cz+14,'minecraft:smooth_quartz');
+  fillb(dim,cx+7,y+1,cz-14,cx+14,y+5,cz+14,'minecraft:calcite');
+  fillb(dim,cx-3,y+1,cz-15,cx+3,y+1,cz+15,'minecraft:blue_ice');
+  const ringY=y+15+((rsDeterministic('chrono',sx,sz,1)%8));
+  // Rectangular impossible clock ring, deliberately hovering unsupported.
+  fillb(dim,cx-10,ringY,cz-1,cx+10,ringY+1,cz+1,'minecraft:amethyst_block');
+  fillb(dim,cx-1,ringY-9,cz-1,cx+1,ringY+10,cz+1,'minecraft:amethyst_block');
+  fillb(dim,cx-7,ringY-7,cz-1,cx-5,ringY-5,cz+1,'minecraft:sea_lantern');
+  fillb(dim,cx+5,ringY+5,cz-1,cx+7,ringY+7,cz+1,'minecraft:sea_lantern');
+  for(let i=-12;i<=12;i+=4){
+    setb(dim,cx+i,y+2,cz+12,'minecraft:end_rod');
+    setb(dim,cx+i,y+2,cz-12,'minecraft:end_rod');
+  }
+}
+
+function rsScrapSector(dim,cx,y,cz,sx,sz,theme){
+  // Rusted industrial moon: crane silhouettes, gantries, stacked machine guts,
+  // rails and oxidized copper carcasses across a dark broken deck.
+  for(let i=0;i<4;i++){
+    const h=rsDeterministic('scrap',sx,sz,i), dx=(h%25)-12, dz=((h>>>8)%25)-12, height=9+((h>>>15)%16);
+    fillb(dim,cx+dx,y+1,cz+dz,cx+dx+1,y+height,cz+dz+1,'minecraft:iron_block');
+    fillb(dim,cx+dx,y+height,cz+dz,cx+dx+8,y+height+1,cz+dz+1,'minecraft:cut_copper');
+    setb(dim,cx+dx+8,y+height-1,cz+dz,'minecraft:chain');
+  }
+  fillb(dim,cx-15,y+1,cz-10,cx+15,y+1,cz-8,'minecraft:rail');
+  fillb(dim,cx-15,y+1,cz+8,cx+15,y+1,cz+10,'minecraft:oxidized_cut_copper');
+  for(const [dx,dz] of [[-12,-3],[-7,5],[4,-5],[10,4]]){
+    fillb(dim,cx+dx,y+1,cz+dz,cx+dx+3,y+4,cz+dz+3,'minecraft:iron_block hollow');
+    setb(dim,cx+dx+1,y+2,cz+dz+1,'minecraft:redstone_lamp');
+  }
+}
+
+function rsCitadelSector(dim,cx,y,cz,sx,sz,theme){
+  // Outer bureaucratic metropolis. Central sector is overwritten/augmented by
+  // the existing story Citadel; surrounding districts make it feel enormous.
+  if(sx===0 && sz===0) return;
+  const seed=rsDeterministic('citadel',sx,sz,0);
+  const towerH=24+(seed%26);
+  fillb(dim,cx-8,y+1,cz-8,cx+8,y+towerH,cz+8,'minecraft:dark_prismarine hollow');
+  fillb(dim,cx-5,y+3,cz-5,cx+5,y+towerH-3,cz+5,'minecraft:air');
+  for(let yy=y+6;yy<towerH+y;yy+=6){
+    fillb(dim,cx-8,yy,cz-8,cx+8,yy,cz-8,'minecraft:sea_lantern');
+  }
+  fillb(dim,cx-15,y+5,cz-2,cx+15,y+7,cz+2,'minecraft:quartz_bricks');
+  fillb(dim,cx-2,y+5,cz-15,cx+2,y+7,cz+15,'minecraft:oxidized_cut_copper');
+  setb(dim,cx,y+towerH+1,cz,'minecraft:beacon');
+}
+
+function rsAuthorRealitySector(dim,key,sx,sz){
+  const z=ZONES[key], theme=RS_REALITY_THEME[key], c=rsSectorCenter(z,sx,sz), y=c.y;
+  if(!theme) return;
+
+  // Three-block floating island mass with a themed top layer.
+  fillb(dim,c.x-17,y-2,c.z-17,c.x+17,y-1,c.z+17,theme.sub);
+  fillb(dim,c.x-17,y,c.z-17,c.x+17,y,c.z+17,theme.top);
+  rsCutIslandCorners(dim,c.x,y,c.z);
+  rsBuildSectorBridges(dim,c.x,y,c.z,theme);
+
+  // Landing/wayfinding pad at every sector center; central destination is larger.
+  const pad=(sx===0&&sz===0)?6:3;
+  fillb(dim,c.x-pad,y+1,c.z-pad,c.x+pad,y+1,c.z+pad,'minecraft:smooth_stone');
+  setb(dim,c.x,y+2,c.z,'minecraft:lodestone');
+  setb(dim,c.x+pad,y+2,c.z+pad,theme.glow);
+  setb(dim,c.x-pad,y+2,c.z-pad,theme.glow);
+
+  if(key==='glorp') rsGlorpSector(dim,c.x,y,c.z,sx,sz,theme);
+  else if(key==='fizz') rsFizzSector(dim,c.x,y,c.z,sx,sz,theme);
+  else if(key==='chrono') rsChronoSector(dim,c.x,y,c.z,sx,sz,theme);
+  else if(key==='scrap') rsScrapSector(dim,c.x,y,c.z,sx,sz,theme);
+  else if(key==='citadel') rsCitadelSector(dim,c.x,y,c.z,sx,sz,theme);
+
+  rsScatterResources(dim,key,c.x,y,c.z,theme,sx,sz);
+  // Persistent in-world marker for this sector, independent of script-session Sets.
+  setb(dim,c.x,y-1,c.z,'keepinitkrispy_rs:zone_anchor');
+}
+
+async function rsEnsureRealitySector(dim,key,sx,sz){
+  const sk=rsSectorKey(key,sx,sz);
+  if(rsBuiltRealitySectors.has(sk)) return;
+  const z=ZONES[key], c=rsSectorCenter(z,sx,sz);
+  const areaId=`rs_${key}_${sx}_${sz}`.replaceAll('-','n');
+  try{
+    await world.tickingAreaManager.createTickingArea(areaId,{
+      dimension:dim,
+      from:{x:c.x-22,y:c.y-8,z:c.z-22},
+      to:{x:c.x+22,y:c.y+56,z:c.z+22}
+    });
+    const marker=dim.getBlock({x:c.x,y:c.y-1,z:c.z});
+    if(marker?.typeId!=='keepinitkrispy_rs:zone_anchor') rsAuthorRealitySector(dim,key,sx,sz);
+    rsBuiltRealitySectors.add(sk);
+  }finally{
+    try{ world.tickingAreaManager.removeTickingArea(areaId); }catch{}
+  }
+}
+
+async function buildExpandedReality(dim,key){
+  // Pre-author a full 3x3 district before the portal opens. This is the retail
+  // acceptance floor: the player arrives to a real skyline, not a tiny pad.
+  for(let sx=-REALITY_INITIAL_RADIUS;sx<=REALITY_INITIAL_RADIUS;sx++){
+    for(let sz=-REALITY_INITIAL_RADIUS;sz<=REALITY_INITIAL_RADIUS;sz++){
+      await rsEnsureRealitySector(dim,key,sx,sz);
+    }
+  }
+
+  const p=ZONES[key].pos;
+  if(key==='glorp') dim.runCommand(`summon keepinitkrispy_rs:sundae ${p.x+7} ${p.y+2} ${p.z+4}`);
+  if(key==='fizz') dim.runCommand(`summon keepinitkrispy_rs:scronchy ${p.x+7} ${p.y+2} ${p.z+4}`);
+  if(key==='chrono') dim.runCommand(`summon keepinitkrispy_rs:bird_dude ${p.x+7} ${p.y+2} ${p.z+4}`);
+  if(key==='scrap'){
+    dim.runCommand(`summon keepinitkrispy_rs:mr_needs_it ${p.x+7} ${p.y+2} ${p.z+4}`);
+    dim.runCommand(`summon keepinitkrispy_rs:gerry ${p.x-7} ${p.y+2} ${p.z+4}`);
+  }
+  if(key==='citadel') buildCitadel(dim,p);
+}
+
+function rsQueueSector(dim,key,sx,sz){
+  const sk=rsSectorKey(key,sx,sz);
+  if(rsBuiltRealitySectors.has(sk)||rsQueuedRealitySectors.has(sk)) return;
+  rsQueuedRealitySectors.add(sk);
+  rsRealitySectorQueue=rsRealitySectorQueue
+    .then(()=>rsEnsureRealitySector(dim,key,sx,sz))
+    .catch(()=>{})
+    .finally(()=>rsQueuedRealitySectors.delete(sk));
+}
+
+// Expand around the player as they explore. One serialized sector at a time keeps
+// the ticking-chunk budget bounded while making the void dimensions effectively
+// much larger than the initial authored district.
+system.runInterval(()=>{
+  for(const player of world.getAllPlayers()){
+    const key=Object.keys(RS_REALITY_DIMENSIONS).find(k=>RS_REALITY_DIMENSIONS[k]===player.dimension.id);
+    if(!key) continue;
+    const z=ZONES[key];
+    const sx=Math.round((player.location.x-z.pos.x)/REALITY_SECTOR_SIZE);
+    const sz=Math.round((player.location.z-z.pos.z)/REALITY_SECTOR_SIZE);
+    for(let dx=-1;dx<=1;dx++) for(let dz=-1;dz<=1;dz++) rsQueueSector(player.dimension,key,sx+dx,sz+dz);
+  }
+},30);
+'''
+    twrite(script_path,script)
+
+    # Reseal the documented composite after modifying the shipping script.
+    return _beta_dimension_reseal(addon)
+
+
+def validate(addon:Path):
+    report=_dimension_scale_previous_validate(addon)
+    errors=list(report.get('errors',[])); checks=int(report.get('checks',0))
+    script=(BP/'scripts/main.js').read_text(encoding='utf-8')
+
+    required={
+      'expanded dimension routing':'await buildExpandedReality(dimension,key)',
+      '120 block initial district':'REALITY_SECTOR_SIZE=40',
+      '3x3 initial sector build':'REALITY_INITIAL_RADIUS=1',
+      'exploration streaming':'system.runInterval(()=>',
+      'serialized sector queue':'rsRealitySectorQueue',
+      'per-sector ticking area':'rsEnsureRealitySector(dim,key,sx,sz)',
+      'Glorp fungal skyline':'function rsGlorpSector',
+      'Fizz basalt desert skyline':'function rsFizzSector',
+      'Chrono clock ring':'function rsChronoSector',
+      'Scrap industrial skyline':'function rsScrapSector',
+      'Citadel outer metropolis':'function rsCitadelSector',
+      'persistent sector markers':"setb(dim,c.x,y-1,c.z,'keepinitkrispy_rs:zone_anchor')"
+    }
+    for label,needle in required.items():
+        checks+=1
+        if needle not in script: errors.append(f'expanded reality regression: missing {label} ({needle!r})')
+
+    checks+=1
+    true_dimension_block='''if(!Boolean(world.getDynamicProperty(rsRealityBuiltKey(key))??false)){\n    buildZone(dimension,key);'''
+    if true_dimension_block in script:
+        errors.append('expanded reality regression: true custom dimensions routed back to tiny prototype buildZone')
+
+    # Every resource reality must use its own authored resource block in sectors.
+    for rid in ('glorp_ore','fizzium_ore','chronodust_cluster','scrap_node'):
+        checks+=1
+        if f'keepinitkrispy_rs:{rid}' not in script:
+            errors.append(f'expanded reality regression: missing streamed resource {rid}')
+
+    report['checks']=checks
+    report['errors']=errors
+    report['status']='PASS' if not errors else 'FAIL'
+    report['reality_world_profile']='streamed_authored_sectors_v1'
+    report['initial_reality_footprint']='3x3 sectors, approximately 120x120 blocks before arrival'
+    report['reality_expansion']='adjacent 40x40 sectors generated as players explore'
+    report['retail_test_58_dimension_transport']='VERIFIED'
+    report['retail_test_58_dimension_content']='FAILED_TINY_PLAIN_REPLACED'
+    gates=list(report.get('feature_regression_gates',[]))
+    for g in ('expanded_reality_120x120_initial','streamed_reality_expansion','distinct_reality_skylines','sector_ticking_area_serialization'):
+        if g not in gates: gates.append(g)
+    report['feature_regression_gates']=gates
+    jwrite(OUT/'validation_report.json',report)
+    return report
