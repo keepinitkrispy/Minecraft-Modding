@@ -1,0 +1,72 @@
+
+# ---------------------------------------------------------------------------
+# REALITY ENEMY 1.26.10 SCHEMA FIX
+# Release gate 77 correctly rejected the new mobs because minecraft:pushable was
+# split in Bedrock 1.26.10. Convert all ten enemy definitions to the two current
+# empty-marker components and bring the Late-Fee Drone to the 12-cube visual
+# floor. Do not weaken either regression gate.
+# ---------------------------------------------------------------------------
+_enemy_schema_previous_make_pack = make_pack
+_enemy_schema_previous_validate = validate
+
+
+def make_pack():
+    addon=_enemy_schema_previous_make_pack()
+
+    for eid,*_ in RS_REALITY_ENEMIES:
+        path=BP/f'entities/{eid}.json'
+        obj=json.loads(path.read_text(encoding='utf-8'))
+        obj['format_version']='1.26.10'
+        comps=obj['minecraft:entity']['components']
+        comps.pop('minecraft:pushable',None)
+        comps['minecraft:pushable_by_block']={}
+        comps['minecraft:pushable_by_entity']={}
+        jwrite(path,obj)
+
+    # TEST 77 gate found the clock drone at 11 cubes. Add a rear chronometer
+    # housing instead of lowering the visual-quality threshold.
+    geo_path=RP/'models/entity/late_fee_drone.geo.json'
+    geo=json.loads(geo_path.read_text(encoding='utf-8'))
+    bones=geo['minecraft:geometry'][0]['bones']
+    body=next((b for b in bones if b.get('name')=='body'),None)
+    if not body:
+        raise RuntimeError('Late-Fee Drone body bone missing during visual fix')
+    body.setdefault('cubes',[]).append({'origin':[-3,18,-1],'size':[6,2,3],'uv':[0,0]})
+    jwrite(geo_path,geo)
+
+    return _beta_dimension_reseal(addon)
+
+
+def validate(addon:Path):
+    report=_enemy_schema_previous_validate(addon)
+    errors=list(report.get('errors',[])); checks=int(report.get('checks',0))
+
+    for eid,*_ in RS_REALITY_ENEMIES:
+        checks+=4
+        obj=json.loads((BP/f'entities/{eid}.json').read_text(encoding='utf-8'))
+        comps=obj['minecraft:entity']['components']
+        if obj.get('format_version')!='1.26.10':
+            errors.append(f'reality enemy schema regression: {eid} not pinned to format 1.26.10')
+        if 'minecraft:pushable' in comps:
+            errors.append(f'reality enemy schema regression: {eid} still has legacy minecraft:pushable')
+        if comps.get('minecraft:pushable_by_block')!={}:
+            errors.append(f'reality enemy schema regression: {eid} missing minecraft:pushable_by_block')
+        if comps.get('minecraft:pushable_by_entity')!={}:
+            errors.append(f'reality enemy schema regression: {eid} missing minecraft:pushable_by_entity')
+
+    checks+=1
+    geo=json.loads((RP/'models/entity/late_fee_drone.geo.json').read_text(encoding='utf-8'))
+    count=sum(len(b.get('cubes',[])) for b in geo['minecraft:geometry'][0]['bones'])
+    if count<12:
+        errors.append(f'reality enemy visual regression: Late-Fee Drone remains below 12 cubes ({count})')
+
+    report['checks']=checks
+    report['errors']=errors
+    report['status']='PASS' if not errors else 'FAIL'
+    gates=list(report.get('feature_regression_gates',[]))
+    for g in ('reality_enemy_pushable_split_1_26_10','late_fee_drone_minimum_visual_mass'):
+        if g not in gates: gates.append(g)
+    report['feature_regression_gates']=gates
+    report['reality_enemy_schema']='1.26.10 pushable_by_block + pushable_by_entity'
+    jwrite(OUT/'validation_report.json',report)
+    return report
