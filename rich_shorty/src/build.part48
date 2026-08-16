@@ -1,0 +1,338 @@
+
+# ---------------------------------------------------------------------------
+# TEST 79 — AMBIENT LIFE / LIVED-IN REALITIES
+# The realities now have combat natives, but a world made only of enemies still
+# feels like an arena. Add one harmless native species per dimension, capped local
+# spawning, co-op-aware sector processing, safe-ish surface placement for ground
+# critters, flyers that actually use Bedrock flight AI, and cleanup outside the
+# player bubble. No loot/progression value: these exist to make the places feel
+# alive, weird, and inhabited.
+# ---------------------------------------------------------------------------
+_ambient_life_previous_make_pack = make_pack
+_ambient_life_previous_validate = validate
+
+RS_AMBIENT_SPECIES = [
+    # id, display, reality, archetype, base, accent, flying, scale-ish collision
+    ('bubble_peeper','Bubble Peeper','glorp','peeper','#2e786d','#a5ffd2',True,0.58,0.58),
+    ('radiator_beetle','Radiator Beetle','fizz','beetle','#56382b','#ffb43b',False,0.78,0.48),
+    ('minute_moth','Minute Moth','chrono','moth','#313a68','#9feeff',True,0.82,0.62),
+    ('bolt_pigeon','Bolt Pigeon','scrap','pigeon','#49515b','#dfaa4b',True,0.70,0.82),
+    ('receipt_rat','Receipt Rat','citadel','rat','#43636a','#ecfff9',False,0.68,0.48),
+]
+
+
+def _ambient_geo(eid,kind):
+    bones=[{'name':'root','pivot':[0,0,0]}]
+    def b(name,pivot,cubes,parent='root'):
+        bones.append({'name':name,'parent':parent,'pivot':list(pivot),'cubes':cubes})
+    C=lambda o,s:{'origin':list(o),'size':list(s),'uv':[0,0]}
+
+    if kind=='peeper':
+        b('body',[0,7,0],[C((-4,4,-4),(8,7,8)),C((-3,10,-3),(6,3,6)),C((-1,12,-1),(2,3,2))])
+        b('head',[0,8,-3],[C((-3,7,-7),(6,5,5)),C((-3,9,-9),(2,2,2)),C((0,9,-9),(2,2,2)),C((3,9,-8),(1,1,1))])
+        b('fin1',[-4,7,0],[C((-8,6,-2),(5,2,4))]); b('fin2',[4,7,0],[C((3,6,-2),(5,2,4))])
+        b('tail',[0,6,4],[C((-1,5,3),(2,2,6))])
+    elif kind=='beetle':
+        b('body',[0,4,0],[C((-5,2,-6),(10,5,12)),C((-4,6,-4),(8,2,9)),C((-2,7,-2),(4,2,5)),C((-5,3,-8),(10,3,3))])
+        b('head',[0,5,-6],[C((-4,3,-10),(8,5,5)),C((-3,5,-12),(2,2,2)),C((1,5,-12),(2,2,2))])
+        for i,(x,z) in enumerate([(-5,-4),(5,-4),(-5,0),(5,0),(-4,4),(4,4)],1):
+            b(f'leg{i}',[x,3,z],[C((x-1,0,z-1),(2,4,2))])
+    elif kind=='moth':
+        b('body',[0,7,0],[C((-2,4,-4),(4,7,8)),C((-1,10,-6),(2,3,4)),C((-1,3,3),(2,3,5))])
+        b('head',[0,10,-5],[C((-3,8,-8),(6,5,4)),C((-3,10,-10),(2,2,2)),C((1,10,-10),(2,2,2))])
+        b('wing1',[-2,8,0],[C((-11,7,-3),(9,1,8)),C((-9,9,-2),(7,1,6))])
+        b('wing2',[2,8,0],[C((2,7,-3),(9,1,8)),C((2,9,-2),(7,1,6))])
+        b('antenna1',[-2,12,-7],[C((-3,12,-10),(1,4,1))]); b('antenna2',[2,12,-7],[C((2,12,-10),(1,4,1))])
+    elif kind=='pigeon':
+        b('body',[0,7,0],[C((-4,4,-5),(8,7,10)),C((-3,9,-3),(6,3,7)),C((-2,3,3),(4,3,6)),C((-1,5,9),(2,2,5))])
+        b('head',[0,12,-4],[C((-3,10,-7),(6,5,6)),C((-1,11,-10),(2,2,4)),C((-2,13,-8),(1,1,1)),C((1,13,-8),(1,1,1))])
+        b('wing1',[-4,8,0],[C((-10,6,-3),(7,2,8))]); b('wing2',[4,8,0],[C((3,6,-3),(7,2,8))])
+        b('leg1',[-2,4,1],[C((-3,0,0),(2,5,2))]); b('leg2',[2,4,1],[C((1,0,0),(2,5,2))])
+    else: # receipt rat
+        b('body',[0,4,0],[C((-4,2,-5),(8,5,11)),C((-3,5,-3),(6,2,8)),C((-2,3,5),(4,3,5))])
+        b('head',[0,5,-5],[C((-4,3,-9),(8,5,5)),C((-2,4,-12),(4,3,4)),C((-3,7,-8),(2,3,2)),C((1,7,-8),(2,3,2))])
+        b('tail',[0,3,6],[C((-1,2,5),(2,2,8)),C((0,3,12),(1,1,5))])
+        b('paper',[0,7,1],[C((-3,7,-1),(6,1,8))])
+        for i,(x,z) in enumerate([(-3,-3),(3,-3),(-3,3),(3,3)],1): b(f'leg{i}',[x,3,z],[C((x-1,0,z-1),(2,3,2))])
+
+    return {'format_version':'1.12.0','minecraft:geometry':[{
+      'description':{
+        'identifier':f'geometry.keepinitkrispy_rs.{eid}',
+        'texture_width':64,'texture_height':64,
+        'visible_bounds_width':3.0,'visible_bounds_height':3.0,'visible_bounds_offset':[0,1,0]
+      },
+      'bones':bones
+    }]}
+
+
+def _ambient_anim(eid,geo,flying):
+    names={b['name'] for b in geo['minecraft:geometry'][0]['bones']}
+    idle={'body':{'rotation':{'0.0':[0,-2,0],'1.1':[2,2,0],'2.2':[0,-2,0]}}}
+    if 'head' in names: idle['head']={'rotation':{'0.0':[0,-5,0],'1.1':[1,5,0],'2.2':[0,-5,0]}}
+    move={}
+    if 'wing1' in names:
+        move['wing1']={'rotation':{'0.0':[0,0,18],'0.25':[0,0,-42],'0.5':[0,0,18]}}
+        move['wing2']={'rotation':{'0.0':[0,0,-18],'0.25':[0,0,42],'0.5':[0,0,-18]}}
+    for i,n in enumerate(sorted(x for x in names if x.startswith('leg'))):
+        a=16 if i%2==0 else -16
+        move[n]={'rotation':{'0.0':[a,0,0],'0.5':[-a,0,0],'1.0':[a,0,0]}}
+    if not move: move={'body':{'rotation':{'0.0':[0,-4,0],'0.5':[0,4,0],'1.0':[0,-4,0]}}}
+    return {'format_version':'1.8.0','animations':{
+      f'animation.keepinitkrispy_rs.{eid}.idle':{'loop':True,'animation_length':2.2,'bones':idle},
+      f'animation.keepinitkrispy_rs.{eid}.move':{'loop':True,'animation_length':0.5 if flying else 1.0,'bones':move}
+    }}
+
+
+def _ambient_client(eid):
+    return {'format_version':'1.10.0','minecraft:client_entity':{'description':{
+      'identifier':f'keepinitkrispy_rs:{eid}',
+      'materials':{'default':'entity_alphatest'},
+      'textures':{'default':f'textures/entity/keepinitkrispy_rs/{eid}'},
+      'geometry':{'default':f'geometry.keepinitkrispy_rs.{eid}'},
+      'animations':{
+        'idle':f'animation.keepinitkrispy_rs.{eid}.idle',
+        'move':f'animation.keepinitkrispy_rs.{eid}.move'
+      },
+      'scripts':{'animate':['idle',{'move':'query.modified_move_speed > 0.01'}]},
+      'render_controllers':['controller.render.rs_default']
+    }}}
+
+
+def _ambient_behavior(eid,reality,flying,width,height):
+    comps={
+      'minecraft:type_family':{'family':['keepinitkrispy_rs_ambient',f'keepinitkrispy_rs_ambient_{reality}','mob']},
+      'minecraft:health':{'value':10,'max':10},
+      'minecraft:movement':{'value':0.22 if flying else 0.17},
+      'minecraft:physics':{},
+      'minecraft:collision_box':{'width':width,'height':height},
+      'minecraft:pushable_by_block':{},'minecraft:pushable_by_entity':{},
+      'minecraft:nameable':{},
+      'minecraft:behavior.look_at_player':{'priority':7,'look_distance':7,'probability':0.05},
+      'minecraft:behavior.random_look_around':{'priority':9},
+    }
+    if flying:
+        comps.update({
+          'minecraft:can_fly':{},
+          'minecraft:movement.fly':{},
+          'minecraft:navigation.fly':{'avoid_damage_blocks':True,'avoid_water':False},
+          'minecraft:behavior.random_fly':{'priority':5,'avoid_damage_blocks':True,'can_land_on_trees':False,'speed_multiplier':0.85,'xz_dist':11,'y_dist':5}
+        })
+    else:
+        comps.update({
+          'minecraft:movement.basic':{},
+          'minecraft:navigation.walk':{'can_path_over_water':False,'avoid_damage_blocks':True},
+          'minecraft:behavior.random_stroll':{'priority':5,'speed_multiplier':0.8,'xz_dist':9,'y_dist':3}
+        })
+    if reality=='fizz': comps['minecraft:fire_immune']={}
+    return {'format_version':'1.26.10','minecraft:entity':{
+      'description':{
+        'identifier':f'keepinitkrispy_rs:{eid}','is_spawnable':True,'is_summonable':True,'is_experimental':False,
+        'spawn_egg':{'base_color':'#56636b','overlay_color':'#b9e5d0'}
+      },
+      'component_groups':{},'components':comps,'events':{}
+    }}
+
+
+def _paint_ambient(path,base,accent,eid):
+    path.parent.mkdir(parents=True,exist_ok=True)
+    b=tuple(int(base[i:i+2],16) for i in (1,3,5)); a=tuple(int(accent[i:i+2],16) for i in (1,3,5))
+    im=Image.new('RGBA',(64,64),b+(255,)); d=ImageDraw.Draw(im)
+    shade=tuple(max(0,c-28) for c in b)+(255,)
+    for y in range(0,64,8): d.line((0,y,63,y),fill=shade,width=1)
+    for x in range(6,64,14): d.rectangle((x,4,x+3,59),fill=a+(255,))
+    d.rectangle((8,8,25,15),fill=(18,25,29,255)); d.rectangle((10,10,23,13),fill=a+(255,))
+    seed=sum(ord(c) for c in eid)
+    for i in range(8):
+        x=(seed+i*13)%58+2; y=(seed*5+i*9)%54+4
+        d.rectangle((x,y,min(63,x+3),min(63,y+3)),fill=a+(255,))
+    im.save(path)
+
+
+def make_pack():
+    addon=_ambient_life_previous_make_pack()
+    lang_path=RP/'texts/en_US.lang'
+    lang=lang_path.read_text(encoding='utf-8') if lang_path.exists() else ''
+
+    for eid,display,reality,kind,base,accent,flying,width,height in RS_AMBIENT_SPECIES:
+        geo=_ambient_geo(eid,kind)
+        jwrite(RP/f'models/entity/{eid}.geo.json',geo)
+        jwrite(RP/f'animations/{eid}.animation.json',_ambient_anim(eid,geo,flying))
+        jwrite(RP/f'entity/{eid}.entity.json',_ambient_client(eid))
+        jwrite(BP/f'entities/{eid}.json',_ambient_behavior(eid,reality,flying,width,height))
+        _paint_ambient(RP/f'textures/entity/keepinitkrispy_rs/{eid}.png',base,accent,eid)
+        lang += f'entity.keepinitkrispy_rs:{eid}.name={display}\n'
+    twrite(lang_path,lang)
+
+    script_path=BP/'scripts/main.js'
+    script=script_path.read_text(encoding='utf-8')
+    script += r'''
+
+// -------------------------------------------------------------------------
+// NATIVE AMBIENT LIFE
+// One harmless species per reality. They have no drops, quests, or combat role.
+// Spawns are local, capped, co-op deduplicated by occupied sector, and removed
+// once no player is nearby so a long exploration session cannot leak entities.
+// -------------------------------------------------------------------------
+const RS_AMBIENT_SPECIES={
+  glorp:{id:'keepinitkrispy_rs:bubble_peeper',flying:true},
+  fizz:{id:'keepinitkrispy_rs:radiator_beetle',flying:false},
+  chrono:{id:'keepinitkrispy_rs:minute_moth',flying:true},
+  scrap:{id:'keepinitkrispy_rs:bolt_pigeon',flying:true},
+  citadel:{id:'keepinitkrispy_rs:receipt_rat',flying:false}
+};
+const RS_AMBIENT_IDS=new Set(Object.values(RS_AMBIENT_SPECIES).map(v=>v.id));
+
+function rsAmbientOpenAir(dim,x,y,z){
+  try{
+    const a=dim.getBlock({x,y,z})?.typeId;
+    const b=dim.getBlock({x,y:y+1,z})?.typeId;
+    return a==='minecraft:air'&&b==='minecraft:air';
+  }catch{return false;}
+}
+function rsAmbientSpawnPoint(player,key,flying,salt){
+  const dim=player.dimension;
+  const seed=rsDeterministic(`ambient_${key}`,Math.floor(player.location.x),Math.floor(player.location.z),salt);
+  const angle=((seed%360)/180)*Math.PI;
+  const radius=8+((seed>>>8)%9);
+  const x=Math.floor(player.location.x+Math.cos(angle)*radius);
+  const z=Math.floor(player.location.z+Math.sin(angle)*radius);
+  const py=Math.floor(player.location.y);
+  if(flying){
+    for(const y of [py+4,py+7,py+2,py+10]) if(rsAmbientOpenAir(dim,x,y,z)) return {x:x+0.5,y:y+0.2,z:z+0.5};
+    return null;
+  }
+  for(let y=py+6;y>=py-9;y--){
+    try{
+      const floor=dim.getBlock({x,y:y-1,z})?.typeId;
+      if(floor&&floor!=='minecraft:air'&&floor!=='minecraft:water'&&floor!=='minecraft:lava'&&rsAmbientOpenAir(dim,x,y,z)){
+        return {x:x+0.5,y:y+0.01,z:z+0.5};
+      }
+    }catch{}
+  }
+  return null;
+}
+function rsAmbientNearbyCount(dim,player){
+  let n=0;
+  try{
+    for(const e of dim.getEntities({location:player.location,maxDistance:26})) if(RS_AMBIENT_IDS.has(e.typeId)) n++;
+  }catch{}
+  return n;
+}
+
+system.runInterval(()=>{
+  const processed=new Set();
+  for(const player of world.getAllPlayers()){
+    const key=rsRealityKeyForDimension(player.dimension.id);
+    const spec=key?RS_AMBIENT_SPECIES[key]:null;
+    if(!spec) continue;
+    const z=ZONES[key];
+    const sx=Math.round((player.location.x-z.pos.x)/REALITY_SECTOR_SIZE);
+    const sz=Math.round((player.location.z-z.pos.z)/REALITY_SECTOR_SIZE);
+    const occupied=`${player.dimension.id}:${sx}:${sz}`;
+    if(processed.has(occupied)) continue;
+    processed.add(occupied);
+    const active=rsAmbientNearbyCount(player.dimension,player);
+    if(active>=6) continue;
+    const point=rsAmbientSpawnPoint(player,key,spec.flying,system.currentTick+active*37);
+    if(!point) continue;
+    try{
+      const ent=player.dimension.spawnEntity(spec.id,point);
+      ent.addTag('keepinitkrispy_rs_ambient_native');
+    }catch{}
+  }
+},80);
+
+// Rare little flocks make the skyline move without turning every sector into a
+// zoo. At most two extra natives are attempted and the same local cap applies.
+system.runInterval(()=>{
+  for(const player of world.getAllPlayers()){
+    const key=rsRealityKeyForDimension(player.dimension.id);
+    const spec=key?RS_AMBIENT_SPECIES[key]:null;
+    if(!spec||rsAmbientNearbyCount(player.dimension,player)>3) continue;
+    if((rsDeterministic(`ambient_flock_${key}`,system.currentTick>>7,player.id.length,17)%5)!==0) continue;
+    for(let i=0;i<2;i++){
+      const point=rsAmbientSpawnPoint(player,key,spec.flying,system.currentTick+i*101);
+      if(!point) continue;
+      try{
+        const ent=player.dimension.spawnEntity(spec.id,point);
+        ent.addTag('keepinitkrispy_rs_ambient_native');
+      }catch{}
+    }
+  }
+},260);
+
+// Cleanup keeps phone/Realm-transfer worlds bounded even after long exploration.
+system.runInterval(()=>{
+  for(const [key,dimId] of Object.entries(RS_REALITY_DIMENSIONS)){
+    let dim;
+    try{dim=world.getDimension(dimId);}catch{continue;}
+    let natives=[];
+    try{natives=dim.getEntities({tags:['keepinitkrispy_rs_ambient_native']});}catch{}
+    const players=world.getAllPlayers().filter(p=>p.dimension.id===dimId);
+    for(const e of natives){
+      let near=false;
+      for(const p of players){
+        if(Math.hypot(p.location.x-e.location.x,p.location.y-e.location.y,p.location.z-e.location.z)<=58){near=true;break;}
+      }
+      if(!near){try{e.remove();}catch{}}
+    }
+  }
+},200);
+'''
+    twrite(script_path,script)
+    return _beta_dimension_reseal(addon)
+
+
+def validate(addon:Path):
+    report=_ambient_life_previous_validate(addon)
+    errors=list(report.get('errors',[])); checks=int(report.get('checks',0))
+    script=(BP/'scripts/main.js').read_text(encoding='utf-8')
+
+    for eid,display,reality,kind,base,accent,flying,width,height in RS_AMBIENT_SPECIES:
+        for path in (
+          BP/f'entities/{eid}.json',RP/f'entity/{eid}.entity.json',RP/f'models/entity/{eid}.geo.json',
+          RP/f'animations/{eid}.animation.json',RP/f'textures/entity/keepinitkrispy_rs/{eid}.png'):
+            checks+=1
+            if not path.exists(): errors.append(f'ambient life regression: missing {path}')
+        if (BP/f'entities/{eid}.json').exists():
+            obj=json.loads((BP/f'entities/{eid}.json').read_text(encoding='utf-8'))
+            comps=obj['minecraft:entity']['components']
+            checks+=5
+            if obj.get('format_version')!='1.26.10': errors.append(f'ambient life schema regression: {eid} format not 1.26.10')
+            if 'minecraft:attack' in comps or 'minecraft:behavior.melee_attack' in comps or 'minecraft:behavior.nearest_attackable_target' in comps:
+                errors.append(f'ambient life aggression regression: {eid} became hostile')
+            if comps.get('minecraft:pushable_by_block')!={}: errors.append(f'ambient life schema regression: {eid} missing pushable_by_block')
+            if comps.get('minecraft:pushable_by_entity')!={}: errors.append(f'ambient life schema regression: {eid} missing pushable_by_entity')
+            if flying and not all(k in comps for k in ('minecraft:can_fly','minecraft:movement.fly','minecraft:navigation.fly','minecraft:behavior.random_fly')):
+                errors.append(f'ambient flight regression: {eid} missing complete flight stack')
+
+    required={
+      'five-species map':'const RS_AMBIENT_SPECIES={',
+      'co-op sector dedupe':'if(processed.has(occupied)) continue;',
+      'local population cap':'if(active>=6) continue;',
+      'safe surface scan':'function rsAmbientSpawnPoint(player,key,flying,salt)',
+      'native tagging':"ent.addTag('keepinitkrispy_rs_ambient_native')",
+      'rare flock pulse':'ambient_flock_',
+      'distance cleanup':"if(!near){try{e.remove();}catch{}}",
+      'cleanup radius':'<=58',
+    }
+    for label,needle in required.items():
+        checks+=1
+        if needle not in script: errors.append(f'ambient life regression: missing {label} ({needle!r})')
+
+    checks+=1
+    if script.count("flying:true")<3:
+        errors.append('ambient life regression: expected at least three airborne native species')
+
+    report['checks']=checks
+    report['errors']=errors
+    report['status']='PASS' if not errors else 'FAIL'
+    report['ambient_life_profile']='five_native_species_capped_coop_safe_v1'
+    report['ambient_species_count']=5
+    report['ambient_spawn_cap']='6 nearby natives per occupied player sector bubble; cleanup beyond 58 blocks'
+    gates=list(report.get('feature_regression_gates',[]))
+    for g in ('five_native_ambient_species','ambient_nonhostile_entities','ambient_flight_ai','ambient_coop_sector_dedupe','ambient_local_population_cap','ambient_distance_cleanup'):
+        if g not in gates: gates.append(g)
+    report['feature_regression_gates']=gates
+    jwrite(OUT/'validation_report.json',report)
+    return report
