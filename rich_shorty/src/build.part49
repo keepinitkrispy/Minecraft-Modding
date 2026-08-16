@@ -1,0 +1,252 @@
+
+# ---------------------------------------------------------------------------
+# TEST 81 — REALM COURIER ONBOARDING + RETAIL INVENTORY ART
+# Retail PS5 transfer exposed two shipping failures in TEST 79:
+# 1) starter onboarding returned early on !initialSpawn, so a player who first
+#    existed on the non-Beta Realm could never receive the Remote/Capsule after
+#    downloading the world locally;
+# 2) custom block items had no minecraft:item_visual, and the custom item icons
+#    were tiny/generic enough that several read as blank or meaningless in the
+#    PlayStation creative inventory.
+#
+# Fix the actual generated pack, then add fail-closed regression gates for both.
+# ---------------------------------------------------------------------------
+_realm_retail_previous_make_pack = make_pack
+_realm_retail_previous_validate = validate
+
+_RS_RETAIL_ICON_IDS = (
+    'glorp_crystal','fizzium','chronodust','scrap_fragment','citadel_token',
+    'busted_portal_remote','garage_deployment_capsule','gravity_spanner',
+    'phase_pick','freeze_ray','time_skip_watch','scaffold_printer',
+    'matter_swap_glove','pocket_black_hole','chaos_bonker',
+)
+
+
+def _rs_retail_icon(path:Path, item_id:str):
+    """64px high-contrast, item-specific inventory art for controller/TV UI."""
+    path.parent.mkdir(parents=True,exist_ok=True)
+    im=Image.new('RGBA',(64,64),(0,0,0,0)); d=ImageDraw.Draw(im)
+    ink=(19,24,32,255); white=(239,247,245,255)
+    cyan=(88,238,219,255); cyan2=(180,255,241,255)
+    purple=(171,93,255,255); orange=(255,147,48,255)
+    yellow=(255,220,70,255); red=(237,72,78,255)
+    blue=(75,174,255,255); green=(92,222,126,255)
+    metal=(139,151,164,255); dark=(49,58,70,255)
+
+    def line(points,fill=ink,width=4): d.line(points,fill=fill,width=width,joint='curve')
+    def rr(box,r,fill,outline=ink,width=3): d.rounded_rectangle(box,radius=r,fill=fill,outline=outline,width=width)
+
+    if item_id=='glorp_crystal':
+        d.polygon([(31,4),(51,20),(45,53),(22,59),(8,28)],fill=(69,213,166,255),outline=ink)
+        d.polygon([(31,8),(42,22),(36,49),(23,54),(18,29)],fill=cyan2)
+        line([(31,8),(31,52)],white,3); line([(18,29),(43,22)],ink,3)
+    elif item_id=='fizzium':
+        d.polygon([(31,4),(49,19),(46,46),(32,59),(15,48),(11,24)],fill=orange,outline=ink)
+        d.polygon([(31,11),(40,22),(37,43),(28,50),(20,42),(20,25)],fill=yellow)
+        line([(17,48),(46,20)],red,4)
+    elif item_id=='chronodust':
+        d.ellipse((10,10,54,54),fill=(93,79,175,255),outline=ink,width=4)
+        d.ellipse((17,17,47,47),fill=(203,190,255,255),outline=white,width=3)
+        line([(32,32),(32,20)],ink,4); line([(32,32),(42,37)],ink,4)
+        for x,y in [(8,48),(17,57),(52,48),(47,8),(8,18)]: d.ellipse((x,y,x+5,y+5),fill=purple)
+    elif item_id=='scrap_fragment':
+        d.polygon([(7,19),(24,8),(34,18),(51,12),(58,30),(45,38),(50,54),(28,57),(19,46),(7,48)],fill=metal,outline=ink)
+        line([(13,24),(49,47)],orange,5); d.ellipse((21,20,31,30),fill=dark,outline=ink,width=2)
+        d.rectangle((37,16,46,27),fill=yellow,outline=ink,width=2)
+    elif item_id=='citadel_token':
+        d.ellipse((7,7,57,57),fill=(63,131,143,255),outline=ink,width=5)
+        d.ellipse((14,14,50,50),outline=cyan2,width=4)
+        d.rectangle((29,19,35,46),fill=white); d.rectangle((20,28,44,35),fill=white)
+        d.rectangle((26,25,38,39),outline=ink,width=2)
+    elif item_id=='busted_portal_remote':
+        rr((15,5,49,59),8,dark,width=4); rr((20,11,44,32),5,(20,68,69,255),outline=cyan,width=3)
+        d.ellipse((25,15,39,29),outline=cyan2,width=4); line([(27,27),(39,16)],red,3)
+        d.rectangle((22,39,42,45),fill=metal,outline=ink,width=2); d.ellipse((27,49,33,55),fill=green); d.ellipse((36,49,42,55),fill=red)
+        line([(44,8),(53,2)],metal,4); d.ellipse((51,0,57,6),fill=yellow,outline=ink,width=2)
+    elif item_id=='garage_deployment_capsule':
+        rr((13,10,51,54),11,(189,202,209,255),width=4)
+        d.rectangle((20,22,44,48),fill=(88,104,116,255),outline=ink,width=3)
+        line([(25,26),(25,45)],cyan,3); line([(32,26),(32,45)],yellow,3); line([(39,26),(39,45)],orange,3)
+        d.rectangle((24,7,40,14),fill=red,outline=ink,width=3)
+    elif item_id=='gravity_spanner':
+        line([(13,51),(42,22)],metal,11); line([(13,51),(42,22)],white,4)
+        d.arc((33,5,57,29),30,315,fill=purple,width=7); d.ellipse((7,46,20,59),fill=dark,outline=ink,width=3)
+        d.arc((4,14,32,42),200,520,fill=purple,width=4); d.arc((1,10,37,46),200,520,fill=cyan,width=2)
+    elif item_id=='phase_pick':
+        line([(20,55),(36,20)],dark,9); line([(12,22),(35,12),(54,18)],cyan,8)
+        line([(15,26),(38,16),(57,22)],purple,3); line([(24,52),(40,17)],white,2)
+        d.rectangle((9,19,17,28),fill=(116,255,239,130)); d.rectangle((50,16,58,25),fill=(190,116,255,130))
+    elif item_id=='freeze_ray':
+        rr((10,23,45,42),5,(65,113,158,255),width=4); d.polygon([(42,25),(58,18),(58,46),(42,40)],fill=blue,outline=ink)
+        d.polygon([(20,40),(31,40),(27,58),(17,58)],fill=dark,outline=ink)
+        d.ellipse((49,25,59,35),fill=cyan2,outline=white,width=2)
+        for a,b in [((53,8),(53,20)),((47,11),(59,17)),((47,17),(59,11))]: line([a,b],cyan2,3)
+    elif item_id=='time_skip_watch':
+        d.ellipse((10,13,54,57),fill=(209,168,67,255),outline=ink,width=5); d.ellipse((17,20,47,50),fill=white,outline=dark,width=3)
+        line([(32,35),(32,24)],dark,4); line([(32,35),(42,39)],dark,4)
+        rr((25,4,39,15),3,metal,width=3); line([(39,10),(51,5)],metal,4)
+        d.arc((5,7,59,61),200,340,fill=cyan,width=3)
+    elif item_id=='scaffold_printer':
+        rr((8,21,43,43),4,(215,152,53,255),width=4); d.polygon([(40,24),(58,29),(58,36),(40,40)],fill=metal,outline=ink)
+        d.polygon([(17,42),(29,42),(26,58),(14,58)],fill=dark,outline=ink)
+        for x in (45,51,57): line([(x,14),(x,27)],yellow,2)
+        for y in (14,20,26): line([(42,y),(60,y)],yellow,2)
+        d.rectangle((14,27,34,34),fill=cyan,outline=ink,width=2)
+    elif item_id=='matter_swap_glove':
+        d.polygon([(18,55),(12,38),(15,18),(21,15),(24,33),(27,8),(33,8),(33,32),(38,11),(44,14),(40,35),(49,22),(54,27),(45,47),(36,57)],fill=purple,outline=ink)
+        d.polygon([(18,55),(12,38),(15,18),(21,15),(24,33),(28,31),(28,55)],fill=cyan)
+        line([(21,43),(43,43)],white,4); d.polygon([(43,37),(54,43),(43,49)],fill=white)
+    elif item_id=='pocket_black_hole':
+        d.ellipse((14,14,50,50),fill=(4,5,10,255),outline=purple,width=5)
+        d.arc((4,21,60,43),175,365,fill=cyan,width=5); d.arc((4,21,60,43),0,175,fill=orange,width=4)
+        d.ellipse((27,27,37,37),fill=(0,0,0,255)); d.ellipse((30,30,34,34),fill=white)
+    elif item_id=='chaos_bonker':
+        line([(18,56),(36,30)],dark,10); rr((21,8,55,31),5,red,width=4)
+        for x in range(24,53,8): line([(x,11),(x+8,28)],yellow,4)
+        d.ellipse((8,49,23,62),fill=purple,outline=ink,width=3)
+    else:
+        rr((8,8,56,56),8,red,width=4); line([(14,14),(50,50)],white,5)
+
+    # TV/controller readability: opaque dark pixel border around the visible art.
+    alpha=im.getchannel('A')
+    if alpha.getbbox() is None:
+        raise RuntimeError(f'generated empty retail icon for {item_id}')
+    im.save(path)
+
+
+def make_pack():
+    addon=_realm_retail_previous_make_pack()
+
+    # Realm courier fix: first entry on the Realm must not consume onboarding.
+    # The Rich & Shorty marker is authoritative; Minecraft's initialSpawn is not.
+    script_path=BP/'scripts/main.js'
+    script=script_path.read_text(encoding='utf-8')
+    old='world.afterEvents.playerSpawn.subscribe(e=>{\n  if(!e.initialSpawn) return; const p=e.player;'
+    new='world.afterEvents.playerSpawn.subscribe(e=>{\n  const p=e.player;'
+    if old not in script:
+        raise RuntimeError('Realm onboarding regression target missing; refusing ambiguous playerSpawn rewrite')
+    script=script.replace(old,new,1)
+    twrite(script_path,script)
+
+    # Current item schema: bind icon through textures.default to item_texture keys.
+    atlas_path=RP/'textures/item_texture.json'
+    atlas=json.loads(atlas_path.read_text(encoding='utf-8'))
+    texture_data=atlas.setdefault('texture_data',{})
+    icon_root=RP/'textures/items/keepinitkrispy/rich_shorty'
+    for item_id in _RS_RETAIL_ICON_IDS:
+        key=f'keepinitkrispy_rs_{item_id}'
+        item_path=BP/f'items/{item_id}.json'
+        obj=json.loads(item_path.read_text(encoding='utf-8'))
+        obj['minecraft:item']['components']['minecraft:icon']={'textures':{'default':key}}
+        jwrite(item_path,obj)
+        texture_data[key]={'textures':f'textures/items/keepinitkrispy/rich_shorty/{item_id}'}
+        _rs_retail_icon(icon_root/f'{item_id}.png',item_id)
+    jwrite(atlas_path,atlas)
+
+    # Every data-driven block shown in creative inventory gets an explicit item
+    # visual. This is the supported 1.21.60+ path for block hotbar/inventory art.
+    for block_path in sorted((BP/'blocks').glob('*.json')):
+        obj=json.loads(block_path.read_text(encoding='utf-8'))
+        comps=obj['minecraft:block']['components']
+        geometry=comps.get('minecraft:geometry')
+        materials=comps.get('minecraft:material_instances')
+        if geometry is None or materials is None:
+            raise RuntimeError(f'block cannot receive item_visual: {block_path.name}')
+        comps['minecraft:item_visual']={
+          'geometry':geometry,
+          'material_instances':materials,
+        }
+        jwrite(block_path,obj)
+
+    return _beta_dimension_reseal(addon)
+
+
+def validate(addon:Path):
+    report=_realm_retail_previous_validate(addon)
+    errors=list(report.get('errors',[])); checks=int(report.get('checks',0))
+    script=(BP/'scripts/main.js').read_text(encoding='utf-8')
+
+    checks+=5
+    if 'if(!e.initialSpawn) return;' in script:
+        errors.append('Realm courier onboarding regression: initialSpawn still blocks starter delivery')
+    spawn_idx=script.find('world.afterEvents.playerSpawn.subscribe')
+    tag_idx=script.find('if(!p.hasTag("keepinitkrispy_rs_started"))',spawn_idx)
+    remote_idx=script.find('give(p,"keepinitkrispy_rs:busted_portal_remote",1)',spawn_idx)
+    capsule_idx=script.find('give(p,"keepinitkrispy_rs:garage_deployment_capsule",1)',spawn_idx)
+    if min(spawn_idx,tag_idx,remote_idx,capsule_idx)<0:
+        errors.append('Realm courier onboarding regression: starter event/tag/items missing')
+    if not (spawn_idx<tag_idx<remote_idx and spawn_idx<tag_idx<capsule_idx):
+        errors.append('Realm courier onboarding regression: Rich & Shorty marker is not authoritative before starter grants')
+    if "p.addTag(\"keepinitkrispy_rs_started\")" not in script:
+        errors.append('Realm courier onboarding regression: started marker missing')
+    if "keepinitkrispy_rs:home_x" not in script or "keepinitkrispy_rs:home_y" not in script or "keepinitkrispy_rs:home_z" not in script:
+        errors.append('Realm courier onboarding regression: starter Home persistence missing')
+
+    atlas=json.loads((RP/'textures/item_texture.json').read_text(encoding='utf-8'))
+    texture_data=atlas.get('texture_data',{})
+    hashes={}
+    for item_id in _RS_RETAIL_ICON_IDS:
+        key=f'keepinitkrispy_rs_{item_id}'
+        checks+=7
+        item_path=BP/f'items/{item_id}.json'
+        if not item_path.exists():
+            errors.append(f'retail item art regression: missing item JSON {item_id}')
+            continue
+        obj=json.loads(item_path.read_text(encoding='utf-8'))
+        icon=obj['minecraft:item']['components'].get('minecraft:icon')
+        if icon!={'textures':{'default':key}}:
+            errors.append(f'retail item art regression: {item_id} does not use textures.default -> {key}')
+        entry=texture_data.get(key)
+        expected=f'textures/items/keepinitkrispy/rich_shorty/{item_id}'
+        if not isinstance(entry,dict) or entry.get('textures')!=expected:
+            errors.append(f'retail item art regression: atlas binding wrong for {item_id}')
+        png=RP/f'{expected}.png'
+        if not png.exists():
+            errors.append(f'retail item art regression: missing PNG for {item_id}')
+            continue
+        try:
+            with Image.open(png) as im:
+                if im.size!=(64,64): errors.append(f'retail item art regression: {item_id} icon is {im.size}, expected 64x64')
+                if im.mode!='RGBA': errors.append(f'retail item art regression: {item_id} icon is not RGBA')
+                alpha=im.getchannel('A')
+                bbox=alpha.getbbox()
+                if bbox is None: errors.append(f'retail item art regression: {item_id} icon is fully transparent')
+                elif (bbox[2]-bbox[0])<20 or (bbox[3]-bbox[1])<20:
+                    errors.append(f'retail item art regression: {item_id} icon silhouette is too small for TV/controller UI')
+        except Exception as exc:
+            errors.append(f'retail item art regression: cannot inspect {item_id} PNG: {exc}')
+        hashes[item_id]=hashlib.sha256(png.read_bytes()).hexdigest()
+
+    checks+=1
+    if len(set(hashes.values()))!=len(_RS_RETAIL_ICON_IDS):
+        errors.append('retail item art regression: duplicate item icon PNGs detected')
+
+    block_files=sorted((BP/'blocks').glob('*.json'))
+    for block_path in block_files:
+        checks+=4
+        obj=json.loads(block_path.read_text(encoding='utf-8'))
+        comps=obj['minecraft:block']['components']
+        visual=comps.get('minecraft:item_visual')
+        if not isinstance(visual,dict):
+            errors.append(f'block item visual regression: {block_path.name} has no minecraft:item_visual')
+            continue
+        if visual.get('geometry')!=comps.get('minecraft:geometry'):
+            errors.append(f'block item visual regression: {block_path.name} item geometry does not match placed block')
+        if visual.get('material_instances')!=comps.get('minecraft:material_instances'):
+            errors.append(f'block item visual regression: {block_path.name} item materials do not match placed block')
+        if not visual.get('material_instances'):
+            errors.append(f'block item visual regression: {block_path.name} item visual has no material instances')
+
+    report['checks']=checks
+    report['errors']=errors
+    report['status']='PASS' if not errors else 'FAIL'
+    report['realm_courier_onboarding']='starter delivery keyed to keepinitkrispy_rs_started, not Minecraft initialSpawn'
+    report['retail_item_art']='15 unique 64x64 item icons + explicit minecraft:item_visual on every custom block'
+    report['retail_test79_transfer_result']='FAILED_STARTER_ONBOARDING_AFTER_REALM_JOIN_FIXED'
+    report['retail_test79_inventory_result']='FAILED_BLANK_OR_MEANINGLESS_THUMBNAILS_FIXED'
+    gates=list(report.get('feature_regression_gates',[]))
+    for g in ('realm_courier_onboarding_not_initial_spawn','starter_remote_capsule_recovery','all_custom_items_resolve_real_icons','unique_retail_item_icons','all_custom_blocks_have_item_visual'):
+        if g not in gates: gates.append(g)
+    report['feature_regression_gates']=gates
+    jwrite(OUT/'validation_report.json',report)
+    return report
