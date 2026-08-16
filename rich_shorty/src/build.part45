@@ -1,0 +1,89 @@
+
+# ---------------------------------------------------------------------------
+# REALITY COMPOSITION PASS — ROUTES AND SIGHTLINES
+# Density without composition can become clutter. Force every streamed sector to
+# keep a readable cross-axis between the central pad and all four bridges after
+# its landmark is authored. This guarantees navigation, sightlines, and a clear
+# gameplay loop while still letting each reality keep its own architecture.
+# ---------------------------------------------------------------------------
+_reality_routes_previous_make_pack = make_pack
+_reality_routes_previous_validate = validate
+
+
+def make_pack():
+    addon=_reality_routes_previous_make_pack()
+    script_path=BP/'scripts/main.js'
+    script=script_path.read_text(encoding='utf-8')
+
+    old="""  rsAuthorSignatureLandmark(dim,key,sx,sz,c.x,y,c.z,theme);\n  rsAuthorSectorGameplay(dim,key,sx,sz,c.x,y,c.z,theme);"""
+    new="""  rsAuthorSignatureLandmark(dim,key,sx,sz,c.x,y,c.z,theme);\n  rsCarveRealityRoutes(dim,key,c.x,y,c.z,theme);\n  rsAuthorSectorGameplay(dim,key,sx,sz,c.x,y,c.z,theme);"""
+    if old not in script:
+        raise RuntimeError('signature-landmark hook not found for route composition pass')
+    script=script.replace(old,new,1)
+
+    script += r'''
+
+const RS_ROUTE_BLOCK={
+  glorp:'minecraft:dark_prismarine',
+  fizz:'minecraft:red_sandstone',
+  chrono:'minecraft:smooth_quartz',
+  scrap:'minecraft:deepslate_tiles',
+  citadel:'minecraft:quartz_bricks'
+};
+
+function rsCarveRealityRoutes(dim,key,cx,y,cz,theme){
+  const floor=RS_ROUTE_BLOCK[key]??theme.edge;
+  // Four 5-wide routes from the landing/sector center to each bridge. Clear
+  // enough headroom to turn dense landmark geometry into intentional gateways
+  // rather than obstacles. The center itself stays compatible with the safe
+  // arrival pocket established after authoring.
+  fillb(dim,cx-2,y+1,cz-17,cx+2,y+1,cz+17,floor);
+  fillb(dim,cx-17,y+1,cz-2,cx+17,y+1,cz+2,floor);
+  fillb(dim,cx-2,y+2,cz-17,cx+2,y+5,cz+17,'minecraft:air');
+  fillb(dim,cx-17,y+2,cz-2,cx+17,y+5,cz+2,'minecraft:air');
+
+  // Strong rhythm lighting: visible destination points and bridge alignment.
+  for(const d of [-15,-9,9,15]){
+    setb(dim,cx-3,y+2,cz+d,theme.glow);
+    setb(dim,cx+3,y+2,cz+d,theme.glow);
+    setb(dim,cx+d,y+2,cz-3,theme.glow);
+    setb(dim,cx+d,y+2,cz+3,theme.glow);
+  }
+
+  // A small raised center node gives the player an orientation point without
+  // occupying the collision column used by the portal arrival offset.
+  fillb(dim,cx-3,y+1,cz-3,cx+3,y+1,cz+3,'minecraft:smooth_stone');
+  setb(dim,cx,y+2,cz,'minecraft:lodestone');
+}
+'''
+
+    twrite(script_path,script)
+    return _beta_dimension_reseal(addon)
+
+
+def validate(addon:Path):
+    report=_reality_routes_previous_validate(addon)
+    errors=list(report.get('errors',[])); checks=int(report.get('checks',0))
+    script=(BP/'scripts/main.js').read_text(encoding='utf-8')
+    required={
+      'route author hook':'rsCarveRealityRoutes(dim,key,c.x,y,c.z,theme)',
+      'reality route palette':'RS_ROUTE_BLOCK',
+      'north-south spine':"fillb(dim,cx-2,y+1,cz-17,cx+2,y+1,cz+17,floor)",
+      'east-west spine':"fillb(dim,cx-17,y+1,cz-2,cx+17,y+1,cz+2,floor)",
+      'north-south headroom':"fillb(dim,cx-2,y+2,cz-17,cx+2,y+5,cz+17,'minecraft:air')",
+      'east-west headroom':"fillb(dim,cx-17,y+2,cz-2,cx+17,y+5,cz+2,'minecraft:air')",
+      'route rhythm lighting':'for(const d of [-15,-9,9,15])'
+    }
+    for label,needle in required.items():
+        checks+=1
+        if needle not in script: errors.append(f'reality route regression: missing {label} ({needle!r})')
+    report['checks']=checks
+    report['errors']=errors
+    report['status']='PASS' if not errors else 'FAIL'
+    report['reality_composition_profile']='landmark_plus_four_bridge_sightlines_v1'
+    gates=list(report.get('feature_regression_gates',[]))
+    for g in ('reality_authored_traversal_spines','reality_four_bridge_sightlines','dense_geometry_headroom_carve'):
+        if g not in gates: gates.append(g)
+    report['feature_regression_gates']=gates
+    jwrite(OUT/'validation_report.json',report)
+    return report
