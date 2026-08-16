@@ -1,0 +1,65 @@
+
+# ---------------------------------------------------------------------------
+# TEST 85 — RETAIL-PROVEN ITEM ICON BINDING
+# TEST79's simple string minecraft:icon -> array-form item_texture entry was the
+# last binding form that visibly rendered custom inventory icons on retail. Keep
+# TEST83/84's new 64px artwork and flat console paths, but restore that binding
+# form instead of inventing another schema interpretation.
+# ---------------------------------------------------------------------------
+_retail85_icon_previous_make_pack = make_pack
+_retail85_icon_previous_validate = validate
+
+
+def make_pack():
+    addon=_retail85_icon_previous_make_pack()
+    atlas_path=RP/'textures/item_texture.json'
+    atlas=json.loads(atlas_path.read_text(encoding='utf-8'))
+    data=atlas.setdefault('texture_data',{})
+    for item_id in _RS_RETAIL_ICON_IDS:
+        key=f'keepinitkrispy_rs_{item_id}'
+        tex=f'textures/items/rs_{item_id}'
+        item_path=BP/f'items/{item_id}.json'
+        obj=json.loads(item_path.read_text(encoding='utf-8'))
+        obj['minecraft:item']['components']['minecraft:icon']=key
+        jwrite(item_path,obj)
+        data[key]={'textures':[tex]}
+        # Remove the TEST83 canonical-string experiment so there is one active
+        # atlas key per item, not two competing representations.
+        data.pop(f'keepinitkrispy_rs:{item_id}',None)
+    jwrite(atlas_path,atlas)
+    return _beta_dimension_reseal(addon)
+
+
+def validate(addon:Path):
+    report=_retail85_icon_previous_validate(addon)
+    errors=list(report.get('errors',[])); checks=int(report.get('checks',0))
+    stale=set()
+    for item_id in _RS_RETAIL_ICON_IDS:
+        stale.add(f'PS5 icon regression: {item_id} not bound by canonical string key')
+        stale.add(f'PS5 icon regression: {item_id} atlas entry is not string path')
+        stale.add(f'PS5 icon regression: atlas key missing for {item_id}')
+        # TEST81 validator expected textures.default object; retail disproved it.
+        stale.add(f'retail item art regression: {item_id} does not use textures.default -> keepinitkrispy_rs_{item_id}')
+    errors=[e for e in errors if e not in stale]
+
+    data=json.loads((RP/'textures/item_texture.json').read_text(encoding='utf-8')).get('texture_data',{})
+    for item_id in _RS_RETAIL_ICON_IDS:
+        checks+=4
+        key=f'keepinitkrispy_rs_{item_id}'; tex=f'textures/items/rs_{item_id}'
+        obj=json.loads((BP/f'items/{item_id}.json').read_text(encoding='utf-8'))
+        if obj['minecraft:item']['components'].get('minecraft:icon')!=key:
+            errors.append(f'retail-proven icon regression: {item_id} must use simple string key {key}')
+        if data.get(key,{}).get('textures')!=[tex]:
+            errors.append(f'retail-proven icon regression: {item_id} atlas must use one-entry array')
+        if f'keepinitkrispy_rs:{item_id}' in data:
+            errors.append(f'retail-proven icon regression: competing canonical atlas entry remains for {item_id}')
+        if not (RP/f'{tex}.png').exists():
+            errors.append(f'retail-proven icon regression: flat 64px PNG missing for {item_id}')
+
+    report['checks']=checks; report['errors']=errors; report['status']='PASS' if not errors else 'FAIL'
+    report['retail_icon_binding']='simple minecraft:icon string -> one-entry array atlas -> flat 64px PNG'
+    gates=list(report.get('feature_regression_gates',[]))
+    if 'retail_proven_simple_item_icon_binding' not in gates: gates.append('retail_proven_simple_item_icon_binding')
+    report['feature_regression_gates']=gates
+    jwrite(OUT/'validation_report.json',report)
+    return report
