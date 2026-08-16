@@ -1,0 +1,61 @@
+
+# ---------------------------------------------------------------------------
+# TEST 82 — ITEM TEXTURE ATLAS SCHEMA CORRECTION
+# TEST 81 was rejected by Creator Tools because item_texture.json requires each
+# texture_data entry's `textures` field to be an array in the current schema.
+# Keep the new 64px art and textures.default item bindings; correct only the
+# atlas representation and migrate the now-invalid TEST 81 string-form gate.
+# ---------------------------------------------------------------------------
+_retail_atlas_previous_make_pack = make_pack
+_retail_atlas_previous_validate = validate
+
+
+def make_pack():
+    addon=_retail_atlas_previous_make_pack()
+    atlas_path=RP/'textures/item_texture.json'
+    atlas=json.loads(atlas_path.read_text(encoding='utf-8'))
+    data=atlas.setdefault('texture_data',{})
+    for item_id in _RS_RETAIL_ICON_IDS:
+        key=f'keepinitkrispy_rs_{item_id}'
+        expected=f'textures/items/keepinitkrispy/rich_shorty/{item_id}'
+        entry=data.get(key)
+        if not isinstance(entry,dict):
+            raise RuntimeError(f'missing retail atlas entry for {item_id}')
+        entry['textures']=[expected]
+    jwrite(atlas_path,atlas)
+    return _beta_dimension_reseal(addon)
+
+
+def validate(addon:Path):
+    report=_retail_atlas_previous_validate(addon)
+    errors=list(report.get('errors',[])); checks=int(report.get('checks',0))
+
+    # TEST 81's own validation expected the string representation that Creator
+    # Tools correctly rejected. Retire only those exact stale messages, then
+    # positively verify the required array representation below.
+    stale={f'retail item art regression: atlas binding wrong for {item_id}' for item_id in _RS_RETAIL_ICON_IDS}
+    errors=[e for e in errors if e not in stale]
+
+    atlas=json.loads((RP/'textures/item_texture.json').read_text(encoding='utf-8'))
+    data=atlas.get('texture_data',{})
+    for item_id in _RS_RETAIL_ICON_IDS:
+        checks+=2
+        key=f'keepinitkrispy_rs_{item_id}'
+        expected=f'textures/items/keepinitkrispy/rich_shorty/{item_id}'
+        entry=data.get(key)
+        if not isinstance(entry,dict) or entry.get('textures')!=[expected]:
+            errors.append(f'retail atlas schema regression: {item_id} textures must be single-entry array')
+        if not (RP/f'{expected}.png').exists():
+            errors.append(f'retail atlas schema regression: bound PNG missing for {item_id}')
+
+    report['checks']=checks
+    report['errors']=errors
+    report['status']='PASS' if not errors else 'FAIL'
+    report['retail_item_art']='15 unique 64x64 item icons + current array-form item_texture bindings + explicit minecraft:item_visual on every custom block'
+    report['retail_test81_result']='REJECTED_CREATOR_TOOLS_ITEM_TEXTURE_STRING_SCHEMA'
+    gates=list(report.get('feature_regression_gates',[]))
+    if 'item_texture_array_schema_1_26_40' not in gates:
+        gates.append('item_texture_array_schema_1_26_40')
+    report['feature_regression_gates']=gates
+    jwrite(OUT/'validation_report.json',report)
+    return report
