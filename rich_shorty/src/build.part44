@@ -1,0 +1,40 @@
+
+# ---------------------------------------------------------------------------
+# LANDMARK FINALIZATION
+# Keep part43's art pass fail-closed while correcting one generated-JS expression
+# before syntax validation. Do not weaken any art or runtime gates.
+# ---------------------------------------------------------------------------
+_landmark_final_previous_make_pack = make_pack
+_landmark_final_previous_validate = validate
+
+
+def make_pack():
+    addon=_landmark_final_previous_make_pack()
+    script_path=BP/'scripts/main.js'
+    script=script_path.read_text(encoding='utf-8')
+    bad="fillb(dim,cx-r,y+17+(13-r)//3 if false else y+20,cz-r,cx+r,y+20,cz+r,'minecraft:warped_wart_block');"
+    good="fillb(dim,cx-r,y+20,cz-r,cx+r,y+20,cz+r,'minecraft:warped_wart_block');"
+    if bad not in script:
+        raise RuntimeError('expected part43 giant-cap expression not found for finalization')
+    script=script.replace(bad,good,1)
+    twrite(script_path,script)
+    return _beta_dimension_reseal(addon)
+
+
+def validate(addon:Path):
+    report=_landmark_final_previous_validate(addon)
+    errors=list(report.get('errors',[])); checks=int(report.get('checks',0))
+    script=(BP/'scripts/main.js').read_text(encoding='utf-8')
+    checks+=2
+    if '//3 if false else' in script:
+        errors.append('landmark finalization regression: non-JavaScript expression survived generated script')
+    if "fillb(dim,cx-r,y+20,cz-r,cx+r,y+20,cz+r,'minecraft:warped_wart_block')" not in script:
+        errors.append('landmark finalization regression: giant-cap canopy layer missing')
+    report['checks']=checks
+    report['errors']=errors
+    report['status']='PASS' if not errors else 'FAIL'
+    gates=list(report.get('feature_regression_gates',[]))
+    if 'landmark_generated_js_finalization' not in gates: gates.append('landmark_generated_js_finalization')
+    report['feature_regression_gates']=gates
+    jwrite(OUT/'validation_report.json',report)
+    return report
