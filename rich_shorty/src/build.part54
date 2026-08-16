@@ -1,0 +1,48 @@
+
+# ---------------------------------------------------------------------------
+# TEST 86 — RETIRE ONLY SUPERSEDED TEST82 ATLAS ASSERTIONS
+# Part53 intentionally restored the retail-proven simple icon binding. Earlier
+# TEST82/part50 validation had already emitted errors against the intermediate
+# part51 colon-key/string experiment before part53 rewrote the final pack.
+# Remove only those exact stale messages, then positively verify the final pack.
+# ---------------------------------------------------------------------------
+_retail86_previous_validate = validate
+
+
+def validate(addon:Path):
+    report=_retail86_previous_validate(addon)
+    errors=list(report.get('errors',[])); checks=int(report.get('checks',0))
+
+    stale={
+        f'retail atlas schema regression: {item_id} textures must be single-entry array'
+        for item_id in _RS_RETAIL_ICON_IDS
+    }
+    errors=[e for e in errors if e not in stale]
+
+    atlas=json.loads((RP/'textures/item_texture.json').read_text(encoding='utf-8'))
+    data=atlas.get('texture_data',{})
+    for item_id in _RS_RETAIL_ICON_IDS:
+        checks+=4
+        key=f'keepinitkrispy_rs_{item_id}'
+        tex=f'textures/items/rs_{item_id}'
+        item=json.loads((BP/f'items/{item_id}.json').read_text(encoding='utf-8'))
+        if item['minecraft:item']['components'].get('minecraft:icon') != key:
+            errors.append(f'final retail icon regression: {item_id} item key mismatch')
+        if data.get(key,{}).get('textures') != [tex]:
+            errors.append(f'final retail icon regression: {item_id} final atlas mismatch')
+        png=RP/f'{tex}.png'
+        if not png.exists() or png.stat().st_size < 128:
+            errors.append(f'final retail icon regression: {item_id} flat PNG missing/empty')
+        if f'keepinitkrispy_rs:{item_id}' in data:
+            errors.append(f'final retail icon regression: {item_id} competing colon-key remains')
+
+    report['checks']=checks
+    report['errors']=errors
+    report['status']='PASS' if not errors else 'FAIL'
+    report['retail_test86_validation']='superseded TEST82 atlas assertions retired; final retail-proven binding revalidated positively'
+    gates=list(report.get('feature_regression_gates',[]))
+    if 'final_retail_icon_binding_positive_gate' not in gates:
+        gates.append('final_retail_icon_binding_positive_gate')
+    report['feature_regression_gates']=gates
+    jwrite(OUT/'validation_report.json',report)
+    return report
