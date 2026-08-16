@@ -1,0 +1,113 @@
+
+# ---------------------------------------------------------------------------
+# TEST 83 — PS5 RETAIL VISUAL REPAIR
+# Retail TEST 82 showed that MCT-green data was still wrong on PS5: item icons
+# did not render, spawn eggs were black, and featured faces read with doubled
+# pupils. Follow current Microsoft retail examples for the item atlas and move
+# spawn-egg appearance to the client entity where Bedrock actually renders it.
+# ---------------------------------------------------------------------------
+_retail83_visual_previous_make_pack = make_pack
+_retail83_visual_previous_validate = validate
+
+_RS83_EGG_COLORS = [
+    ('#58EEDB','#173B52'),('#FF9A3D','#612B20'),('#B686FF','#2D1C51'),
+    ('#76D982','#1D4A32'),('#FFD84A','#664819'),('#6BB8FF','#183C67'),
+    ('#F07178','#571F32'),('#C6D0D9','#3B4650'),('#8DE8F2','#31516A'),
+    ('#E7A7FF','#56336B'),('#9BE36F','#2E5425'),('#FFB774','#67391D'),
+]
+
+
+def make_pack():
+    addon=_retail83_visual_previous_make_pack()
+    atlas_path=RP/'textures/item_texture.json'
+    atlas=json.loads(atlas_path.read_text(encoding='utf-8'))
+    data=atlas.setdefault('texture_data',{})
+    preload=[]
+    for item_id in _RS_RETAIL_ICON_IDS:
+        canonical=f'keepinitkrispy_rs:{item_id}'
+        item_path=BP/f'items/{item_id}.json'
+        obj=json.loads(item_path.read_text(encoding='utf-8'))
+        obj['minecraft:item']['components']['minecraft:icon']=canonical
+        jwrite(item_path,obj)
+
+        src=RP/f'textures/items/keepinitkrispy/rich_shorty/{item_id}.png'
+        dst=RP/f'textures/items/rs_{item_id}.png'
+        if not src.exists(): raise RuntimeError(f'PS5 icon source missing: {src}')
+        shutil.copy2(src,dst)
+        tex=f'textures/items/rs_{item_id}'
+        data[canonical]={'textures':tex}
+        preload.append(tex+'.png')
+    jwrite(atlas_path,atlas)
+    jwrite(RP/'textures/textures_list.json',preload)
+
+    for idx,entity_path in enumerate(sorted((RP/'entity').glob('*.entity.json'))):
+        obj=json.loads(entity_path.read_text(encoding='utf-8'))
+        base,overlay=_RS83_EGG_COLORS[idx % len(_RS83_EGG_COLORS)]
+        obj['minecraft:client_entity']['description']['spawn_egg']={
+            'base_color':base,'overlay_color':overlay
+        }
+        jwrite(entity_path,obj)
+
+    pupil_uv=list(SWATCH_UV['pupil'])
+    for name in {m.name for m in CHAR_MODELS}:
+        geo_path=RP/f'models/entity/{name}.geo.json'
+        obj=json.loads(geo_path.read_text(encoding='utf-8'))
+        for bone in obj['minecraft:geometry'][0].get('bones',[]):
+            if bone.get('name')!='head': continue
+            cubes=bone.get('cubes',[])
+            inds=[i for i,c in enumerate(cubes) if c.get('uv')==pupil_uv]
+            if len(inds)>2:
+                keep=set(inds[:2])
+                cubes[:]=[c for i,c in enumerate(cubes) if i not in inds or i in keep]
+            for c in cubes:
+                if c.get('uv')==pupil_uv:
+                    s=list(c.get('size',[0,0,0])); s[2]=min(float(s[2]),0.08); c['size']=s
+        jwrite(geo_path,obj)
+    return _beta_dimension_reseal(addon)
+
+
+def validate(addon:Path):
+    report=_retail83_visual_previous_validate(addon)
+    errors=list(report.get('errors',[])); checks=int(report.get('checks',0))
+    stale=set()
+    for item_id in _RS_RETAIL_ICON_IDS:
+        oldkey=f'keepinitkrispy_rs_{item_id}'
+        stale.add(f'retail item art regression: {item_id} does not use textures.default -> {oldkey}')
+    errors=[e for e in errors if e not in stale]
+
+    data=json.loads((RP/'textures/item_texture.json').read_text(encoding='utf-8')).get('texture_data',{})
+    for item_id in _RS_RETAIL_ICON_IDS:
+        checks+=4
+        key=f'keepinitkrispy_rs:{item_id}'; tex=f'textures/items/rs_{item_id}'
+        obj=json.loads((BP/f'items/{item_id}.json').read_text(encoding='utf-8'))
+        if obj['minecraft:item']['components'].get('minecraft:icon')!=key:
+            errors.append(f'PS5 icon regression: {item_id} not bound by canonical string key')
+        if data.get(key,{}).get('textures')!=tex:
+            errors.append(f'PS5 icon regression: {item_id} atlas entry is not string path')
+        if not (RP/f'{tex}.png').exists(): errors.append(f'PS5 icon regression: flat PNG missing for {item_id}')
+        if key not in data: errors.append(f'PS5 icon regression: atlas key missing for {item_id}')
+
+    for entity_path in sorted((RP/'entity').glob('*.entity.json')):
+        checks+=1
+        egg=json.loads(entity_path.read_text(encoding='utf-8'))['minecraft:client_entity']['description'].get('spawn_egg')
+        if not isinstance(egg,dict) or not egg.get('base_color') or not egg.get('overlay_color'):
+            errors.append(f'spawn egg regression: client spawn_egg missing in {entity_path.name}')
+
+    pupil_uv=list(SWATCH_UV['pupil'])
+    for name in {m.name for m in CHAR_MODELS}:
+        checks+=2; pupils=[]
+        obj=json.loads((RP/f'models/entity/{name}.geo.json').read_text(encoding='utf-8'))
+        for bone in obj['minecraft:geometry'][0].get('bones',[]):
+            if bone.get('name')=='head': pupils += [c for c in bone.get('cubes',[]) if c.get('uv')==pupil_uv]
+        if len(pupils)>2: errors.append(f'face regression: {name} has {len(pupils)} pupil cubes')
+        if any(float(c.get('size',[0,0,99])[2])>0.10 for c in pupils):
+            errors.append(f'face regression: {name} has protruding pupil geometry')
+
+    report['checks']=checks; report['errors']=errors; report['status']='PASS' if not errors else 'FAIL'
+    report['retail_test82_visual_result']='FAIL_NO_ICONS_BLACK_EGGS_DOUBLE_PUPIL_PRESENTATION'
+    gates=list(report.get('feature_regression_gates',[]))
+    for g in ('ps5_retail_item_icon_string_binding','flat_console_item_texture_paths','client_side_spawn_egg_visuals','single_pupil_per_eye_flattened'):
+        if g not in gates: gates.append(g)
+    report['feature_regression_gates']=gates
+    jwrite(OUT/'validation_report.json',report)
+    return report
