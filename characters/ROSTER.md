@@ -9,7 +9,7 @@ Tracking all Junk Bunch characters created for the series.
 | Name | Status | Traits | Ability | Summon/Tame Item | Created | Data File |
 |------|--------|--------|---------|------------------|---------|-----------|
 | Leafy | draft | fun, helpful, shy | Slow Float (emits leaf particles) | Rake | 2026-08-05 | leafy.json |
-| Seaweed | static_valid | hostile → loyal | Four-stalk seaweed whip | Kelp | 2026-08-18 | seaweed.json |
+| Seaweed | runtime_testing | hostile → loyal | Four-stalk seaweed whip | Kelp | 2026-08-18 | seaweed.json |
 
 ---
 
