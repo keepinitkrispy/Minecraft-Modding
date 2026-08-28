@@ -3,7 +3,7 @@ import subprocess, os, shutil, json
 
 root = Path.home()/"solbridge-workspace"/"appuid-installer"
 root.mkdir(parents=True, exist_ok=True)
-repo = "https://raw.githubusercontent.com/keepinitkrispy/Minecraft-Modding/60c9a6b69d3546a4aae66c542baf6df284c585ab/solbridge/appuid-installer/InstallerStage.java"
+repo = "https://raw.githubusercontent.com/keepinitkrispy/Minecraft-Modding/786fc4b1a59f2e8fa40fc66d6ae6997599822f9c/solbridge/appuid-installer/InstallerStage.java"
 src = root/"InstallerStage.java"
 subprocess.run(["curl","-fsSL",repo,"-o",str(src)],check=True,timeout=60)
 android_jar = Path.home()/"solbridge-workspace"/"native-companion"/"android.jar"
