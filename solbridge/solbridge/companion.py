@@ -87,21 +87,42 @@ def _find_chatgpt_package() -> str:
     return "com.openai.chatgpt"
 
 
+def _launcher_component(package: str) -> str | None:
+    try:
+        p = subprocess.run(["/system/bin/pm", "path", "--user", "0", package], capture_output=True, text=True, timeout=20)
+        apk = next((line.split(":", 1)[1].strip() for line in p.stdout.splitlines() if line.startswith("package:")), None)
+        if not apk:
+            return None
+        aapt = "/data/data/com.termux/files/usr/bin/aapt2"
+        b = subprocess.run([aapt, "dump", "badging", apk], capture_output=True, text=True, timeout=30)
+        m = re.search(r"launchable-activity: name='([^']+)'", b.stdout)
+        if not m:
+            return None
+        activity = m.group(1)
+        if activity.startswith("."):
+            activity = package + activity
+        elif "." not in activity:
+            activity = package + "." + activity
+        return package + "/" + activity
+    except Exception:
+        return None
+
+
 def _launch(package: str) -> dict:
     native = _q("/launch", {"package": package})
     if isinstance(native, dict) and native.get("ok"):
         return {"ok": True, "method": "companion-native"}
+    component = _launcher_component(package)
+    if not component:
+        return {"ok": False, "method": "explicit-component", "error": "launcher component could not be resolved"}
     try:
         am = "/data/data/com.termux/files/usr/bin/am"
-        r = subprocess.run(
-            [am, "start", "--user", "0", "-a", "android.intent.action.MAIN", "-c", "android.intent.category.LAUNCHER", "-p", package],
-            capture_output=True, text=True, timeout=30,
-        )
+        r = subprocess.run([am, "start", "--user", "0", "-n", component], capture_output=True, text=True, timeout=30)
         text = (r.stdout + "\n" + r.stderr)[-3000:]
         ok = r.returncode == 0 and "Error:" not in text
-        return {"ok": ok, "method": "termux-am", "returncode": r.returncode, "detail": text}
+        return {"ok": ok, "method": "explicit-component", "component": component, "returncode": r.returncode, "detail": text}
     except Exception as e:
-        return {"ok": False, "method": "termux-am", "error": f"{type(e).__name__}: {e}"}
+        return {"ok": False, "method": "explicit-component", "component": component, "error": f"{type(e).__name__}: {e}"}
 
 
 def execute_companion(cfg, args: dict) -> dict:
