@@ -62,18 +62,26 @@ exec svlogger "$PREFIX/var/log/sv/solbridge"
 RUN
 chmod +x "$SERVICE/run" "$SERVICE/log/run"
 
-# termux-services normally starts on the next shell launch; start its daemon now too.
-if [ -f "$PREFIX/etc/profile.d/start-services.sh" ]; then
-  # shellcheck disable=SC1090
-  . "$PREFIX/etc/profile.d/start-services.sh"
-else
-  export SVDIR="$PREFIX/var/service"
-  export LOGDIR="$PREFIX/var/log"
-  (service-daemon start >/dev/null 2>&1 &)
+export SVDIR="$PREFIX/var/service"
+export LOGDIR="$PREFIX/var/log"
+PIDFILE="$PREFIX/var/run/service-daemon.pid"
+if [ ! -s "$PIDFILE" ] || ! kill -0 "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null; then
+  service-daemon start >/dev/null 2>&1 || true
 fi
-sleep 1
-sv-enable solbridge || true
-sv up solbridge || true
+
+# runsvdir scans asynchronously. Wait until this service is actually supervised.
+for _ in $(seq 1 20); do
+  [ -e "$SERVICE/supervise/ok" ] && break
+  sleep 0.5
+done
+if [ ! -e "$SERVICE/supervise/ok" ]; then
+  echo "ERROR: runit did not begin supervising SolBridge" >&2
+  exit 1
+fi
+
+rm -f "$SERVICE/down"
+sv up solbridge
+sv status solbridge
 
 # Termux:Boot will run this after Android reboots, if the companion app is installed/opened once.
 mkdir -p "$HOME/.termux/boot"
@@ -81,8 +89,14 @@ cat > "$HOME/.termux/boot/solbridge-start.sh" <<'RUN'
 #!/data/data/com.termux/files/usr/bin/sh
 export SVDIR="$PREFIX/var/service"
 export LOGDIR="$PREFIX/var/log"
-(service-daemon start >/dev/null 2>&1 &)
-sleep 2
+PIDFILE="$PREFIX/var/run/service-daemon.pid"
+if [ ! -s "$PIDFILE" ] || ! kill -0 "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null; then
+  service-daemon start >/dev/null 2>&1 || true
+fi
+for _ in $(seq 1 20); do
+  [ -e "$PREFIX/var/service/solbridge/supervise/ok" ] && break
+  sleep 0.5
+done
 sv up solbridge >/dev/null 2>&1 || true
 RUN
 chmod +x "$HOME/.termux/boot/solbridge-start.sh"
@@ -92,4 +106,4 @@ echo "SOLBRIDGE_INSTALLED=1"
 echo "BUS_REPO=$BUS_REPO"
 echo "CONFIG=$CFG_DIR/config.json"
 echo "WORKSPACE=$WORK"
-echo "Run: sv status solbridge"
+echo "SERVICE=running"
