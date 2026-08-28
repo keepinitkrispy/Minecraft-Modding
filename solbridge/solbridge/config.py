@@ -1,9 +1,15 @@
 from __future__ import annotations
-import json, os
+import json, os, shutil, subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
 DEFAULT_CONFIG = Path.home() / ".config" / "solbridge" / "config.json"
+
+def _gh_token() -> str:
+    if not shutil.which("gh"):
+        return ""
+    p = subprocess.run(["gh", "auth", "token"], capture_output=True, text=True, timeout=15)
+    return p.stdout.strip() if p.returncode == 0 else ""
 
 @dataclass
 class Config:
@@ -20,10 +26,10 @@ class Config:
     def load(cls, path: str | os.PathLike | None = None) -> "Config":
         path = Path(path or os.getenv("SOLBRIDGE_CONFIG", DEFAULT_CONFIG))
         data = json.loads(path.read_text())
-        token = os.getenv("SOLBRIDGE_GITHUB_TOKEN") or data.get("token", "")
+        token = os.getenv("SOLBRIDGE_GITHUB_TOKEN") or data.get("token", "") or _gh_token()
         repo = os.getenv("SOLBRIDGE_REPO") or data.get("repo", "")
         if not token or not repo:
-            raise RuntimeError("Missing GitHub token or repository")
+            raise RuntimeError("Missing GitHub authentication or repository")
         return cls(
             repo=repo,
             token=token,
