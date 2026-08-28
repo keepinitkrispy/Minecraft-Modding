@@ -1,5 +1,5 @@
 from __future__ import annotations
-import hashlib, json, os, re, shutil, subprocess, time
+import base64, hashlib, json, os, re, shutil, subprocess, time
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -413,6 +413,38 @@ def adb_shell(cfg: Config, args: dict) -> dict:
     result["authority"] = "android-shell"
     return result
 
+def android_ui(cfg: Config, args: dict) -> dict:
+    action = str(args.get("action", "state")).strip().lower()
+    if action == "state":
+        return adb_shell(cfg, {"command": "wm size; dumpsys window | grep -E 'mCurrentFocus|mFocusedApp' | head -4", "timeout": 30})
+    if action == "dump":
+        return adb_shell(cfg, {"command": "uiautomator dump /sdcard/solbridge-window.xml >/dev/null 2>&1; cat /sdcard/solbridge-window.xml", "timeout": 45})
+    if action == "tap":
+        x, y = int(args.get("x", -1)), int(args.get("y", -1))
+        if not (0 <= x <= 20000 and 0 <= y <= 20000): raise ToolError("invalid tap coordinates")
+        return adb_shell(cfg, {"command": f"input tap {x} {y}", "timeout": 20})
+    if action == "swipe":
+        vals = [int(args.get(k, -1)) for k in ("x1", "y1", "x2", "y2")]
+        if any(v < 0 or v > 20000 for v in vals): raise ToolError("invalid swipe coordinates")
+        ms = max(50, min(int(args.get("duration_ms", 300)), 5000))
+        return adb_shell(cfg, {"command": f"input swipe {vals[0]} {vals[1]} {vals[2]} {vals[3]} {ms}", "timeout": 20})
+    if action == "key":
+        key = str(args.get("key", "")).strip().upper()
+        if not re.fullmatch(r"(?:KEYCODE_)?[A-Z0-9_]{1,60}|[0-9]{1,4}", key): raise ToolError("invalid key")
+        if not key.isdigit() and not key.startswith("KEYCODE_"): key = "KEYCODE_" + key
+        return adb_shell(cfg, {"command": f"input keyevent {key}", "timeout": 20})
+    if action == "text":
+        text = str(args.get("text", ""))
+        if not text or len(text) > 4000 or chr(10) in text or chr(13) in text: raise ToolError("text must be 1-4000 chars without newlines")
+        enc = base64.b64encode(text.encode()).decode()
+        cmd = 'input text "$(echo ' + enc + ' | base64 -d)"'
+        return adb_shell(cfg, {"command": cmd, "timeout": 30})
+    if action == "launch":
+        package = str(args.get("package", "")).strip()
+        if not re.fullmatch(r"[A-Za-z0-9_]+(?:[.][A-Za-z0-9_]+)+", package): raise ToolError("invalid package name")
+        return adb_shell(cfg, {"command": f"monkey -p {package} -c android.intent.category.LAUNCHER 1", "timeout": 30})
+    raise ToolError("action must be state, dump, tap, swipe, key, text, or launch")
+
 def workflow(cfg: Config, args: dict) -> dict:
     steps = list(args.get("steps") or [])
     if not steps or len(steps) > 12:
@@ -474,6 +506,7 @@ TOOLS = {
     "android_action": android_action,
     "termux_api": termux_api,
     "adb_shell": adb_shell,
+    "android_ui": android_ui,
     "workflow": workflow,
     "self_update": self_update,
     "shell": shell,
