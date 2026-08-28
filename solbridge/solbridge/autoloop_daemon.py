@@ -104,12 +104,27 @@ def ask_chatgpt(prompt: str) -> str:
         return r.get("result", {}).get("result", {}).get("value")
 
     try:
+        # A failed/offline request can leave ChatGPT's SPA in a poisoned DOM state even
+        # after connectivity returns. Start every autonomous reasoning attempt from a
+        # fresh navigation so the existing retry loop genuinely recovers the session.
+        call("Page.enable")
+        call("Page.navigate", {"url": "https://chatgpt.com/"})
+        ready = False
+        for _ in range(60):
+            time.sleep(0.5)
+            state = ev("(()=>({ready:document.readyState,composer:!!(document.querySelector('#mobile-composer-prompt')||document.querySelector('textarea'))}))()") or {}
+            if state.get("ready") in {"interactive", "complete"} and state.get("composer"):
+                ready = True
+                break
+        if not ready:
+            raise RuntimeError("ChatGPT composer unavailable after fresh navigation")
+
         before = ev("document.querySelectorAll('[data-message-role=assistant]').length") or 0
         focused = ev("(()=>{let x=document.querySelector('#mobile-composer-prompt')||document.querySelector('textarea');if(!x)return false;x.focus();return true;})()")
         if not focused:
             raise RuntimeError("ChatGPT composer unavailable")
         call("Input.insertText", {"text": prompt})
-        time.sleep(0.25)
+        time.sleep(0.35)
         sent = ev("(()=>{let b=[...document.querySelectorAll('button')].find(b=>/send message/i.test(b.getAttribute('aria-label')||''));if(!b||b.disabled)return false;b.click();return true;})()")
         if not sent:
             raise RuntimeError("ChatGPT send button unavailable")
