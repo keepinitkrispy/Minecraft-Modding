@@ -92,14 +92,16 @@ def _launch(package: str) -> dict:
     if isinstance(native, dict) and native.get("ok"):
         return {"ok": True, "method": "companion-native"}
     try:
+        am = "/data/data/com.termux/files/usr/bin/am"
         r = subprocess.run(
-            ["/system/bin/sh", "/system/bin/monkey", "-p", package, "-c", "android.intent.category.LAUNCHER", "1"],
+            [am, "start", "--user", "0", "-a", "android.intent.action.MAIN", "-c", "android.intent.category.LAUNCHER", "-p", package],
             capture_output=True, text=True, timeout=30,
         )
         text = (r.stdout + "\n" + r.stderr)[-3000:]
-        return {"ok": r.returncode == 0 and "Events injected: 1" in text, "method": "android-monkey", "returncode": r.returncode, "detail": text}
+        ok = r.returncode == 0 and "Error:" not in text
+        return {"ok": ok, "method": "termux-am", "returncode": r.returncode, "detail": text}
     except Exception as e:
-        return {"ok": False, "method": "android-monkey", "error": f"{type(e).__name__}: {e}"}
+        return {"ok": False, "method": "termux-am", "error": f"{type(e).__name__}: {e}"}
 
 
 def execute_companion(cfg, args: dict) -> dict:
