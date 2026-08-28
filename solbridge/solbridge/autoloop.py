@@ -22,6 +22,10 @@ def _prefix() -> Path:
     return Path(os.environ.get("PREFIX", "/data/data/com.termux/files/usr"))
 
 
+def _boot_id() -> str:
+    return Path("/proc/sys/kernel/random/boot_id").read_text().strip()
+
+
 def _pid_alive(pid: int | None) -> bool:
     if not pid:
         return False
@@ -52,7 +56,7 @@ def _sv_status() -> dict:
 
 def _status(base: Path, mission_id: str | None = None) -> dict:
     pid = _read_pid(base)
-    out = {"pid": pid, "alive": _pid_alive(pid), "supervisor": _sv_status()}
+    out = {"pid": pid, "alive": _pid_alive(pid), "supervisor": _sv_status(), "boot_id": _boot_id()}
     log = base / "autoloop.log"
     if log.exists():
         out["log_tail"] = "\n".join(log.read_text(errors="ignore").splitlines()[-25:])
@@ -95,6 +99,7 @@ exec {prefix}/bin/svlogger {prefix}/var/log/sv/autoloop
     boot_script = f'''#!/data/data/com.termux/files/usr/bin/sh
 export SVDIR="{prefix}/var/service"
 export LOGDIR="{prefix}/var/log"
+export PYTHONPATH="{source}${{PYTHONPATH:+:$PYTHONPATH}}"
 PIDFILE="{prefix}/var/run/service-daemon.pid"
 if [ ! -s "$PIDFILE" ] || ! kill -0 "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null; then
   {prefix}/bin/service-daemon start >/dev/null 2>&1 || true
@@ -105,6 +110,7 @@ for _ in $(seq 1 30); do
 done
 {prefix}/bin/sv up solbridge >/dev/null 2>&1 || true
 {prefix}/bin/sv up autoloop >/dev/null 2>&1 || true
+{prefix}/bin/python -m solbridge.autoloop_boot >>"{Path.home()}/solbridge-workspace/autoloop/boot-hook.log" 2>&1 || true
 '''
     boot.write_text(boot_script)
     os.chmod(boot, 0o755)
@@ -167,6 +173,52 @@ def _fault_test() -> dict:
     return {"install": install, "proof": proof}
 
 
+def _arm_reboot_test(base: Path, args: dict) -> dict:
+    install = _install_supervisor()
+    mid = str(args.get("mission_id") or "reboot-survival-proof")
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,100}", mid):
+        raise ValueError("invalid mission id")
+    goal = str(args.get("goal") or "Inspect the live Android state after reboot and execute exactly one safe launch action that changes the foreground app, then verify it.")
+    if not goal or len(goal) > 3000:
+        raise ValueError("goal must be 1-3000 characters")
+    for p in (base / "proofs" / "reboot-detected.json", base / "proofs" / f"{mid}.json", base / "done" / f"{mid}.json", base / "failed" / f"{mid}.json", base / "inbox" / f"{mid}.json", base / "reboot-arm-consumed.json"):
+        p.unlink(missing_ok=True)
+    arm = {
+        "armed_at": time.time(),
+        "old_boot_id": _boot_id(),
+        "mission_id": mid,
+        "goal": goal,
+    }
+    (base / "reboot-arm.json").write_text(json.dumps(arm, indent=2))
+    return {"armed": True, "arm": arm, "boot_hook": install.get("boot"), "supervisor_alive": install.get("alive")}
+
+
+def _reboot_status(base: Path, args: dict) -> dict:
+    mid = str(args.get("mission_id") or "reboot-survival-proof")
+    detected_path = base / "proofs" / "reboot-detected.json"
+    mission_path = base / "proofs" / f"{mid}.json"
+    detected = json.loads(detected_path.read_text()) if detected_path.exists() else None
+    mission = json.loads(mission_path.read_text()) if mission_path.exists() else None
+    current = _boot_id()
+    out = {
+        "current_boot_id": current,
+        "detected": detected,
+        "mission_proof": mission,
+        "mission_done": (base / "done" / f"{mid}.json").exists(),
+        "daemon": _status(base),
+    }
+    out["verified"] = bool(
+        detected
+        and detected.get("verified_reboot")
+        and detected.get("old_boot_id") != detected.get("new_boot_id") == current
+        and mission
+        and mission.get("verified")
+        and out["mission_done"]
+        and out["daemon"].get("alive")
+    )
+    return out
+
+
 def execute_autoloop(cfg, args: dict) -> dict:
     _, base = _paths()
     action = str(args.get("action", "status")).strip().lower()
@@ -177,6 +229,10 @@ def execute_autoloop(cfg, args: dict) -> dict:
         return _install_supervisor()
     if action == "fault_test":
         return _fault_test()
+    if action == "arm_reboot_test":
+        return _arm_reboot_test(base, args)
+    if action == "reboot_status":
+        return _reboot_status(base, args)
     if action == "start":
         supervised = _sv_status()
         if supervised.get("returncode") == 0:
@@ -223,4 +279,4 @@ def execute_autoloop(cfg, args: dict) -> dict:
         dst = base / "inbox" / f"{mid}.json"
         dst.write_text(json.dumps(mission, indent=2))
         return {"queued": True, "mission": mission, "path": str(dst)}
-    raise ValueError("action must be status, start, stop, mission, install_supervisor, or fault_test")
+    raise ValueError("action must be status, start, stop, mission, install_supervisor, fault_test, arm_reboot_test, or reboot_status")
