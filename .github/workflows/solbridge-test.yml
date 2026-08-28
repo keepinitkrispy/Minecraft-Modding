@@ -1,0 +1,21 @@
+name: SolBridge test
+
+on:
+  push:
+    branches: [solbridge-v1]
+    paths:
+      - 'solbridge/**'
+      - '.github/workflows/solbridge-test.yml'
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e ./solbridge pytest
+      - run: pytest -q ./solbridge/tests
