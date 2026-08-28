@@ -3,11 +3,9 @@ package com.termux.termuxam;
 import android.content.pm.PackageInstaller;
 import android.os.IBinder;
 import android.os.ParcelFileDescriptor;
-import com.termux.termuxam.reflection.ReflectionUtils;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.OutputStream;
-import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 
 public class InstallerStage {
@@ -33,8 +31,15 @@ public class InstallerStage {
         return best.invoke(obj, args);
     }
 
+    static void bypassHiddenApi() throws Exception {
+        Class<?> c = Class.forName("com.termux.termuxam.reflection.ReflectionUtils");
+        Method m = c.getDeclaredMethod("bypassHiddenAPIReflectionRestrictions");
+        m.setAccessible(true);
+        m.invoke(null);
+    }
+
     public static void main(String[] args) throws Exception {
-        ReflectionUtils.bypassHiddenAPIReflectionRestrictions();
+        bypassHiddenApi();
         String apkPath = args.length > 0 ? args[0] : "/sdcard/Download/SolBridgeCompanion.apk";
         File apk = new File(apkPath);
         System.out.println("APK=" + apk + " exists=" + apk.isFile() + " size=" + apk.length());
