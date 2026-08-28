@@ -4,6 +4,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import time
 import urllib.request
@@ -11,7 +12,7 @@ from pathlib import Path
 
 import websocket
 
-from .companion import _get, _launch, _q, _tree_summary
+from .companion import _get, _launch, _tree_summary
 
 ROOT = Path.home() / "solbridge-workspace"
 BASE = ROOT / "autoloop"
@@ -22,6 +23,7 @@ PROOFS = BASE / "proofs"
 PIDFILE = BASE / "autoloop.pid"
 LOG = BASE / "autoloop.log"
 PROFILE = ROOT / "chatgpt-browser" / "profile"
+STOP = False
 
 for p in (BASE, INBOX, DONE, FAILED, PROOFS, PROFILE):
     p.mkdir(parents=True, exist_ok=True)
@@ -30,6 +32,11 @@ for p in (BASE, INBOX, DONE, FAILED, PROOFS, PROFILE):
 def log(msg: str) -> None:
     with LOG.open("a", encoding="utf-8") as f:
         f.write(time.strftime("%Y-%m-%dT%H:%M:%S%z") + " " + msg.replace("\n", " ") + "\n")
+
+
+def stop(*_):
+    global STOP
+    STOP = True
 
 
 def chrome_targets():
@@ -173,12 +180,7 @@ def execute_action(action: dict) -> dict:
         verified = bool(result.get("ok")) and any(isinstance(e, dict) and e.get("pkg") == action["package"] for e in tail)
     else:
         verified = bool(isinstance(result, dict) and result.get("ok")) and after != before
-    return {
-        "result": result,
-        "verified": verified,
-        "events_tail": tail[-12:],
-        "tree": tree,
-    }
+    return {"result": result, "verified": verified, "events_tail": tail[-12:], "tree": tree}
 
 
 def process_mission(path: Path) -> None:
@@ -200,38 +202,78 @@ def process_mission(path: Path) -> None:
     response = ask_chatgpt(prompt)
     action = parse_action(response)
     execution = execute_action(action)
+    if not execution.get("verified"):
+        raise RuntimeError("chosen UI action did not verify")
     proof = {
         "id": mid,
         "mission_created_at": mission.get("created_at"),
         "processed_at": time.time(),
         "elapsed": time.time() - started,
+        "attempts": int(mission.get("attempts", 0)) + 1,
         "trigger": "local_inbox_watcher",
         "goal": goal,
         "before": before,
         "assistant_response": response,
         "action": action,
         "execution": execution,
-        "verified": bool(execution.get("verified")),
+        "verified": True,
     }
     (PROOFS / f"{mid}.json").write_text(json.dumps(proof, indent=2, ensure_ascii=False))
     path.rename(DONE / path.name)
-    log("DONE " + mid + " action=" + json.dumps(action) + " verified=" + str(proof["verified"]))
+    log("DONE " + mid + " action=" + json.dumps(action) + " verified=True attempts=" + str(proof["attempts"]))
+
+
+def retry_or_fail(path: Path, exc: Exception) -> None:
+    try:
+        mission = json.loads(path.read_text())
+    except Exception:
+        mission = {"id": path.stem, "goal": ""}
+    attempts = int(mission.get("attempts", 0)) + 1
+    mission["attempts"] = attempts
+    mission["last_error"] = f"{type(exc).__name__}: {exc}"
+    mission["last_failed_at"] = time.time()
+    if attempts >= 60:
+        (FAILED / path.name).write_text(json.dumps({"error": mission["last_error"], "mission": mission}, indent=2))
+        path.unlink(missing_ok=True)
+        log("GIVEUP " + path.name + " attempts=" + str(attempts) + " " + mission["last_error"])
+        return
+    delay = min(300, 5 * (2 ** min(attempts - 1, 6)))
+    mission["not_before"] = time.time() + delay
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(mission, indent=2))
+    tmp.replace(path)
+    log("RETRY " + path.name + " attempts=" + str(attempts) + " delay=" + str(delay) + " " + mission["last_error"])
 
 
 def main() -> None:
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
     PIDFILE.write_text(str(os.getpid()))
     log("START pid=" + str(os.getpid()))
-    while True:
-        for path in sorted(INBOX.glob("*.json")):
-            try:
-                process_mission(path)
-            except Exception as e:
-                log("FAIL " + path.name + " " + repr(e))
+    try:
+        while not STOP:
+            now = time.time()
+            for path in sorted(INBOX.glob("*.json")):
+                if STOP:
+                    break
                 try:
-                    (FAILED / path.name).write_text(json.dumps({"error": repr(e), "mission": path.read_text(errors="ignore")}, indent=2))
-                finally:
-                    path.unlink(missing_ok=True)
-        time.sleep(1)
+                    mission = json.loads(path.read_text())
+                    if float(mission.get("not_before", 0) or 0) > now:
+                        continue
+                    process_mission(path)
+                except Exception as e:
+                    retry_or_fail(path, e)
+            for _ in range(10):
+                if STOP:
+                    break
+                time.sleep(0.1)
+    finally:
+        try:
+            if PIDFILE.exists() and PIDFILE.read_text().strip() == str(os.getpid()):
+                PIDFILE.unlink()
+        except Exception:
+            pass
+        log("STOP pid=" + str(os.getpid()))
 
 
 if __name__ == "__main__":
