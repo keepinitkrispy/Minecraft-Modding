@@ -17,7 +17,7 @@ class GitHubBus:
             "Authorization": f"Bearer {token}",
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
-            "User-Agent": "solbridge/0.1",
+            "User-Agent": "solbridge/0.2",
         }
 
     def _request(self, method: str, path: str, *, params: dict | None = None,
@@ -48,7 +48,16 @@ class GitHubBus:
             "GET", "/issues",
             params={"state": "open", "labels": "solbridge-command", "per_page": 20},
         )
-        return [x for x in (items or []) if "pull_request" not in x]
+        blocked = {"solbridge-running", "solbridge-done", "solbridge-error"}
+        out = []
+        for x in items or []:
+            if "pull_request" in x:
+                continue
+            labels = {str(v.get("name", "")) for v in (x.get("labels") or []) if isinstance(v, dict)}
+            if labels & blocked:
+                continue
+            out.append(x)
+        return out
 
     def comment(self, issue_number: int, body: str):
         return self._request(
