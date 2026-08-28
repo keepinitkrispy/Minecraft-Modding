@@ -1,5 +1,5 @@
 from __future__ import annotations
-import shutil, subprocess, time
+import shutil, subprocess, sys, time
 from pathlib import Path
 from typing import Any
 from .config import Config
@@ -23,6 +23,7 @@ def health(cfg: Config, args: dict) -> dict:
         "ok": True,
         "device_id": cfg.device_id,
         "workspace": str(cfg.workspace),
+        "source_dir": str(cfg.source_dir),
         "allow_shell": cfg.allow_shell,
         "time": int(time.time()),
         "python": shutil.which("python") or shutil.which("python3"),
@@ -93,6 +94,19 @@ def termux_api(cfg: Config, args: dict) -> dict:
     if not shutil.which(allowed[name][0]): raise ToolError(f"{allowed[name][0]} is unavailable")
     return run(allowed[name], timeout=45)
 
+def self_update(cfg: Config, args: dict) -> dict:
+    src = cfg.source_dir.resolve()
+    package = src / "solbridge"
+    if not (src / ".git").exists() or not (package / "pyproject.toml").exists():
+        raise ToolError("Configured SolBridge source checkout is missing")
+    pull = run(["git", "pull", "--ff-only"], timeout=120, cwd=src)
+    if pull["returncode"] != 0:
+        raise ToolError(f"git pull failed: {pull['stderr'] or pull['stdout']}")
+    install = run([sys.executable, "-m", "pip", "install", "-q", "."], timeout=180, cwd=package)
+    if install["returncode"] != 0:
+        raise ToolError(f"pip install failed: {install['stderr'] or install['stdout']}")
+    return {"updated": True, "pull": pull, "install": install, "_restart_agent": True}
+
 def shell(cfg: Config, args: dict) -> dict:
     if not cfg.allow_shell:
         raise ToolError("Shell tool is disabled in config")
@@ -111,6 +125,7 @@ TOOLS = {
     "write_text": write_text,
     "git": git,
     "termux_api": termux_api,
+    "self_update": self_update,
     "shell": shell,
 }
 
