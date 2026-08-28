@@ -1,5 +1,5 @@
 from __future__ import annotations
-import shutil, subprocess, sys, time
+import shutil, subprocess, time
 from pathlib import Path
 from typing import Any
 from .config import Config
@@ -97,15 +97,12 @@ def termux_api(cfg: Config, args: dict) -> dict:
 def self_update(cfg: Config, args: dict) -> dict:
     src = cfg.source_dir.resolve()
     package = src / "solbridge"
-    if not (src / ".git").exists() or not (package / "pyproject.toml").exists():
+    if not (src / ".git").exists() or not (package / "solbridge" / "agent.py").exists():
         raise ToolError("Configured SolBridge source checkout is missing")
     pull = run(["git", "pull", "--ff-only"], timeout=120, cwd=src)
     if pull["returncode"] != 0:
         raise ToolError(f"git pull failed: {pull['stderr'] or pull['stdout']}")
-    install = run([sys.executable, "-m", "pip", "install", "-q", "."], timeout=180, cwd=package)
-    if install["returncode"] != 0:
-        raise ToolError(f"pip install failed: {install['stderr'] or install['stdout']}")
-    return {"updated": True, "pull": pull, "install": install, "_restart_agent": True}
+    return {"updated": True, "pull": pull, "_restart_agent": True}
 
 def shell(cfg: Config, args: dict) -> dict:
     if not cfg.allow_shell:
