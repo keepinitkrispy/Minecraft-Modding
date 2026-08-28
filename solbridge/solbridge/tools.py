@@ -399,6 +399,20 @@ def android_action(cfg: Config, args: dict) -> dict:
 def termux_api(cfg: Config, args: dict) -> dict:
     return android_action(cfg, args)
 
+def adb_shell(cfg: Config, args: dict) -> dict:
+    command = str(args.get("command", "")).strip()
+    if not command:
+        raise ToolError("adb_shell requires command")
+    if len(command) > 20000:
+        raise ToolError("adb_shell command too long")
+    helper = safe_path(cfg, "native-pairer/target/release/adbexec")
+    if not helper.exists() or not helper.is_file():
+        raise ToolError("native ADB helper is not installed")
+    timeout = max(8, min(int(args.get("timeout", 60)), 300))
+    result = run([str(helper), command], timeout=timeout)
+    result["authority"] = "android-shell"
+    return result
+
 def workflow(cfg: Config, args: dict) -> dict:
     steps = list(args.get("steps") or [])
     if not steps or len(steps) > 12:
@@ -459,6 +473,7 @@ TOOLS = {
     "file_info": file_info,
     "android_action": android_action,
     "termux_api": termux_api,
+    "adb_shell": adb_shell,
     "workflow": workflow,
     "self_update": self_update,
     "shell": shell,
