@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import fcntl
 import os
 import re
 import shutil
@@ -23,6 +24,7 @@ FAILED = BASE / "failed"
 PROOFS = BASE / "proofs"
 PIDFILE = BASE / "autoloop.pid"
 LOG = BASE / "autoloop.log"
+LOCKFILE = BASE / "autoloop.lock"
 PROFILE = ROOT / "chatgpt-browser" / "profile"
 CDP = "http://127.0.0.1:9222"
 STOP = False
@@ -389,6 +391,13 @@ def retry_or_fail(path: Path, exc: Exception) -> None:
 def main() -> None:
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
+    lock_handle = LOCKFILE.open("a+")
+    try:
+        fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        log("DUPLICATE_EXIT pid=" + str(os.getpid()))
+        lock_handle.close()
+        return
     PIDFILE.write_text(str(os.getpid()))
     log("START pid=" + str(os.getpid()))
     try:
