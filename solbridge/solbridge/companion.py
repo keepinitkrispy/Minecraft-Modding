@@ -64,7 +64,7 @@ def _tree_summary(tree: Any) -> dict:
                 "edit": bool(n.get("edit")),
                 "b": str(n.get("b") or "")[:80],
             })
-        if len(sample) >= 24:
+        if len(sample) >= 18:
             break
     return {"nodes": len(tree), "sample": sample}
 
@@ -75,11 +75,10 @@ def _events_tail(events: Any, n: int = 30) -> list:
 
 def _find_chatgpt_package() -> str:
     try:
-        r = subprocess.run(["pm", "list", "packages"], capture_output=True, text=True, timeout=20)
+        r = subprocess.run(["/system/bin/pm", "list", "packages", "--user", "0"], capture_output=True, text=True, timeout=20)
         packages = [line.split(":", 1)[1].strip() for line in r.stdout.splitlines() if line.startswith("package:")]
-        preferred = [p for p in packages if p == "com.openai.chatgpt"]
-        if preferred:
-            return preferred[0]
+        if "com.openai.chatgpt" in packages:
+            return "com.openai.chatgpt"
         candidates = [p for p in packages if "openai" in p.lower() or "chatgpt" in p.lower()]
         if candidates:
             return candidates[0]
@@ -88,18 +87,30 @@ def _find_chatgpt_package() -> str:
     return "com.openai.chatgpt"
 
 
+def _launch(package: str) -> dict:
+    native = _q("/launch", {"package": package})
+    if isinstance(native, dict) and native.get("ok"):
+        return {"ok": True, "method": "companion-native"}
+    try:
+        r = subprocess.run(
+            ["/system/bin/monkey", "-p", package, "-c", "android.intent.category.LAUNCHER", "1"],
+            capture_output=True, text=True, timeout=30,
+        )
+        text = (r.stdout + "\n" + r.stderr)[-3000:]
+        return {"ok": r.returncode == 0 and "Events injected: 1" in text, "method": "android-monkey", "returncode": r.returncode, "detail": text}
+    except Exception as e:
+        return {"ok": False, "method": "android-monkey", "error": f"{type(e).__name__}: {e}"}
+
+
 def execute_companion(cfg, args: dict) -> dict:
     action = str(args.get("action", "health")).strip().lower()
-
     if action == "health":
         return {"health": _get("/health")}
     if action == "events":
         return {"events": _events_tail(_get("/events"), max(1, min(int(args.get("limit", 50)), 200)))}
     if action == "tree":
         tree = _get("/tree")
-        if bool(args.get("full", False)):
-            return {"tree": tree}
-        return {"tree": _tree_summary(tree)}
+        return {"tree": tree if bool(args.get("full", False)) else _tree_summary(tree)}
     if action == "tap":
         x = int(args.get("x", -1)); y = int(args.get("y", -1))
         if not (0 <= x <= 20000 and 0 <= y <= 20000):
@@ -116,40 +127,24 @@ def execute_companion(cfg, args: dict) -> dict:
         package = str(args.get("package", "")).strip()
         if not re.fullmatch(r"[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)+", package):
             raise CompanionError("invalid package name")
-        return {"launch": _q("/launch", {"package": package})}
+        return {"launch": _launch(package)}
     if action == "prove":
-        out: dict[str, Any] = {}
-        out["health"] = _get("/health")
+        out: dict[str, Any] = {"health": _get("/health")}
         if not isinstance(out["health"], dict) or not out["health"].get("accessibility"):
-            out["verified"] = False
-            out["failure"] = "accessibility service is not connected"
-            return out
-
-        out["before_events"] = _events_tail(_get("/events"), 12)
+            return {**out, "verified": False, "failure": "accessibility service is not connected"}
         out["before_tree"] = _tree_summary(_get("/tree"))
-
-        out["launch_settings"] = _q("/launch", {"package": "com.android.settings"})
-        time.sleep(1.4)
+        out["launch_settings"] = _launch("com.android.settings")
+        time.sleep(1.2)
         settings_events = _events_tail(_get("/events"), 40)
         out["settings_seen"] = any(isinstance(e, dict) and e.get("pkg") == "com.android.settings" for e in settings_events)
-        out["settings_events"] = settings_events[-12:]
-        out["settings_tree"] = _tree_summary(_get("/tree"))
-
         chat_pkg = _find_chatgpt_package()
         out["chatgpt_package"] = chat_pkg
-        out["launch_chatgpt"] = _q("/launch", {"package": chat_pkg})
-        time.sleep(1.4)
+        out["launch_chatgpt"] = _launch(chat_pkg)
+        time.sleep(1.5)
         chat_events = _events_tail(_get("/events"), 50)
         out["chatgpt_seen"] = any(isinstance(e, dict) and e.get("pkg") == chat_pkg for e in chat_events)
-        out["chatgpt_events"] = chat_events[-12:]
+        out["chatgpt_events"] = [e for e in chat_events if isinstance(e, dict) and e.get("pkg") == chat_pkg][-8:]
         out["chatgpt_tree"] = _tree_summary(_get("/tree"))
-        out["verified"] = bool(
-            isinstance(out.get("launch_settings"), dict) and out["launch_settings"].get("ok")
-            and out.get("settings_seen")
-            and isinstance(out.get("launch_chatgpt"), dict) and out["launch_chatgpt"].get("ok")
-            and out.get("chatgpt_seen")
-            and out.get("chatgpt_tree", {}).get("nodes", 0) > 0
-        )
+        out["verified"] = bool(out["launch_settings"].get("ok") and out["settings_seen"] and out["launch_chatgpt"].get("ok") and out["chatgpt_seen"] and out["chatgpt_tree"].get("nodes", 0) > 0)
         return out
-
     raise CompanionError("action must be health, events, tree, tap, back, home, text, launch, or prove")
