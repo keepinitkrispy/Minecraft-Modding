@@ -1,22 +1,40 @@
 from __future__ import annotations
-import shutil, subprocess, time
+import json, os, re, shutil, subprocess, time
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 from .config import Config
 
 class ToolError(RuntimeError): pass
 
 def run(cmd: list[str] | str, *, timeout=30, shell=False, cwd=None, input_text: str | None = None):
-    p = subprocess.run(
-        cmd,
-        shell=shell,
-        cwd=cwd,
-        input=input_text,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-    )
-    return {"returncode": p.returncode, "stdout": p.stdout[-20000:], "stderr": p.stderr[-20000:]}
+    try:
+        p = subprocess.run(
+            cmd,
+            shell=shell,
+            cwd=cwd,
+            input=input_text,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        return {"returncode": p.returncode, "stdout": p.stdout[-20000:], "stderr": p.stderr[-20000:]}
+    except subprocess.TimeoutExpired as e:
+        return {
+            "returncode": 124,
+            "stdout": (e.stdout or "")[-20000:] if isinstance(e.stdout, str) else "",
+            "stderr": ((e.stderr or "") if isinstance(e.stderr, str) else "")[-20000:] + "\nTIMEOUT",
+        }
+
+def run_json(cmd: list[str], *, timeout=30, cwd=None):
+    r = run(cmd, timeout=timeout, cwd=cwd)
+    if r["returncode"] != 0:
+        return r
+    try:
+        r["json"] = json.loads(r["stdout"])
+    except Exception:
+        pass
+    return r
 
 def safe_path(cfg: Config, user_path: str) -> Path:
     cfg.workspace.mkdir(parents=True, exist_ok=True)
@@ -26,12 +44,23 @@ def safe_path(cfg: Config, user_path: str) -> Path:
         raise ToolError("Path escapes configured workspace")
     return p
 
+def _require(command: str) -> None:
+    if not shutil.which(command):
+        raise ToolError(f"{command} is unavailable")
+
+def _git_head(cfg: Config) -> str | None:
+    if not (cfg.source_dir / ".git").exists():
+        return None
+    r = run(["git", "rev-parse", "--short=12", "HEAD"], cwd=cfg.source_dir)
+    return r["stdout"].strip() if r["returncode"] == 0 else None
+
 def health(cfg: Config, args: dict) -> dict:
     return {
         "ok": True,
         "device_id": cfg.device_id,
         "workspace": str(cfg.workspace),
         "source_dir": str(cfg.source_dir),
+        "source_head": _git_head(cfg),
         "allow_shell": cfg.allow_shell,
         "time": int(time.time()),
         "python": shutil.which("python") or shutil.which("python3"),
@@ -39,61 +68,115 @@ def health(cfg: Config, args: dict) -> dict:
         "rish": bool(shutil.which("rish")),
     }
 
+CAPABILITY_COMMANDS = [
+    "termux-battery-status", "termux-wifi-connectioninfo", "termux-location",
+    "termux-sensor", "termux-camera-info", "termux-camera-photo",
+    "termux-clipboard-get", "termux-clipboard-set", "termux-notification",
+    "termux-notification-list", "termux-vibrate", "termux-tts-speak",
+    "termux-speech-to-text", "termux-contact-list", "termux-call-log",
+    "termux-telephony-deviceinfo", "termux-telephony-cellinfo", "termux-sms-list",
+    "termux-sms-send", "termux-torch", "termux-volume", "termux-media-player",
+    "termux-microphone-record", "termux-fingerprint", "termux-nfc",
+    "termux-wallpaper", "termux-open-url", "am", "pm", "logcat", "getprop",
+    "dumpsys", "ps", "ip", "git", "python", "gh", "rish",
+]
+
 def capabilities(cfg: Config, args: dict) -> dict:
-    commands = [
-        "termux-battery-status",
-        "termux-wifi-connectioninfo",
-        "termux-location",
-        "termux-sensor",
-        "termux-camera-info",
-        "termux-camera-photo",
-        "termux-clipboard-get",
-        "termux-clipboard-set",
-        "termux-notification",
-        "termux-notification-list",
-        "termux-vibrate",
-        "termux-tts-speak",
-        "termux-speech-to-text",
-        "termux-contact-list",
-        "termux-call-log",
-        "termux-telephony-deviceinfo",
-        "termux-telephony-cellinfo",
-        "termux-sms-list",
-        "termux-sms-send",
-        "termux-torch",
-        "termux-volume",
-        "termux-media-player",
-        "termux-microphone-record",
-        "termux-fingerprint",
-        "termux-nfc",
-        "termux-wallpaper",
-        "termux-open-url",
-        "am",
-        "git",
-        "python",
-        "gh",
-        "rish",
-    ]
     return {
         "device_id": cfg.device_id,
-        "available": {name: bool(shutil.which(name)) for name in commands},
+        "source_head": _git_head(cfg),
+        "available": {name: bool(shutil.which(name)) for name in CAPABILITY_COMMANDS},
+        "tools": sorted(TOOLS.keys()),
         "shell_enabled": cfg.allow_shell,
     }
+
+def _probe(name: str, cmd: list[str], timeout: int = 15) -> dict:
+    if not shutil.which(cmd[0]):
+        return {"status": "unavailable"}
+    r = run(cmd, timeout=timeout)
+    text = (r["stderr"] + "\n" + r["stdout"]).lower()
+    if r["returncode"] == 0:
+        return {"status": "ok", "returncode": 0}
+    if r["returncode"] == 124:
+        return {"status": "timeout", "returncode": 124}
+    denied_tokens = ("permission", "denied", "not allowed", "securityexception")
+    return {
+        "status": "denied" if any(t in text for t in denied_tokens) else "error",
+        "returncode": r["returncode"],
+        "detail": (r["stderr"] or r["stdout"])[-500:],
+    }
+
+def permission_probe(cfg: Config, args: dict) -> dict:
+    probes = {
+        "battery": ["termux-battery-status"],
+        "wifi": ["termux-wifi-connectioninfo"],
+        "camera_info": ["termux-camera-info"],
+        "sensors": ["termux-sensor", "-l"],
+        "location": ["termux-location", "-p", "network", "-r", "once"],
+        "volume": ["termux-volume"],
+    }
+    result = {name: _probe(name, cmd, 20 if name == "location" else 10) for name, cmd in probes.items()}
+    result["sensitive_not_probed"] = [
+        "contacts", "call_log", "sms", "clipboard", "microphone", "camera_photo",
+        "notification_contents", "telephony_identity",
+    ]
+    return {"device_id": cfg.device_id, "probes": result}
 
 def device_snapshot(cfg: Config, args: dict) -> dict:
     out: dict[str, Any] = {
         "device_id": cfg.device_id,
+        "source_head": _git_head(cfg),
         "uname": run(["uname", "-a"]),
         "disk": run(["df", "-h", str(cfg.workspace)]),
+        "load": run(["uptime"]),
     }
     if shutil.which("termux-battery-status"):
-        out["battery"] = run(["termux-battery-status"])
+        out["battery"] = run_json(["termux-battery-status"])
     if shutil.which("termux-wifi-connectioninfo"):
-        out["wifi"] = run(["termux-wifi-connectioninfo"])
+        out["wifi"] = run_json(["termux-wifi-connectioninfo"])
     if shutil.which("getprop"):
-        out["android_release"] = run(["getprop", "ro.build.version.release"])
-        out["device"] = run(["getprop", "ro.product.model"])
+        props = {}
+        for key in (
+            "ro.build.version.release", "ro.build.version.security_patch",
+            "ro.product.model", "ro.product.manufacturer", "ro.product.cpu.abi",
+        ):
+            r = run(["getprop", key])
+            props[key] = r["stdout"].strip()
+        out["android"] = props
     return out
+
+def system_inspect(cfg: Config, args: dict) -> dict:
+    mode = str(args.get("mode", "summary"))
+    if mode == "summary":
+        return {
+            "processes": run(["ps", "-A", "-o", "PID,PPID,NAME"], timeout=20),
+            "network": run(["ip", "-brief", "addr"], timeout=20),
+            "routes": run(["ip", "route"], timeout=20),
+            "memory": run(["cat", "/proc/meminfo"], timeout=20),
+        }
+    if mode == "logs":
+        n = max(20, min(int(args.get("lines", 200)), 1000))
+        return {"logcat": run(["logcat", "-d", "-t", str(n)], timeout=30)}
+    if mode == "packages":
+        scope = str(args.get("scope", "user"))
+        cmd = ["pm", "list", "packages"]
+        if scope == "user":
+            cmd.append("-3")
+        elif scope == "system":
+            cmd.append("-s")
+        elif scope != "all":
+            raise ToolError("scope must be user, system, or all")
+        return {"packages": run(cmd, timeout=30)}
+    raise ToolError("mode must be summary, logs, or packages")
+
+def package_info(cfg: Config, args: dict) -> dict:
+    package = str(args.get("package", "")).strip()
+    if not re.fullmatch(r"[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)+", package):
+        raise ToolError("invalid package name")
+    return {
+        "path": run(["pm", "path", package], timeout=20),
+        "dump": run(["dumpsys", "package", package], timeout=30),
+    }
 
 def list_files(cfg: Config, args: dict) -> dict:
     p = safe_path(cfg, args.get("path", "."))
@@ -118,6 +201,35 @@ def write_text(cfg: Config, args: dict) -> dict:
     p.write_text(text)
     return {"path":str(p), "bytes":len(text.encode())}
 
+STATE_FILE = ".solbridge_state.json"
+
+def state_get(cfg: Config, args: dict) -> dict:
+    p = safe_path(cfg, STATE_FILE)
+    if not p.exists():
+        return {"state": {}}
+    try:
+        data = json.loads(p.read_text())
+    except Exception:
+        data = {}
+    key = args.get("key")
+    return {"value": data.get(str(key))} if key is not None else {"state": data}
+
+def state_set(cfg: Config, args: dict) -> dict:
+    p = safe_path(cfg, STATE_FILE)
+    try:
+        data = json.loads(p.read_text()) if p.exists() else {}
+    except Exception:
+        data = {}
+    key = str(args["key"])
+    if len(key) > 200:
+        raise ToolError("state key too long")
+    data[key] = args.get("value")
+    raw = json.dumps(data, ensure_ascii=False, indent=2)
+    if len(raw.encode()) > 1_000_000:
+        raise ToolError("state file would exceed 1 MB")
+    p.write_text(raw)
+    return {"saved": True, "key": key}
+
 def git(cfg: Config, args: dict) -> dict:
     path = safe_path(cfg, args.get("path", "."))
     op = args.get("op", "status")
@@ -130,37 +242,46 @@ def git(cfg: Config, args: dict) -> dict:
     if op not in commands: raise ToolError(f"Unsupported git op: {op}")
     return run(commands[op], timeout=120, cwd=path)
 
-def _require(command: str) -> None:
-    if not shutil.which(command):
-        raise ToolError(f"{command} is unavailable")
-
 def android_action(cfg: Config, args: dict) -> dict:
     name = str(args.get("name", "")).strip()
     if name == "battery":
-        _require("termux-battery-status")
-        return run(["termux-battery-status"], timeout=45)
+        _require("termux-battery-status"); return run_json(["termux-battery-status"], timeout=45)
     if name == "wifi":
-        _require("termux-wifi-connectioninfo")
-        return run(["termux-wifi-connectioninfo"], timeout=45)
+        _require("termux-wifi-connectioninfo"); return run_json(["termux-wifi-connectioninfo"], timeout=45)
     if name == "location":
         _require("termux-location")
         provider = str(args.get("provider", "network"))
         if provider not in {"gps", "network", "passive"}:
             raise ToolError("provider must be gps, network, or passive")
-        return run(["termux-location", "-p", provider, "-r", "once"], timeout=60)
-    if name == "sensors":
+        return run_json(["termux-location", "-p", provider, "-r", "once"], timeout=60)
+    if name in {"sensors", "sensors_list"}:
+        _require("termux-sensor"); return run_json(["termux-sensor", "-l"], timeout=45)
+    if name == "sensor_sample":
         _require("termux-sensor")
-        return run(["termux-sensor", "-l"], timeout=45)
+        sensor = str(args.get("sensor", "")).strip()
+        if not sensor or len(sensor) > 160:
+            raise ToolError("sensor_sample requires sensor name")
+        count = max(1, min(int(args.get("count", 1)), 10))
+        return run_json(["termux-sensor", "-s", sensor, "-n", str(count)], timeout=45)
     if name == "camera_info":
-        _require("termux-camera-info")
-        return run(["termux-camera-info"], timeout=45)
+        _require("termux-camera-info"); return run_json(["termux-camera-info"], timeout=45)
+    if name == "camera_photo":
+        _require("termux-camera-photo")
+        camera_id = max(0, min(int(args.get("camera_id", 0)), 10))
+        p = safe_path(cfg, str(args.get("path", "camera/latest.jpg")))
+        p.parent.mkdir(parents=True, exist_ok=True)
+        r = run(["termux-camera-photo", "-c", str(camera_id), str(p)], timeout=60)
+        r["path"] = str(p)
+        r["bytes"] = p.stat().st_size if p.exists() else 0
+        return r
     if name == "clipboard_get":
-        _require("termux-clipboard-get")
-        return run(["termux-clipboard-get"], timeout=45)
+        _require("termux-clipboard-get"); return run(["termux-clipboard-get"], timeout=45)
     if name == "clipboard_set":
         _require("termux-clipboard-set")
-        text = str(args.get("text", ""))
+        text = str(args.get("text", ""))[:100000]
         return run(["termux-clipboard-set"], timeout=45, input_text=text)
+    if name == "notification_list":
+        _require("termux-notification-list"); return run_json(["termux-notification-list"], timeout=45)
     if name == "notify":
         _require("termux-notification")
         title = str(args.get("title", "SolBridge"))[:160]
@@ -174,27 +295,63 @@ def android_action(cfg: Config, args: dict) -> dict:
     if name == "tts":
         _require("termux-tts-speak")
         text = str(args.get("text", ""))[:4000]
-        if not text:
-            raise ToolError("tts requires text")
+        if not text: raise ToolError("tts requires text")
         return run(["termux-tts-speak", text], timeout=60)
+    if name == "torch":
+        _require("termux-torch")
+        state = str(args.get("state", "off")).lower()
+        if state not in {"on", "off"}:
+            raise ToolError("torch state must be on or off")
+        return run(["termux-torch", state], timeout=45)
     if name == "volume":
-        _require("termux-volume")
-        return run(["termux-volume"], timeout=45)
+        _require("termux-volume"); return run_json(["termux-volume"], timeout=45)
+    if name == "open_url":
+        _require("termux-open-url")
+        url = str(args.get("url", "")).strip()
+        parsed = urlparse(url)
+        if parsed.scheme not in {"http", "https", "market"}:
+            raise ToolError("open_url only allows http, https, or market URLs")
+        return run(["termux-open-url", url], timeout=45)
+    if name == "launch_package":
+        package = str(args.get("package", "")).strip()
+        if not re.fullmatch(r"[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)+", package):
+            raise ToolError("invalid package name")
+        return run(["monkey", "-p", package, "-c", "android.intent.category.LAUNCHER", "1"], timeout=45)
     raise ToolError(f"Unsupported Android action: {name}")
 
 def termux_api(cfg: Config, args: dict) -> dict:
-    # Backward-compatible alias for older command payloads.
     return android_action(cfg, args)
+
+def workflow(cfg: Config, args: dict) -> dict:
+    steps = list(args.get("steps") or [])
+    if not steps or len(steps) > 12:
+        raise ToolError("workflow requires 1-12 steps")
+    results = []
+    forbidden = {"workflow", "self_update", "shell"}
+    for i, step in enumerate(steps):
+        tool = str(step.get("tool", ""))
+        if tool in forbidden:
+            raise ToolError(f"workflow step {i}: {tool} is not allowed")
+        try:
+            value = execute(cfg, tool, dict(step.get("args") or {}))
+            results.append({"index": i, "tool": tool, "status": "ok", "result": value})
+        except Exception as e:
+            results.append({"index": i, "tool": tool, "status": "error", "error": f"{type(e).__name__}: {e}"})
+            if not bool(step.get("continue_on_error", False)):
+                break
+    return {"steps": results}
 
 def self_update(cfg: Config, args: dict) -> dict:
     src = cfg.source_dir.resolve()
     package = src / "solbridge"
     if not (src / ".git").exists() or not (package / "solbridge" / "agent.py").exists():
         raise ToolError("Configured SolBridge source checkout is missing")
+    before = _git_head(cfg)
     pull = run(["git", "pull", "--ff-only"], timeout=120, cwd=src)
     if pull["returncode"] != 0:
         raise ToolError(f"git pull failed: {pull['stderr'] or pull['stdout']}")
-    return {"updated": True, "pull": pull, "_restart_agent": True}
+    after = _git_head(cfg)
+    return {"updated": True, "before": before, "after": after, "pull": pull, "_restart_agent": True}
 
 def shell(cfg: Config, args: dict) -> dict:
     if not cfg.allow_shell:
@@ -209,13 +366,19 @@ def shell(cfg: Config, args: dict) -> dict:
 TOOLS = {
     "health": health,
     "capabilities": capabilities,
+    "permission_probe": permission_probe,
     "device_snapshot": device_snapshot,
+    "system_inspect": system_inspect,
+    "package_info": package_info,
     "list_files": list_files,
     "read_text": read_text,
     "write_text": write_text,
+    "state_get": state_get,
+    "state_set": state_set,
     "git": git,
     "android_action": android_action,
     "termux_api": termux_api,
+    "workflow": workflow,
     "self_update": self_update,
     "shell": shell,
 }
