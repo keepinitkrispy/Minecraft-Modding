@@ -93,7 +93,7 @@ def _launch(package: str) -> dict:
         return {"ok": True, "method": "companion-native"}
     try:
         r = subprocess.run(
-            ["/system/bin/monkey", "-p", package, "-c", "android.intent.category.LAUNCHER", "1"],
+            ["/system/bin/sh", "/system/bin/monkey", "-p", package, "-c", "android.intent.category.LAUNCHER", "1"],
             capture_output=True, text=True, timeout=30,
         )
         text = (r.stdout + "\n" + r.stderr)[-3000:]
