@@ -1,9 +1,9 @@
 [project]
 name = "solbridge"
-version = "0.1.0"
+version = "0.1.1"
 description = "GitHub-mediated execution bridge for a Termux/Android agent"
 requires-python = ">=3.11"
-dependencies = ["requests>=2.31,<3"]
+dependencies = []
 
 [project.scripts]
 solbridge = "solbridge.agent:main"
