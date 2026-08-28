@@ -7,6 +7,7 @@ import shutil
 import signal
 import subprocess
 import time
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -23,6 +24,7 @@ PROOFS = BASE / "proofs"
 PIDFILE = BASE / "autoloop.pid"
 LOG = BASE / "autoloop.log"
 PROFILE = ROOT / "chatgpt-browser" / "profile"
+CDP = "http://127.0.0.1:9222"
 STOP = False
 
 for p in (BASE, INBOX, DONE, FAILED, PROOFS, PROFILE):
@@ -41,20 +43,19 @@ def stop(*_):
 
 def chrome_targets():
     try:
-        with urllib.request.urlopen("http://127.0.0.1:9222/json/list", timeout=2) as r:
-            return json.load(r)
+        with urllib.request.urlopen(CDP + "/json/list", timeout=2) as r:
+            data = json.load(r)
+            return data if isinstance(data, list) else []
     except Exception:
         return None
 
 
-def ensure_chrome():
-    targets = chrome_targets()
-    if targets:
-        return targets
+def _start_chromium() -> None:
     exe = shutil.which("chromium-browser") or shutil.which("chromium")
     if not exe:
         raise RuntimeError("native Chromium is missing")
-    log_file = (ROOT / "chatgpt-browser" / "autoloop-chromium.log").open("ab", buffering=0)
+    log_path = ROOT / "chatgpt-browser" / "autoloop-chromium.log"
+    log_file = log_path.open("ab", buffering=0)
     cmd = [
         exe,
         "--headless=new",
@@ -72,21 +73,102 @@ def ensure_chrome():
         "https://chatgpt.com/",
     ]
     subprocess.Popen(cmd, stdout=log_file, stderr=log_file, start_new_session=True)
-    for _ in range(60):
+
+
+def ensure_chrome():
+    targets = chrome_targets()
+    if targets is not None:
+        return targets
+    _start_chromium()
+    for _ in range(80):
         time.sleep(0.5)
         targets = chrome_targets()
-        if targets:
+        if targets is not None:
             return targets
     raise RuntimeError("Chromium did not expose CDP")
 
 
-def ask_chatgpt(prompt: str) -> str:
-    targets = ensure_chrome()
-    pages = [x for x in targets if x.get("type") == "page" and "chatgpt.com" in x.get("url", "")]
-    if not pages:
-        raise RuntimeError("ChatGPT page not found")
-    page = pages[0]
-    ws = websocket.create_connection(page["webSocketDebuggerUrl"], timeout=25, origin="http://localhost")
+def _new_target(url: str):
+    encoded = urllib.parse.quote(url, safe=":/?=&")
+    req = urllib.request.Request(CDP + "/json/new?" + encoded, method="PUT")
+    try:
+        with urllib.request.urlopen(req, timeout=5) as r:
+            data = json.load(r)
+            return data if isinstance(data, dict) else None
+    except Exception as e:
+        log("CDP new-target failed " + type(e).__name__ + ": " + str(e))
+        return None
+
+
+def _ws(page: dict):
+    endpoint = page.get("webSocketDebuggerUrl")
+    if not endpoint:
+        raise RuntimeError("CDP page has no websocket endpoint")
+    return websocket.create_connection(endpoint, timeout=25, origin="http://localhost")
+
+
+def _navigate_page(page: dict, url: str) -> None:
+    ws = _ws(page)
+    try:
+        ws.send(json.dumps({"id": 1, "method": "Page.enable", "params": {}}))
+        while True:
+            msg = json.loads(ws.recv())
+            if msg.get("id") == 1:
+                break
+        ws.send(json.dumps({"id": 2, "method": "Page.navigate", "params": {"url": url}}))
+        while True:
+            msg = json.loads(ws.recv())
+            if msg.get("id") == 2:
+                break
+    finally:
+        ws.close()
+
+
+def ensure_chatgpt_page() -> dict:
+    targets = ensure_chrome() or []
+    pages = [x for x in targets if x.get("type") == "page"]
+    chat = [x for x in pages if "chatgpt.com" in str(x.get("url", ""))]
+    if chat:
+        return chat[0]
+
+    made = _new_target("https://chatgpt.com/")
+    if made and made.get("webSocketDebuggerUrl"):
+        return made
+
+    if pages:
+        try:
+            _navigate_page(pages[0], "https://chatgpt.com/")
+        except Exception as e:
+            log("CDP navigate-existing failed " + type(e).__name__ + ": " + str(e))
+        for _ in range(30):
+            time.sleep(0.5)
+            targets = chrome_targets() or []
+            chat = [x for x in targets if x.get("type") == "page" and "chatgpt.com" in str(x.get("url", ""))]
+            if chat:
+                return chat[0]
+
+    # CDP may be alive with only dead/non-page targets. A new browser process using
+    # the same profile/port will either create a page in the existing browser or fail
+    # harmlessly because the port is owned. Try it, then re-enumerate.
+    _start_chromium()
+    for _ in range(60):
+        time.sleep(0.5)
+        targets = chrome_targets() or []
+        chat = [x for x in targets if x.get("type") == "page" and "chatgpt.com" in str(x.get("url", ""))]
+        if chat:
+            return chat[0]
+        pages = [x for x in targets if x.get("type") == "page"]
+        if pages:
+            try:
+                _navigate_page(pages[0], "https://chatgpt.com/")
+            except Exception:
+                pass
+    raise RuntimeError("unable to create or recover ChatGPT CDP page")
+
+
+def _ask_chatgpt_once(prompt: str) -> str:
+    page = ensure_chatgpt_page()
+    ws = _ws(page)
     seq = 0
 
     def call(method: str, params=None):
@@ -97,41 +179,67 @@ def ask_chatgpt(prompt: str) -> str:
         while True:
             msg = json.loads(ws.recv())
             if msg.get("id") == ident:
+                if msg.get("error"):
+                    raise RuntimeError("CDP " + method + " failed: " + json.dumps(msg["error"]))
                 return msg
 
     def ev(js: str):
-        r = call("Runtime.evaluate", {"expression": js, "returnByValue": True})
+        r = call("Runtime.evaluate", {"expression": js, "returnByValue": True, "awaitPromise": True})
         return r.get("result", {}).get("result", {}).get("value")
 
     try:
-        # A failed/offline request can leave ChatGPT's SPA in a poisoned DOM state even
-        # after connectivity returns. Start every autonomous reasoning attempt from a
-        # fresh navigation so the existing retry loop genuinely recovers the session.
         call("Page.enable")
         call("Page.navigate", {"url": "https://chatgpt.com/"})
+
         ready = False
-        for _ in range(60):
+        last_state = {}
+        for _ in range(120):
             time.sleep(0.5)
-            state = ev("(()=>({ready:document.readyState,composer:!!(document.querySelector('#mobile-composer-prompt')||document.querySelector('textarea'))}))()") or {}
-            if state.get("ready") in {"interactive", "complete"} and state.get("composer"):
+            last_state = ev(
+                "(()=>({ready:document.readyState,url:location.href,"
+                "composer:!!(document.querySelector('#mobile-composer-prompt')||document.querySelector('textarea')||document.querySelector('[contenteditable=\"true\"]')),"
+                "text:(document.body?.innerText||'').slice(0,1200)}))()"
+            ) or {}
+            body = str(last_state.get("text") or "").lower()
+            if "unable to connect" in body or "no internet" in body:
+                raise RuntimeError("ChatGPT page reports offline")
+            if last_state.get("ready") in {"interactive", "complete"} and last_state.get("composer"):
                 ready = True
                 break
         if not ready:
-            raise RuntimeError("ChatGPT composer unavailable after fresh navigation")
+            raise RuntimeError("ChatGPT composer unavailable after navigation; state=" + repr(last_state))
 
         before = ev("document.querySelectorAll('[data-message-role=assistant]').length") or 0
-        focused = ev("(()=>{let x=document.querySelector('#mobile-composer-prompt')||document.querySelector('textarea');if(!x)return false;x.focus();return true;})()")
+        focused = ev(
+            "(()=>{let x=document.querySelector('#mobile-composer-prompt')||document.querySelector('textarea')||document.querySelector('[contenteditable=\"true\"]');"
+            "if(!x)return false;x.focus();return true;})()"
+        )
         if not focused:
             raise RuntimeError("ChatGPT composer unavailable")
+
         call("Input.insertText", {"text": prompt})
-        time.sleep(0.35)
-        sent = ev("(()=>{let b=[...document.querySelectorAll('button')].find(b=>/send message/i.test(b.getAttribute('aria-label')||''));if(!b||b.disabled)return false;b.click();return true;})()")
+        time.sleep(0.4)
+        sent = ev(
+            "(()=>{let b=[...document.querySelectorAll('button')].find(b=>/send( message)?/i.test((b.getAttribute('aria-label')||'')+' '+(b.getAttribute('data-testid')||'')));"
+            "if(!b||b.disabled)return false;b.click();return true;})()"
+        )
         if not sent:
-            raise RuntimeError("ChatGPT send button unavailable")
+            # ChatGPT's DOM changes regularly. With the composer focused, Enter is a
+            # stable semantic fallback and avoids binding the daemon to one button label.
+            call("Input.dispatchKeyEvent", {"type": "keyDown", "key": "Enter", "code": "Enter", "windowsVirtualKeyCode": 13, "nativeVirtualKeyCode": 13})
+            call("Input.dispatchKeyEvent", {"type": "keyUp", "key": "Enter", "code": "Enter", "windowsVirtualKeyCode": 13, "nativeVirtualKeyCode": 13})
+
         last = ""
         stable = 0
-        for _ in range(150):
-            d = ev("(()=>{let t=[...document.querySelectorAll('[data-message-role=assistant]')];let q=t[t.length-1];return {n:t.length,text:q?(q.querySelector('[data-assistant-markdown]')?.innerText||q.innerText.replace(/^ChatGPT said:/,'')).trim():'',busy:[...document.querySelectorAll('button')].some(b=>/stop/i.test((b.getAttribute('aria-label')||'')+' '+(b.innerText||'')))};})()") or {}
+        for _ in range(180):
+            d = ev(
+                "(()=>{let t=[...document.querySelectorAll('[data-message-role=assistant]')];let q=t[t.length-1];"
+                "let body=(document.body?.innerText||'');return {n:t.length,text:q?(q.querySelector('[data-assistant-markdown]')?.innerText||q.innerText.replace(/^ChatGPT said:/,'')).trim():'',"
+                "busy:[...document.querySelectorAll('button')].some(b=>/stop/i.test((b.getAttribute('aria-label')||'')+' '+(b.innerText||''))),"
+                "offline:/unable to connect|no internet/i.test(body)};})()"
+            ) or {}
+            if d.get("offline"):
+                raise RuntimeError("ChatGPT went offline while waiting for response")
             cur = (d.get("text") or "").strip()
             if d.get("n", 0) > before and cur:
                 stable = stable + 1 if cur == last and not d.get("busy") else 0
@@ -142,6 +250,21 @@ def ask_chatgpt(prompt: str) -> str:
         raise RuntimeError("assistant response timed out; last=" + repr(last))
     finally:
         ws.close()
+
+
+def ask_chatgpt(prompt: str) -> str:
+    errors = []
+    for attempt in range(1, 4):
+        try:
+            return _ask_chatgpt_once(prompt)
+        except Exception as e:
+            errors.append(f"attempt {attempt}: {type(e).__name__}: {e}")
+            log("REASONER_RECOVER " + errors[-1])
+            # Force a fresh target on the next pass. A stale/offline SPA can otherwise
+            # survive a network outage indefinitely even after the network returns.
+            _new_target("https://chatgpt.com/")
+            time.sleep(min(8, 2 * attempt))
+    raise RuntimeError("ChatGPT reasoning unavailable after recovery attempts: " + " | ".join(errors))
 
 
 def ui_snapshot() -> dict:
@@ -234,6 +357,7 @@ def process_mission(path: Path) -> None:
         "verified": True,
     }
     (PROOFS / f"{mid}.json").write_text(json.dumps(proof, indent=2, ensure_ascii=False))
+    (FAILED / path.name).unlink(missing_ok=True)
     path.rename(DONE / path.name)
     log("DONE " + mid + " action=" + json.dumps(action) + " verified=True attempts=" + str(proof["attempts"]))
 
@@ -241,13 +365,15 @@ def process_mission(path: Path) -> None:
 def retry_or_fail(path: Path, exc: Exception) -> None:
     try:
         mission = json.loads(path.read_text())
+        if not isinstance(mission, dict):
+            raise ValueError("mission is not an object")
     except Exception:
         mission = {"id": path.stem, "goal": ""}
     attempts = int(mission.get("attempts", 0)) + 1
     mission["attempts"] = attempts
     mission["last_error"] = f"{type(exc).__name__}: {exc}"
     mission["last_failed_at"] = time.time()
-    if attempts >= 60:
+    if attempts >= 60 or not str(mission.get("goal") or "").strip():
         (FAILED / path.name).write_text(json.dumps({"error": mission["last_error"], "mission": mission}, indent=2))
         path.unlink(missing_ok=True)
         log("GIVEUP " + path.name + " attempts=" + str(attempts) + " " + mission["last_error"])
