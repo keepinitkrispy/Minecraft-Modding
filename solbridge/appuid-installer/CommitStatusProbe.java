@@ -76,8 +76,8 @@ public class CommitStatusProbe {
         System.out.println("MESSAGE=" + msg);
         System.out.println("RESULT=" + result.toUri(Intent.URI_INTENT_SCHEME));
         Intent confirm = null;
-        try { confirm = result.getParcelableExtra(PackageInstaller.EXTRA_INTENT, Intent.class); }
-        catch (Throwable t) { Object x=result.getParcelableExtra(PackageInstaller.EXTRA_INTENT); if (x instanceof Intent) confirm=(Intent)x; }
+        try { confirm = result.getParcelableExtra(Intent.EXTRA_INTENT, Intent.class); }
+        catch (Throwable t) { Object x=result.getParcelableExtra(Intent.EXTRA_INTENT); if (x instanceof Intent) confirm=(Intent)x; }
         if (confirm != null) {
             System.out.println("CONFIRM_COMPONENT=" + confirm.getComponent());
             System.out.println("CONFIRM=" + confirm.toUri(Intent.URI_INTENT_SCHEME));
