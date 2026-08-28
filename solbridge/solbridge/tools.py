@@ -6,8 +6,16 @@ from .config import Config
 
 class ToolError(RuntimeError): pass
 
-def run(cmd: list[str] | str, *, timeout=30, shell=False, cwd=None):
-    p = subprocess.run(cmd, shell=shell, cwd=cwd, capture_output=True, text=True, timeout=timeout)
+def run(cmd: list[str] | str, *, timeout=30, shell=False, cwd=None, input_text: str | None = None):
+    p = subprocess.run(
+        cmd,
+        shell=shell,
+        cwd=cwd,
+        input=input_text,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
     return {"returncode": p.returncode, "stdout": p.stdout[-20000:], "stderr": p.stderr[-20000:]}
 
 def safe_path(cfg: Config, user_path: str) -> Path:
@@ -29,6 +37,47 @@ def health(cfg: Config, args: dict) -> dict:
         "python": shutil.which("python") or shutil.which("python3"),
         "termux_api": bool(shutil.which("termux-battery-status")),
         "rish": bool(shutil.which("rish")),
+    }
+
+def capabilities(cfg: Config, args: dict) -> dict:
+    commands = [
+        "termux-battery-status",
+        "termux-wifi-connectioninfo",
+        "termux-location",
+        "termux-sensor",
+        "termux-camera-info",
+        "termux-camera-photo",
+        "termux-clipboard-get",
+        "termux-clipboard-set",
+        "termux-notification",
+        "termux-notification-list",
+        "termux-vibrate",
+        "termux-tts-speak",
+        "termux-speech-to-text",
+        "termux-contact-list",
+        "termux-call-log",
+        "termux-telephony-deviceinfo",
+        "termux-telephony-cellinfo",
+        "termux-sms-list",
+        "termux-sms-send",
+        "termux-torch",
+        "termux-volume",
+        "termux-media-player",
+        "termux-microphone-record",
+        "termux-fingerprint",
+        "termux-nfc",
+        "termux-wallpaper",
+        "termux-open-url",
+        "am",
+        "git",
+        "python",
+        "gh",
+        "rish",
+    ]
+    return {
+        "device_id": cfg.device_id,
+        "available": {name: bool(shutil.which(name)) for name in commands},
+        "shell_enabled": cfg.allow_shell,
     }
 
 def device_snapshot(cfg: Config, args: dict) -> dict:
@@ -81,18 +130,61 @@ def git(cfg: Config, args: dict) -> dict:
     if op not in commands: raise ToolError(f"Unsupported git op: {op}")
     return run(commands[op], timeout=120, cwd=path)
 
+def _require(command: str) -> None:
+    if not shutil.which(command):
+        raise ToolError(f"{command} is unavailable")
+
+def android_action(cfg: Config, args: dict) -> dict:
+    name = str(args.get("name", "")).strip()
+    if name == "battery":
+        _require("termux-battery-status")
+        return run(["termux-battery-status"], timeout=45)
+    if name == "wifi":
+        _require("termux-wifi-connectioninfo")
+        return run(["termux-wifi-connectioninfo"], timeout=45)
+    if name == "location":
+        _require("termux-location")
+        provider = str(args.get("provider", "network"))
+        if provider not in {"gps", "network", "passive"}:
+            raise ToolError("provider must be gps, network, or passive")
+        return run(["termux-location", "-p", provider, "-r", "once"], timeout=60)
+    if name == "sensors":
+        _require("termux-sensor")
+        return run(["termux-sensor", "-l"], timeout=45)
+    if name == "camera_info":
+        _require("termux-camera-info")
+        return run(["termux-camera-info"], timeout=45)
+    if name == "clipboard_get":
+        _require("termux-clipboard-get")
+        return run(["termux-clipboard-get"], timeout=45)
+    if name == "clipboard_set":
+        _require("termux-clipboard-set")
+        text = str(args.get("text", ""))
+        return run(["termux-clipboard-set"], timeout=45, input_text=text)
+    if name == "notify":
+        _require("termux-notification")
+        title = str(args.get("title", "SolBridge"))[:160]
+        content = str(args.get("content", ""))[:2000]
+        notification_id = str(args.get("id", "solbridge"))[:80]
+        return run(["termux-notification", "--id", notification_id, "--title", title, "--content", content], timeout=45)
+    if name == "vibrate":
+        _require("termux-vibrate")
+        duration = max(1, min(int(args.get("duration_ms", 250)), 5000))
+        return run(["termux-vibrate", "-d", str(duration)], timeout=45)
+    if name == "tts":
+        _require("termux-tts-speak")
+        text = str(args.get("text", ""))[:4000]
+        if not text:
+            raise ToolError("tts requires text")
+        return run(["termux-tts-speak", text], timeout=60)
+    if name == "volume":
+        _require("termux-volume")
+        return run(["termux-volume"], timeout=45)
+    raise ToolError(f"Unsupported Android action: {name}")
+
 def termux_api(cfg: Config, args: dict) -> dict:
-    name = args.get("name")
-    allowed = {
-        "battery": ["termux-battery-status"],
-        "wifi": ["termux-wifi-connectioninfo"],
-        "location": ["termux-location", "-p", str(args.get("provider", "network")), "-r", "once"],
-        "clipboard_get": ["termux-clipboard-get"],
-        "volume": ["termux-volume"],
-    }
-    if name not in allowed: raise ToolError(f"Unsupported Termux API op: {name}")
-    if not shutil.which(allowed[name][0]): raise ToolError(f"{allowed[name][0]} is unavailable")
-    return run(allowed[name], timeout=45)
+    # Backward-compatible alias for older command payloads.
+    return android_action(cfg, args)
 
 def self_update(cfg: Config, args: dict) -> dict:
     src = cfg.source_dir.resolve()
@@ -116,11 +208,13 @@ def shell(cfg: Config, args: dict) -> dict:
 
 TOOLS = {
     "health": health,
+    "capabilities": capabilities,
     "device_snapshot": device_snapshot,
     "list_files": list_files,
     "read_text": read_text,
     "write_text": write_text,
     "git": git,
+    "android_action": android_action,
     "termux_api": termux_api,
     "self_update": self_update,
     "shell": shell,
