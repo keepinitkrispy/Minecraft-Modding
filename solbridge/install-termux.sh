@@ -10,7 +10,6 @@ WORK="$HOME/solbridge-workspace"
 
 pkg update -y
 pkg install -y python git gh termux-api termux-services
-python -m pip install --upgrade pip
 
 if ! gh auth status --hostname github.com >/dev/null 2>&1; then
   echo
@@ -27,9 +26,14 @@ fi
 
 rm -rf "$DEST"
 git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$DEST"
-cd "$DEST/solbridge"
-python -m pip install .
 mkdir -p "$CFG_DIR" "$WORK"
+
+cat > "$PREFIX/bin/solbridge" <<'RUN'
+#!/data/data/com.termux/files/usr/bin/sh
+export PYTHONPATH="$HOME/.local/share/solbridge-src/solbridge${PYTHONPATH:+:$PYTHONPATH}"
+exec python -m solbridge.agent
+RUN
+chmod +x "$PREFIX/bin/solbridge"
 
 cat > "$CFG_DIR/config.json" <<JSON
 {
@@ -38,6 +42,7 @@ cat > "$CFG_DIR/config.json" <<JSON
   "device_id": "ryan-pixel",
   "poll_seconds": 15,
   "workspace": "~/solbridge-workspace",
+  "source_dir": "~/.local/share/solbridge-src",
   "allow_shell": false,
   "shell_timeout": 120
 }
@@ -56,9 +61,31 @@ cat > "$SERVICE/log/run" <<'RUN'
 exec svlogger "$PREFIX/var/log/sv/solbridge"
 RUN
 chmod +x "$SERVICE/run" "$SERVICE/log/run"
-export SVDIR="$PREFIX/var/service"
+
+# termux-services normally starts on the next shell launch; start its daemon now too.
+if [ -f "$PREFIX/etc/profile.d/start-services.sh" ]; then
+  # shellcheck disable=SC1090
+  . "$PREFIX/etc/profile.d/start-services.sh"
+else
+  export SVDIR="$PREFIX/var/service"
+  export LOGDIR="$PREFIX/var/log"
+  (service-daemon start >/dev/null 2>&1 &)
+fi
+sleep 1
 sv-enable solbridge || true
 sv up solbridge || true
+
+# Termux:Boot will run this after Android reboots, if the companion app is installed/opened once.
+mkdir -p "$HOME/.termux/boot"
+cat > "$HOME/.termux/boot/solbridge-start.sh" <<'RUN'
+#!/data/data/com.termux/files/usr/bin/sh
+export SVDIR="$PREFIX/var/service"
+export LOGDIR="$PREFIX/var/log"
+(service-daemon start >/dev/null 2>&1 &)
+sleep 2
+sv up solbridge >/dev/null 2>&1 || true
+RUN
+chmod +x "$HOME/.termux/boot/solbridge-start.sh"
 
 echo
 echo "SOLBRIDGE_INSTALLED=1"
