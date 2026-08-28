@@ -4,9 +4,13 @@ import android.content.pm.PackageInstaller;
 import android.os.IBinder;
 import android.os.ParcelFileDescriptor;
 import java.io.File;
+import java.io.FileDescriptor;
 import java.io.FileInputStream;
+import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
+import java.security.MessageDigest;
 
 public class InstallerStage {
     static Object invoke(Object obj, String name, Object... args) throws Exception {
@@ -38,11 +42,39 @@ public class InstallerStage {
         m.invoke(null);
     }
 
+    static String hex(byte[] b) {
+        StringBuilder sb = new StringBuilder();
+        for (byte x : b) sb.append(String.format("%02x", x & 0xff));
+        return sb.toString();
+    }
+
+    static String sha256(InputStream in) throws Exception {
+        MessageDigest md = MessageDigest.getInstance("SHA-256");
+        byte[] buf = new byte[65536];
+        for (int n; (n = in.read(buf)) > 0;) md.update(buf, 0, n);
+        return hex(md.digest());
+    }
+
+    static OutputStream fileBridgeStream(ParcelFileDescriptor pfd) throws Exception {
+        Class<?> c = Class.forName("android.os.FileBridge$FileBridgeOutputStream");
+        try {
+            Constructor<?> ctor = c.getDeclaredConstructor(ParcelFileDescriptor.class);
+            ctor.setAccessible(true);
+            return (OutputStream) ctor.newInstance(pfd);
+        } catch (NoSuchMethodException e) {
+            Constructor<?> ctor = c.getDeclaredConstructor(FileDescriptor.class);
+            ctor.setAccessible(true);
+            return (OutputStream) ctor.newInstance(pfd.getFileDescriptor());
+        }
+    }
+
     public static void main(String[] args) throws Exception {
         bypassHiddenApi();
         String apkPath = args.length > 0 ? args[0] : "/sdcard/Download/SolBridgeCompanion.apk";
         File apk = new File(apkPath);
-        System.out.println("APK=" + apk + " exists=" + apk.isFile() + " size=" + apk.length());
+        String srcHash;
+        try (FileInputStream fin = new FileInputStream(apk)) { srcHash = sha256(fin); }
+        System.out.println("APK=" + apk + " exists=" + apk.isFile() + " size=" + apk.length() + " sha256=" + srcHash);
 
         Class<?> sm = Class.forName("android.os.ServiceManager");
         Method getService = sm.getDeclaredMethod("getService", String.class);
@@ -69,16 +101,24 @@ public class InstallerStage {
         System.out.println("SESSION=" + sid);
 
         Object session = invoke(installer, "openSession", sid);
-        System.out.println("SESSION_PROXY=" + session.getClass().getName());
         ParcelFileDescriptor pfd = (ParcelFileDescriptor) invoke(session, "openWrite", "base.apk", 0L, apk.length());
         System.out.println("OPENWRITE=ok fd=" + pfd.getFd());
         long total = 0;
-        try (FileInputStream in = new FileInputStream(apk); OutputStream out = new ParcelFileDescriptor.AutoCloseOutputStream(pfd)) {
+        try (FileInputStream in = new FileInputStream(apk); OutputStream out = fileBridgeStream(pfd)) {
             byte[] buf = new byte[65536];
             for (int n; (n = in.read(buf)) > 0;) { out.write(buf, 0, n); total += n; }
-            out.flush();
+            Method fsync = out.getClass().getDeclaredMethod("fsync");
+            fsync.setAccessible(true);
+            fsync.invoke(out);
+            System.out.println("FSYNC=ok");
         }
         System.out.println("WROTE=" + total);
+
+        ParcelFileDescriptor readPfd = (ParcelFileDescriptor) invoke(session, "openRead", "base.apk");
+        String stagedHash;
+        try (InputStream rin = new ParcelFileDescriptor.AutoCloseInputStream(readPfd)) { stagedHash = sha256(rin); }
+        System.out.println("STAGED_SHA256=" + stagedHash + " MATCH=" + srcHash.equals(stagedHash));
+
         Object names = invoke(session, "getNames");
         if (names instanceof String[]) {
             StringBuilder sb = new StringBuilder();
