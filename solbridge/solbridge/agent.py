@@ -4,6 +4,7 @@ from pathlib import Path
 from .config import Config
 from .github_bus import GitHubBus
 from .tools import execute
+from .companion import execute_companion
 
 STOP = False
 
@@ -67,7 +68,11 @@ def process(bus: GitHubBus, cfg: Config, issue: dict) -> bool:
             return False
         bus.labels(number, ["solbridge-command", "solbridge-running"])
         started = time.time()
-        output = execute(cfg, str(cmd["tool"]), dict(cmd.get("args") or {}))
+        tool = str(cmd["tool"])
+        if tool == "companion":
+            output = execute_companion(cfg, dict(cmd.get("args") or {}))
+        else:
+            output = execute(cfg, tool, dict(cmd.get("args") or {}))
         restart = bool(isinstance(output, dict) and output.pop("_restart_agent", False))
         result = {
             "solbridge": 1,
