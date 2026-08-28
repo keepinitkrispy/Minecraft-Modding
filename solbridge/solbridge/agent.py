@@ -22,9 +22,16 @@ def parse_command(issue: dict) -> dict:
 def result_block(data: dict) -> str:
     return "```json\n" + json.dumps(data, indent=2, ensure_ascii=False)[:60000] + "\n```"
 
+def _authorized_actor(issue: dict, cfg: Config) -> bool:
+    actor = str((issue.get("user") or {}).get("login") or "")
+    owner = cfg.repo.split("/", 1)[0]
+    return bool(actor) and actor.lower() == owner.lower()
+
 def process(bus: GitHubBus, cfg: Config, issue: dict) -> bool:
     number = issue["number"]
     try:
+        if not _authorized_actor(issue, cfg):
+            raise PermissionError("Command issue author is not the SolBridge bus owner")
         cmd = parse_command(issue)
         target = cmd.get("device_id")
         if target not in (None, "*", cfg.device_id):
