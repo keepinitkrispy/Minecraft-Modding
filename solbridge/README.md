@@ -1,14 +1,37 @@
 # SolBridge v0.1
 
-SolBridge turns an Android/Termux device into a controlled execution endpoint using a GitHub repository's Issues API as the command/result bus.
+SolBridge turns an Android/Termux device into a controlled execution endpoint using a private GitHub repository's Issues API as the command/result bus.
 
-## Why this transport
+## What is already built
 
-The current ChatGPT environment can already create/read GitHub issues. The phone can already call GitHub's HTTPS API. That gives both sides a shared, authenticated transport without requiring inbound ports, a public phone IP, or a custom ChatGPT connector.
+The current ChatGPT environment can create and read GitHub issues. The phone can call GitHub's HTTPS API. SolBridge joins those two existing capabilities so ChatGPT can issue a structured command, the Pixel executes it, and the result comes back through the same private repo.
+
+No inbound phone port, public IP, custom ChatGPT connector, or manually maintained token is required.
+
+## Install
+
+Install **Termux** and **Termux:API** from the same signing source. Upstream Termux requires the API app and main app to share a signing key.
+
+Then in Termux run:
+
+```bash
+pkg install -y curl && curl -fsSL https://raw.githubusercontent.com/keepinitkrispy/Minecraft-Modding/solbridge-v1/solbridge/install-termux.sh | bash
+```
+
+The installer:
+
+1. installs Python, git, the official GitHub CLI (`gh`), Termux API helpers, and termux-services;
+2. opens GitHub's browser/device authorization if the phone is not already logged in;
+3. automatically creates `OWNER/solbridge-bus` as a **private** repository;
+4. clones and installs SolBridge;
+5. writes its config without copying the GitHub token into the config file (the agent asks `gh auth token` locally);
+6. registers and starts SolBridge as a runit service.
+
+That GitHub authorization is the only account-level approval the installer cannot perform on the user's behalf.
 
 ## Command protocol
 
-Create an issue with label `solbridge-command` and a JSON body:
+A command is an issue labeled `solbridge-command` whose body is JSON:
 
 ```json
 {
@@ -30,27 +53,22 @@ The phone claims it, executes the named tool, posts a JSON result comment, label
 - `write_text`
 - `git` (`status`, `diff`, `log`, `pull`)
 - `termux_api` (`battery`, `wifi`, `location`, `clipboard_get`, `volume`)
-- `shell` (disabled by default; prefix allowlist when enabled)
+- `self_update` — pulls this branch, reinstalls SolBridge, returns the result, then restarts the running agent into the new code
+- `shell` — disabled by default; when enabled it is still restricted to configured command prefixes and the workspace
 
-All file access is jailed to the configured workspace. The general shell is opt-in.
+All ordinary file operations are jailed to `~/solbridge-workspace`.
 
-## Android side
+## Why `self_update` matters
 
-Install Termux and Termux:API from the same signing source. The upstream Termux project notes that the API app must share the main Termux app's signing key. Then run `install-termux.sh` from this branch. The installer adds Python, git, the Termux API package, and termux-services; upstream termux-services uses runit and supports `sv-enable` for autostart.
+Once the first round trip works, new capabilities can be added to this branch, covered by CI, and then installed on the phone through a `self_update` command. That is the bootstrap for the larger capability-factory idea: add a tool once, then it becomes part of the device agent's permanent callable surface.
 
-## Required private bus repository
-
-Use a **private** GitHub repository for actual commands/results. Do not use the public Minecraft repository as the live bus for personal data. The current ChatGPT GitHub connector can write into repositories it has access to, but it does not expose repository creation, so creating the private repo is the one account-level action that must be done outside the bridge.
-
-Create a fine-grained GitHub token scoped only to that bus repo with Issues read/write. Put the token in the phone's environment (`SOLBRIDGE_GITHUB_TOKEN`) or config. Prefer environment storage over committing it anywhere.
-
-## Config
+## Current config
 
 `~/.config/solbridge/config.json`
 
 ```json
 {
-  "repo": "OWNER/PRIVATE_BUS_REPO",
+  "repo": "OWNER/solbridge-bus",
   "token": "",
   "device_id": "ryan-pixel",
   "poll_seconds": 15,
@@ -60,11 +78,11 @@ Create a fine-grained GitHub token scoped only to that bus repo with Issues read
 }
 ```
 
-## Next layers
+## Next capability layers
 
-1. First successful `health` round trip.
-2. Add a persistent state database and event journal.
-3. Add Android notification ingestion.
-4. Add Shizuku/rish adapter for approved higher-privilege operations.
-5. Add Minecraft-specific validators/builders as first self-added tools.
-6. Move from GitHub polling to a purpose-built relay/MCP endpoint if/when the ChatGPT environment can call it directly.
+- persistent SQLite state/event journal
+- Android notification ingestion
+- Shizuku/rish adapter for approved higher-privilege operations
+- Minecraft Bedrock validators/builders as the first specialized tool suite
+- local document/media indexing
+- purpose-built relay/MCP transport if the ChatGPT environment later supports calling it directly
