@@ -1,5 +1,6 @@
 from __future__ import annotations
 import json, os, signal, sys, time, traceback
+from pathlib import Path
 from .config import Config
 from .github_bus import GitHubBus
 from .tools import execute
@@ -27,8 +28,36 @@ def _authorized_actor(issue: dict, cfg: Config) -> bool:
     owner = cfg.repo.split("/", 1)[0]
     return bool(actor) and actor.lower() == owner.lower()
 
+def _processed_path(cfg: Config) -> Path:
+    return cfg.workspace / ".solbridge_processed_issues.json"
+
+def _processed(cfg: Config) -> set[int]:
+    p = _processed_path(cfg)
+    try:
+        raw = json.loads(p.read_text()) if p.exists() else []
+        return {int(x) for x in raw}
+    except Exception:
+        return set()
+
+def _mark_processed(cfg: Config, number: int) -> None:
+    seen = _processed(cfg)
+    seen.add(int(number))
+    newest = sorted(seen)[-1000:]
+    p = _processed_path(cfg)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(".tmp")
+    tmp.write_text(json.dumps(newest))
+    tmp.replace(p)
+
 def process(bus: GitHubBus, cfg: Config, issue: dict) -> bool:
-    number = issue["number"]
+    number = int(issue["number"])
+    if number in _processed(cfg):
+        try:
+            bus.labels(number, ["solbridge-done"])
+            bus.close(number)
+        except Exception:
+            pass
+        return False
     try:
         if not _authorized_actor(issue, cfg):
             raise PermissionError("Command issue author is not the SolBridge bus owner")
@@ -52,6 +81,7 @@ def process(bus: GitHubBus, cfg: Config, issue: dict) -> bool:
         bus.comment(number, result_block(result))
         bus.labels(number, ["solbridge-done"])
         bus.close(number)
+        _mark_processed(cfg, number)
         return restart
     except Exception as e:
         result = {
@@ -65,6 +95,7 @@ def process(bus: GitHubBus, cfg: Config, issue: dict) -> bool:
             bus.comment(number, result_block(result))
             bus.labels(number, ["solbridge-error"])
             bus.close(number)
+            _mark_processed(cfg, number)
         except Exception:
             print(json.dumps(result), file=sys.stderr, flush=True)
         return False
