@@ -1,8 +1,9 @@
 from __future__ import annotations
-import json, os, re, shutil, subprocess, time
+import hashlib, json, os, re, shutil, subprocess, time
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 from .config import Config
 
 class ToolError(RuntimeError): pass
@@ -78,7 +79,7 @@ CAPABILITY_COMMANDS = [
     "termux-sms-send", "termux-torch", "termux-volume", "termux-media-player",
     "termux-microphone-record", "termux-fingerprint", "termux-nfc",
     "termux-wallpaper", "termux-open-url", "am", "pm", "logcat", "getprop",
-    "dumpsys", "ps", "ip", "git", "python", "gh", "rish",
+    "dumpsys", "ps", "ip", "pkg", "curl", "adb", "git", "python", "gh", "rish",
 ]
 
 def capabilities(cfg: Config, args: dict) -> dict:
@@ -242,6 +243,82 @@ def git(cfg: Config, args: dict) -> dict:
     if op not in commands: raise ToolError(f"Unsupported git op: {op}")
     return run(commands[op], timeout=120, cwd=path)
 
+def termux_package(cfg: Config, args: dict) -> dict:
+    op = str(args.get("op", "list")).strip()
+    if op == "list":
+        return run(["pkg", "list-installed"], timeout=120)
+    if op == "upgrade":
+        return run(["pkg", "upgrade", "-y"], timeout=600)
+    if op != "install":
+        raise ToolError("termux_package op must be list, install, or upgrade")
+    raw = args.get("packages")
+    packages = [str(x) for x in (raw if isinstance(raw, list) else [raw]) if x]
+    if not packages or len(packages) > 20:
+        raise ToolError("install requires 1-20 package names")
+    for package in packages:
+        if not re.fullmatch(r"[A-Za-z0-9+._-]{1,100}", package):
+            raise ToolError(f"invalid Termux package name: {package}")
+    return run(["pkg", "install", "-y", *packages], timeout=900)
+
+def python_job(cfg: Config, args: dict) -> dict:
+    p = safe_path(cfg, str(args.get("path", "")))
+    if p.suffix.lower() != ".py":
+        raise ToolError("python_job requires a .py file in the workspace")
+    if not p.exists() or not p.is_file():
+        raise ToolError("python_job file does not exist")
+    if p.stat().st_size > 2_000_000:
+        raise ToolError("python_job script exceeds 2 MB")
+    argv = args.get("args") or []
+    if not isinstance(argv, list) or len(argv) > 50:
+        raise ToolError("python_job args must be a list of at most 50 values")
+    argv = [str(v)[:2000] for v in argv]
+    timeout = max(1, min(int(args.get("timeout", 120)), 900))
+    return run(["python", str(p), *argv], timeout=timeout, cwd=p.parent)
+
+def http_download(cfg: Config, args: dict) -> dict:
+    url = str(args.get("url", "")).strip()
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"}:
+        raise ToolError("http_download only allows http/https URLs")
+    p = safe_path(cfg, str(args.get("path", "downloads/file.bin")))
+    p.parent.mkdir(parents=True, exist_ok=True)
+    max_bytes = max(1, min(int(args.get("max_bytes", 50_000_000)), 200_000_000))
+    req = Request(url, headers={"User-Agent": "SolBridge/0.3"})
+    h = hashlib.sha256()
+    total = 0
+    tmp = p.with_suffix(p.suffix + ".part")
+    final_url = url
+    try:
+        with urlopen(req, timeout=60) as r, tmp.open("wb") as out:
+            final_url = r.geturl()
+            length = r.headers.get("Content-Length")
+            if length and int(length) > max_bytes:
+                raise ToolError("download exceeds configured size limit")
+            while True:
+                chunk = r.read(1024 * 256)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > max_bytes:
+                    raise ToolError("download exceeded configured size limit")
+                out.write(chunk)
+                h.update(chunk)
+        tmp.replace(p)
+    finally:
+        if tmp.exists() and not p.exists():
+            tmp.unlink(missing_ok=True)
+    return {"path": str(p), "bytes": total, "sha256": h.hexdigest(), "final_url": final_url}
+
+def file_info(cfg: Config, args: dict) -> dict:
+    p = safe_path(cfg, str(args.get("path", "")))
+    if not p.exists() or not p.is_file():
+        raise ToolError("file does not exist")
+    h = hashlib.sha256()
+    with p.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return {"path": str(p), "bytes": p.stat().st_size, "sha256": h.hexdigest()}
+
 def android_action(cfg: Config, args: dict) -> dict:
     name = str(args.get("name", "")).strip()
     if name == "battery":
@@ -376,6 +453,10 @@ TOOLS = {
     "state_get": state_get,
     "state_set": state_set,
     "git": git,
+    "termux_package": termux_package,
+    "python_job": python_job,
+    "http_download": http_download,
+    "file_info": file_info,
     "android_action": android_action,
     "termux_api": termux_api,
     "workflow": workflow,
