@@ -1,5 +1,5 @@
 from __future__ import annotations
-import json, signal, sys, time, traceback
+import json, os, signal, sys, time, traceback
 from .config import Config
 from .github_bus import GitHubBus
 from .tools import execute
@@ -22,16 +22,17 @@ def parse_command(issue: dict) -> dict:
 def result_block(data: dict) -> str:
     return "```json\n" + json.dumps(data, indent=2, ensure_ascii=False)[:60000] + "\n```"
 
-def process(bus: GitHubBus, cfg: Config, issue: dict):
+def process(bus: GitHubBus, cfg: Config, issue: dict) -> bool:
     number = issue["number"]
     try:
         cmd = parse_command(issue)
         target = cmd.get("device_id")
         if target not in (None, "*", cfg.device_id):
-            return
+            return False
         bus.labels(number, ["solbridge-command", "solbridge-running"])
         started = time.time()
         output = execute(cfg, str(cmd["tool"]), dict(cmd.get("args") or {}))
+        restart = bool(isinstance(output, dict) and output.pop("_restart_agent", False))
         result = {
             "solbridge": 1,
             "status": "ok",
@@ -44,6 +45,7 @@ def process(bus: GitHubBus, cfg: Config, issue: dict):
         bus.comment(number, result_block(result))
         bus.labels(number, ["solbridge-done"])
         bus.close(number)
+        return restart
     except Exception as e:
         result = {
             "solbridge": 1,
@@ -58,6 +60,7 @@ def process(bus: GitHubBus, cfg: Config, issue: dict):
             bus.close(number)
         except Exception:
             print(json.dumps(result), file=sys.stderr, flush=True)
+        return False
 
 def main():
     signal.signal(signal.SIGINT, stop)
@@ -70,7 +73,8 @@ def main():
     while not STOP:
         try:
             for issue in bus.pending():
-                process(bus, cfg, issue)
+                if process(bus, cfg, issue):
+                    os.execv(sys.executable, [sys.executable, "-m", "solbridge.agent"])
         except Exception as e:
             print(f"poll error: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
         for _ in range(max(cfg.poll_seconds, 1)):
