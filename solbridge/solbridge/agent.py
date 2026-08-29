@@ -72,10 +72,8 @@ def _heartbeat() -> bool:
 def _execution_failure(tool: str, output) -> str | None:
     """Return a failure reason when a tool result proves execution failed.
 
-    Tool implementations intentionally return structured subprocess results instead
-    of raising on every non-zero exit. The agent is the authoritative completion
-    boundary: it must never publish solbridge-done for a process/workflow that
-    actually failed.
+    The agent is the authoritative completion boundary. A command is only
+    solbridge-done when its subprocess AND its tool-level result say it worked.
     """
     if not isinstance(output, dict):
         return None
@@ -98,6 +96,16 @@ def _execution_failure(tool: str, output) -> str | None:
                 step_rc = result.get("returncode")
                 if isinstance(step_rc, int) and not isinstance(step_rc, bool) and step_rc != 0:
                     return f"workflow step {i} ({step.get('tool', 'unknown')}) returned nonzero exit status {step_rc}"
+        return None
+
+    if tool == "companion":
+        if output.get("ok") is False:
+            return f"companion action failed: {output.get('error', 'ok=false')}"
+        if output.get("verified") is False:
+            return f"companion verification failed: {output.get('failure', output.get('error', 'verified=false'))}"
+        for name, value in output.items():
+            if isinstance(value, dict) and value.get("ok") is False:
+                return f"companion {name} failed: {value.get('error', 'ok=false')}"
         return None
 
     return None
