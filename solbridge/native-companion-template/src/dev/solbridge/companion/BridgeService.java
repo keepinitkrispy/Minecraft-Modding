@@ -4,7 +4,9 @@ import android.app.*;
 import android.accessibilityservice.AccessibilityService;
 import android.content.*;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.*;
+import android.provider.Settings;
 import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
@@ -81,10 +83,17 @@ public class BridgeService extends Service {
         i.putExtra("com.termux.RUN_COMMAND_ARGUMENTS", new String[]{});
         i.putExtra("com.termux.RUN_COMMAND_WORKDIR", "/data/data/com.termux/files/home");
         i.putExtra("com.termux.RUN_COMMAND_BACKGROUND", true);
-        i.putExtra("com.termux.RUN_COMMAND_SESSION_ACTION", "0");
         if (Build.VERSION.SDK_INT >= 26) startForegroundService(i); else startService(i);
         guardianLastDispatch = true;
         guardianLastError = "";
+        return true;
+    }
+
+    boolean openPermissionSettings() {
+        Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+        i.setData(Uri.fromParts("package", getPackageName(), null));
+        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(i);
         return true;
     }
 
@@ -141,6 +150,7 @@ public class BridgeService extends Service {
                 + ",\"guardian_error\":\"" + json(guardianLastError) + "\"}";
         }
         if (p.startsWith("/guardian")) return ok(dispatchTermuxEnsure());
+        if (p.startsWith("/permission_settings")) return ok(openPermissionSettings());
         if (p.startsWith("/events")) return SolAccessibilityService.events();
         if (p.startsWith("/tree")) return a == null ? "[]" : a.tree();
         if (p.startsWith("/tap")) {
