@@ -58,6 +58,7 @@ class GitHubBus:
             if labels & blocked:
                 continue
             out.append(x)
+        out.sort(key=lambda x: int(x.get("number") or 0))
         return out
 
     def verify_owner_command_file(self, *, path: str, commit_sha: str, expected: dict) -> bool:
