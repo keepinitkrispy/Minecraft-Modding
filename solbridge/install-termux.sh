@@ -26,7 +26,7 @@ fi
 
 rm -rf "$DEST"
 git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$DEST"
-mkdir -p "$CFG_DIR" "$WORK"
+mkdir -p "$CFG_DIR" "$WORK" "$HOME/.termux" "$HOME/.local/bin"
 
 cat > "$PREFIX/bin/solbridge" <<'RUN'
 #!/data/data/com.termux/files/usr/bin/sh
@@ -48,6 +48,37 @@ cat > "$CFG_DIR/config.json" <<JSON
 }
 JSON
 chmod 600 "$CFG_DIR/config.json"
+
+# The native companion may invoke exactly this fixed script through Termux's
+# official RUN_COMMAND service. The script is intentionally narrow and idempotent.
+cat > "$HOME/.local/bin/solbridge-ensure" <<'RUN'
+#!/data/data/com.termux/files/usr/bin/sh
+set -u
+export SVDIR="$PREFIX/var/service"
+export LOGDIR="$PREFIX/var/log"
+PIDFILE="$PREFIX/var/run/service-daemon.pid"
+if [ ! -s "$PIDFILE" ] || ! kill -0 "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null; then
+  service-daemon start >/dev/null 2>&1 || true
+fi
+for _ in $(seq 1 20); do
+  [ -e "$PREFIX/var/service/solbridge/supervise/ok" ] && break
+  sleep 0.25
+done
+rm -f "$PREFIX/var/service/solbridge/down"
+sv up solbridge >/dev/null 2>&1 || exit 1
+sv status solbridge
+RUN
+chmod 700 "$HOME/.local/bin/solbridge-ensure"
+
+# Required by Termux for RUN_COMMAND intents from explicitly permitted apps.
+PROPS="$HOME/.termux/termux.properties"
+touch "$PROPS"
+if grep -qE '^[[:space:]]*allow-external-apps[[:space:]]*=' "$PROPS"; then
+  sed -i -E 's/^[[:space:]]*allow-external-apps[[:space:]]*=.*/allow-external-apps=true/' "$PROPS"
+else
+  printf '\nallow-external-apps=true\n' >> "$PROPS"
+fi
+termux-reload-settings >/dev/null 2>&1 || true
 
 SERVICE="$PREFIX/var/service/solbridge"
 mkdir -p "$SERVICE/log"
@@ -83,21 +114,11 @@ rm -f "$SERVICE/down"
 sv up solbridge
 sv status solbridge
 
-# Termux:Boot will run this after Android reboots, if the companion app is installed/opened once.
+# Termux:Boot is a cheap independent reboot fallback.
 mkdir -p "$HOME/.termux/boot"
 cat > "$HOME/.termux/boot/solbridge-start.sh" <<'RUN'
 #!/data/data/com.termux/files/usr/bin/sh
-export SVDIR="$PREFIX/var/service"
-export LOGDIR="$PREFIX/var/log"
-PIDFILE="$PREFIX/var/run/service-daemon.pid"
-if [ ! -s "$PIDFILE" ] || ! kill -0 "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null; then
-  service-daemon start >/dev/null 2>&1 || true
-fi
-for _ in $(seq 1 20); do
-  [ -e "$PREFIX/var/service/solbridge/supervise/ok" ] && break
-  sleep 0.5
-done
-sv up solbridge >/dev/null 2>&1 || true
+exec "$HOME/.local/bin/solbridge-ensure" >/dev/null 2>&1
 RUN
 chmod +x "$HOME/.termux/boot/solbridge-start.sh"
 
@@ -106,4 +127,5 @@ echo "SOLBRIDGE_INSTALLED=1"
 echo "BUS_REPO=$BUS_REPO"
 echo "CONFIG=$CFG_DIR/config.json"
 echo "WORKSPACE=$WORK"
+echo "RECOVERY_SCRIPT=$HOME/.local/bin/solbridge-ensure"
 echo "SERVICE=running"
