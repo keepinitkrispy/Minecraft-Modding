@@ -16,7 +16,10 @@ public class BridgeService extends Service {
     static final String TERMUX_PACKAGE = "com.termux";
     static final String TERMUX_RUN_SERVICE = "com.termux.app.RunCommandService";
     static final String ENSURE_SCRIPT = "/data/data/com.termux/files/home/.local/bin/solbridge-ensure";
+    static final long HEARTBEAT_TIMEOUT_MS = 45_000L;
+    static final long GUARDIAN_RETRY_MS = 60_000L;
     volatile boolean run = true;
+    volatile long guardianLastHeartbeatMs = System.currentTimeMillis();
     volatile long guardianLastAttemptMs = 0;
     volatile boolean guardianLastDispatch = false;
     volatile String guardianLastError = "not-yet-run";
@@ -31,7 +34,7 @@ public class BridgeService extends Service {
         Notification.Builder b = Build.VERSION.SDK_INT >= 26
             ? new Notification.Builder(this, "solbridge") : new Notification.Builder(this);
         b.setContentTitle("SolBridge control plane")
-         .setContentText("Local bridge + recovery guardian active")
+         .setContentText("Heartbeat recovery guardian active")
          .setSmallIcon(android.R.drawable.stat_notify_sync);
         startForeground(8765, b.build());
         new Thread(this::serve, "solbridge-http").start();
@@ -48,13 +51,17 @@ public class BridgeService extends Service {
 
     void guardianLoop() {
         while (run) {
-            try {
-                dispatchTermuxEnsure();
-            } catch (Throwable t) {
-                guardianLastDispatch = false;
-                guardianLastError = t.getClass().getSimpleName() + ": " + String.valueOf(t.getMessage());
+            long now = System.currentTimeMillis();
+            long heartbeatAge = Math.max(0L, now - guardianLastHeartbeatMs);
+            if (heartbeatAge > HEARTBEAT_TIMEOUT_MS && now - guardianLastAttemptMs >= GUARDIAN_RETRY_MS) {
+                try {
+                    dispatchTermuxEnsure();
+                } catch (Throwable t) {
+                    guardianLastDispatch = false;
+                    guardianLastError = t.getClass().getSimpleName() + ": " + String.valueOf(t.getMessage());
+                }
             }
-            for (int i = 0; i < 60 && run; i++) {
+            for (int i = 0; i < 5 && run; i++) {
                 try { Thread.sleep(1000); } catch (InterruptedException e) { return; }
             }
         }
@@ -121,8 +128,14 @@ public class BridgeService extends Service {
 
     String route(String p) throws Exception {
         SolAccessibilityService a = SolAccessibilityService.INSTANCE;
+        if (p.startsWith("/heartbeat")) {
+            guardianLastHeartbeatMs = System.currentTimeMillis();
+            return "{\"ok\":true,\"heartbeat_ms\":" + guardianLastHeartbeatMs + "}";
+        }
         if (p.startsWith("/health")) {
+            long age = Math.max(0L, System.currentTimeMillis() - guardianLastHeartbeatMs);
             return "{\"ok\":true,\"accessibility\":" + (a != null) + ",\"pid\":" + android.os.Process.myPid()
+                + ",\"heartbeat_age_ms\":" + age
                 + ",\"guardian_dispatch\":" + guardianLastDispatch
                 + ",\"guardian_last_attempt_ms\":" + guardianLastAttemptMs
                 + ",\"guardian_error\":\"" + json(guardianLastError) + "\"}";
