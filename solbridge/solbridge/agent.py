@@ -1,5 +1,5 @@
 from __future__ import annotations
-import json, os, signal, sys, time, traceback
+import fcntl, json, os, signal, sys, time, traceback
 from pathlib import Path
 from .config import Config
 from .github_bus import GitHubBus
@@ -181,6 +181,13 @@ def main():
     signal.signal(signal.SIGTERM, stop)
     cfg = Config.load()
     cfg.workspace.mkdir(parents=True, exist_ok=True)
+    lock_handle = (cfg.workspace / ".solbridge-agent.lock").open("a+")
+    try:
+        fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        print("SolBridge duplicate agent exiting", flush=True)
+        lock_handle.close()
+        return
     bus = GitHubBus(cfg.repo, cfg.token)
     bus.ensure_labels()
     print(f"SolBridge online: {cfg.device_id} -> {cfg.repo}", flush=True)
