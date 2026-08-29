@@ -17,7 +17,25 @@ def test_guardian_uses_fixed_background_run_command_target():
     assert 'i.putExtra("com.termux.RUN_COMMAND_BACKGROUND", true)' in src
     assert 'checkSelfPermission(RUN_COMMAND_PERMISSION)' in src
     assert 'guardianLoop' in src
-    assert 'Thread.sleep(1000)' in src
+
+
+def test_guardian_only_recovers_after_stale_heartbeat():
+    src = (ROOT / "native-companion-template" / "src" / "dev" / "solbridge" / "companion" / "BridgeService.java").read_text()
+    assert 'HEARTBEAT_TIMEOUT_MS = 45_000L' in src
+    assert 'GUARDIAN_RETRY_MS = 60_000L' in src
+    assert 'heartbeatAge > HEARTBEAT_TIMEOUT_MS' in src
+    assert 'p.startsWith("/heartbeat")' in src
+    assert 'heartbeat_age_ms' in src
+
+
+def test_agent_sends_heartbeat_each_poll_cycle():
+    agent = (ROOT / "solbridge" / "agent.py").read_text()
+    assert 'def _heartbeat() -> bool:' in agent
+    assert 'companion_get("/heartbeat", timeout=3.0)' in agent
+    loop = agent.index('while not STOP:')
+    heartbeat = agent.index('_heartbeat()', loop)
+    pending = agent.index('bus.pending()', loop)
+    assert loop < heartbeat < pending
 
 
 def test_install_script_exposes_only_fixed_recovery_script_and_external_gate():
