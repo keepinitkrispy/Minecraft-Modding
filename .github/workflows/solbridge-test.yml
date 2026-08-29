@@ -19,3 +19,12 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: pip install -e ./solbridge pytest
       - run: pytest -q ./solbridge/tests
+      - name: Compile native companion Java
+        shell: bash
+        run: |
+          set -euo pipefail
+          android_jar="$(find "$ANDROID_HOME/platforms" -name android.jar -type f | sort -V | tail -1)"
+          test -n "$android_jar"
+          mkdir -p /tmp/solbridge-companion-classes
+          javac -source 11 -target 11 -cp "$android_jar" -d /tmp/solbridge-companion-classes \
+            solbridge/native-companion-template/src/dev/solbridge/companion/*.java
