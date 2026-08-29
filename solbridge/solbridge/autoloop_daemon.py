@@ -224,7 +224,7 @@ def _ask_chatgpt_once(prompt: str) -> str:
                 raise RuntimeError("ChatGPT went offline while waiting for response")
             cur_user = str(final_state.get("user") or "").strip()
             cur = str(final_state.get("text") or "").strip()
-            if cur_user == prompt.strip() and cur and not final_state.get("stream"):
+            if (cur_user == prompt.strip() or cur_user.endswith(prompt.strip())) and cur and not final_state.get("stream"):
                 stable = stable + 1 if cur == last else 0
                 last = cur
                 if stable >= 1:
