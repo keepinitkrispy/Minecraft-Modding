@@ -45,6 +45,25 @@ def test_workflow_success_is_success():
     assert agent._execution_failure("workflow", output) is None
 
 
+def test_companion_direct_ok_false_is_failure():
+    failure = agent._execution_failure("companion", {"ok": False, "error": "target not found"})
+    assert failure == "companion action failed: target not found"
+
+
+def test_companion_nested_ok_false_is_failure():
+    failure = agent._execution_failure("companion", {"launch": {"ok": False, "error": "no launcher"}})
+    assert failure == "companion launch failed: no launcher"
+
+
+def test_companion_verified_false_is_failure():
+    failure = agent._execution_failure("companion", {"verified": False, "failure": "accessibility disconnected"})
+    assert failure == "companion verification failed: accessibility disconnected"
+
+
+def test_companion_success_is_success():
+    assert agent._execution_failure("companion", {"health": {"ok": True}}) is None
+
+
 def test_processed_issue_is_not_rewritten_done(monkeypatch, tmp_path):
     calls = []
 
