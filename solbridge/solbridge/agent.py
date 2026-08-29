@@ -113,13 +113,14 @@ def _execution_failure(tool: str, output) -> str | None:
 def process(bus: GitHubBus, cfg: Config, issue: dict) -> bool:
     number = int(issue["number"])
     if number in _processed(cfg):
-        # A processed issue may have completed OR failed. Never rewrite its outcome
-        # merely because it was reopened; close it without changing result labels.
         try:
             bus.close(number)
         except Exception:
             pass
         return False
+
+    output = None
+    cmd = None
     try:
         cmd = parse_command(issue)
         if not _authorized_actor(issue, cfg, bus, cmd):
@@ -159,9 +160,13 @@ def process(bus: GitHubBus, cfg: Config, issue: dict) -> bool:
             "solbridge": 1,
             "status": "error",
             "device_id": cfg.device_id,
+            "command_id": cmd.get("id") if isinstance(cmd, dict) else None,
+            "tool": cmd.get("tool") if isinstance(cmd, dict) else None,
             "error": f"{type(e).__name__}: {e}",
             "traceback": traceback.format_exc(limit=8),
         }
+        if output is not None:
+            result["result"] = output
         try:
             bus.comment(number, result_block(result))
             bus.labels(number, ["solbridge-error"])
