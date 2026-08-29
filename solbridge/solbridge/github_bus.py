@@ -1,7 +1,8 @@
 from __future__ import annotations
+import base64
 import json
 from urllib.error import HTTPError
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
 
@@ -58,6 +59,28 @@ class GitHubBus:
                 continue
             out.append(x)
         return out
+
+    def verify_owner_command_file(self, *, path: str, commit_sha: str, expected: dict) -> bool:
+        owner = self.repo.split("/", 1)[0]
+        if not path.startswith("commands/") or not path.endswith(".json") or ".." in path:
+            return False
+        if len(commit_sha) != 40 or any(c not in "0123456789abcdefABCDEF" for c in commit_sha):
+            return False
+        _, commit = self._request("GET", f"/commits/{commit_sha}")
+        actor = str(((commit or {}).get("author") or {}).get("login") or "")
+        if actor.lower() != owner.lower():
+            return False
+        _, item = self._request(
+            "GET", f"/contents/{quote(path, safe='/')}", params={"ref": commit_sha}
+        )
+        if not isinstance(item, dict) or item.get("type") != "file" or item.get("encoding") != "base64":
+            return False
+        try:
+            raw = base64.b64decode(str(item.get("content") or "")).decode("utf-8")
+            actual = json.loads(raw)
+        except Exception:
+            return False
+        return actual == expected
 
     def comment(self, issue_number: int, body: str):
         return self._request(
