@@ -19,7 +19,7 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: pip install -e ./solbridge pytest
       - run: pytest -q ./solbridge/tests
-      - run: python -m py_compile ./solbridge/deploy_guardian.py
+      - run: python -m py_compile ./solbridge/deploy_guardian.py ./solbridge/deploy_guardian_heartbeat.py
       - name: Compile native companion Java
         shell: bash
         run: |
