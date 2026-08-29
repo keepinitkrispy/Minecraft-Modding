@@ -83,7 +83,7 @@ public class BridgeService extends Service {
         i.putExtra("com.termux.RUN_COMMAND_ARGUMENTS", new String[]{});
         i.putExtra("com.termux.RUN_COMMAND_WORKDIR", "/data/data/com.termux/files/home");
         i.putExtra("com.termux.RUN_COMMAND_BACKGROUND", true);
-        if (Build.VERSION.SDK_INT >= 26) startForegroundService(i); else startService(i);
+        startService(i);
         guardianLastDispatch = true;
         guardianLastError = "";
         return true;
