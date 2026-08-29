@@ -69,11 +69,45 @@ def _heartbeat() -> bool:
     except Exception:
         return False
 
+def _execution_failure(tool: str, output) -> str | None:
+    """Return a failure reason when a tool result proves execution failed.
+
+    Tool implementations intentionally return structured subprocess results instead
+    of raising on every non-zero exit. The agent is the authoritative completion
+    boundary: it must never publish solbridge-done for a process/workflow that
+    actually failed.
+    """
+    if not isinstance(output, dict):
+        return None
+
+    rc = output.get("returncode")
+    if isinstance(rc, int) and not isinstance(rc, bool) and rc != 0:
+        return f"{tool} returned nonzero exit status {rc}"
+
+    if tool == "workflow":
+        steps = output.get("steps")
+        if not isinstance(steps, list):
+            return "workflow returned no valid steps list"
+        for i, step in enumerate(steps):
+            if not isinstance(step, dict):
+                return f"workflow step {i} returned an invalid result"
+            if step.get("status") == "error":
+                return f"workflow step {i} ({step.get('tool', 'unknown')}) failed: {step.get('error', 'unknown error')}"
+            result = step.get("result")
+            if isinstance(result, dict):
+                step_rc = result.get("returncode")
+                if isinstance(step_rc, int) and not isinstance(step_rc, bool) and step_rc != 0:
+                    return f"workflow step {i} ({step.get('tool', 'unknown')}) returned nonzero exit status {step_rc}"
+        return None
+
+    return None
+
 def process(bus: GitHubBus, cfg: Config, issue: dict) -> bool:
     number = int(issue["number"])
     if number in _processed(cfg):
+        # A processed issue may have completed OR failed. Never rewrite its outcome
+        # merely because it was reopened; close it without changing result labels.
         try:
-            bus.labels(number, ["solbridge-done"])
             bus.close(number)
         except Exception:
             pass
@@ -95,6 +129,9 @@ def process(bus: GitHubBus, cfg: Config, issue: dict) -> bool:
         else:
             output = execute(cfg, tool, dict(cmd.get("args") or {}))
         restart = bool(isinstance(output, dict) and output.pop("_restart_agent", False))
+        failure = _execution_failure(tool, output)
+        if failure:
+            raise RuntimeError(failure)
         result = {
             "solbridge": 1,
             "status": "ok",
