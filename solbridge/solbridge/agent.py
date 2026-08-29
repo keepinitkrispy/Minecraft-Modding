@@ -25,10 +25,21 @@ def parse_command(issue: dict) -> dict:
 def result_block(data: dict) -> str:
     return "```json\n" + json.dumps(data, indent=2, ensure_ascii=False)[:60000] + "\n```"
 
-def _authorized_actor(issue: dict, cfg: Config) -> bool:
+def _authorized_actor(issue: dict, cfg: Config, bus: GitHubBus, cmd: dict) -> bool:
     actor = str((issue.get("user") or {}).get("login") or "")
     owner = cfg.repo.split("/", 1)[0]
-    return bool(actor) and actor.lower() == owner.lower()
+    if actor and actor.lower() == owner.lower():
+        return True
+    if actor.lower() != "github-actions[bot]":
+        return False
+    ingress = cmd.get("_ingress")
+    if not isinstance(ingress, dict) or ingress.get("type") != "owner-command-file":
+        return False
+    path = str(ingress.get("path") or "")
+    commit_sha = str(ingress.get("commit") or "")
+    expected = dict(cmd)
+    expected.pop("_ingress", None)
+    return bus.verify_owner_command_file(path=path, commit_sha=commit_sha, expected=expected)
 
 def _processed_path(cfg: Config) -> Path:
     return cfg.workspace / ".solbridge_processed_issues.json"
@@ -61,9 +72,9 @@ def process(bus: GitHubBus, cfg: Config, issue: dict) -> bool:
             pass
         return False
     try:
-        if not _authorized_actor(issue, cfg):
-            raise PermissionError("Command issue author is not the SolBridge bus owner")
         cmd = parse_command(issue)
+        if not _authorized_actor(issue, cfg, bus, cmd):
+            raise PermissionError("Command provenance is not authorized")
         target = cmd.get("device_id")
         if target not in (None, "*", cfg.device_id):
             return False
