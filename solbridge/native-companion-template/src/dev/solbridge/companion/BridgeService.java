@@ -3,6 +3,7 @@ package dev.solbridge.companion;
 import android.app.*;
 import android.accessibilityservice.AccessibilityService;
 import android.content.*;
+import android.content.pm.PackageManager;
 import android.os.*;
 import java.io.*;
 import java.net.*;
@@ -11,7 +12,14 @@ import java.util.*;
 
 public class BridgeService extends Service {
     static final String TOKEN = "__TOKEN__";
+    static final String RUN_COMMAND_PERMISSION = "com.termux.permission.RUN_COMMAND";
+    static final String TERMUX_PACKAGE = "com.termux";
+    static final String TERMUX_RUN_SERVICE = "com.termux.app.RunCommandService";
+    static final String ENSURE_SCRIPT = "/data/data/com.termux/files/home/.local/bin/solbridge-ensure";
     volatile boolean run = true;
+    volatile long guardianLastAttemptMs = 0;
+    volatile boolean guardianLastDispatch = false;
+    volatile String guardianLastError = "not-yet-run";
     ServerSocket server;
 
     @Override public void onCreate() {
@@ -23,10 +31,11 @@ public class BridgeService extends Service {
         Notification.Builder b = Build.VERSION.SDK_INT >= 26
             ? new Notification.Builder(this, "solbridge") : new Notification.Builder(this);
         b.setContentTitle("SolBridge control plane")
-         .setContentText("Local agent bridge active")
+         .setContentText("Local bridge + recovery guardian active")
          .setSmallIcon(android.R.drawable.stat_notify_sync);
         startForeground(8765, b.build());
         new Thread(this::serve, "solbridge-http").start();
+        new Thread(this::guardianLoop, "solbridge-guardian").start();
     }
 
     @Override public int onStartCommand(Intent i, int flags, int startId) { return START_STICKY; }
@@ -35,6 +44,41 @@ public class BridgeService extends Service {
         run = false;
         try { if (server != null) server.close(); } catch (Exception ignored) {}
         super.onDestroy();
+    }
+
+    void guardianLoop() {
+        while (run) {
+            try {
+                dispatchTermuxEnsure();
+            } catch (Throwable t) {
+                guardianLastDispatch = false;
+                guardianLastError = t.getClass().getSimpleName() + ": " + String.valueOf(t.getMessage());
+            }
+            for (int i = 0; i < 60 && run; i++) {
+                try { Thread.sleep(1000); } catch (InterruptedException e) { return; }
+            }
+        }
+    }
+
+    boolean dispatchTermuxEnsure() {
+        guardianLastAttemptMs = System.currentTimeMillis();
+        if (checkSelfPermission(RUN_COMMAND_PERMISSION) != PackageManager.PERMISSION_GRANTED) {
+            guardianLastDispatch = false;
+            guardianLastError = "RUN_COMMAND permission not granted";
+            return false;
+        }
+        Intent i = new Intent();
+        i.setClassName(TERMUX_PACKAGE, TERMUX_RUN_SERVICE);
+        i.setAction("com.termux.RUN_COMMAND");
+        i.putExtra("com.termux.RUN_COMMAND_PATH", ENSURE_SCRIPT);
+        i.putExtra("com.termux.RUN_COMMAND_ARGUMENTS", new String[]{});
+        i.putExtra("com.termux.RUN_COMMAND_WORKDIR", "/data/data/com.termux/files/home");
+        i.putExtra("com.termux.RUN_COMMAND_BACKGROUND", true);
+        i.putExtra("com.termux.RUN_COMMAND_SESSION_ACTION", "0");
+        if (Build.VERSION.SDK_INT >= 26) startForegroundService(i); else startService(i);
+        guardianLastDispatch = true;
+        guardianLastError = "";
+        return true;
     }
 
     void serve() {
@@ -78,8 +122,12 @@ public class BridgeService extends Service {
     String route(String p) throws Exception {
         SolAccessibilityService a = SolAccessibilityService.INSTANCE;
         if (p.startsWith("/health")) {
-            return "{\"ok\":true,\"accessibility\":" + (a != null) + ",\"pid\":" + android.os.Process.myPid() + "}";
+            return "{\"ok\":true,\"accessibility\":" + (a != null) + ",\"pid\":" + android.os.Process.myPid()
+                + ",\"guardian_dispatch\":" + guardianLastDispatch
+                + ",\"guardian_last_attempt_ms\":" + guardianLastAttemptMs
+                + ",\"guardian_error\":\"" + json(guardianLastError) + "\"}";
         }
+        if (p.startsWith("/guardian")) return ok(dispatchTermuxEnsure());
         if (p.startsWith("/events")) return SolAccessibilityService.events();
         if (p.startsWith("/tree")) return a == null ? "[]" : a.tree();
         if (p.startsWith("/tap")) {
@@ -119,6 +167,7 @@ public class BridgeService extends Service {
     String ok(boolean x) { return "{\"ok\":" + x + "}"; }
 
     static String json(String s) {
+        if (s == null) return "";
         return s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\r", " ").replace("\n", " ");
     }
 
