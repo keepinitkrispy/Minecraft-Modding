@@ -15,8 +15,19 @@ def test_guardian_uses_fixed_background_run_command_target():
     assert 'ENSURE_SCRIPT = "/data/data/com.termux/files/home/.local/bin/solbridge-ensure"' in src
     assert 'i.setAction("com.termux.RUN_COMMAND")' in src
     assert 'i.putExtra("com.termux.RUN_COMMAND_BACKGROUND", true)' in src
+    assert 'RUN_COMMAND_SESSION_ACTION' not in src
     assert 'checkSelfPermission(RUN_COMMAND_PERMISSION)' in src
     assert 'guardianLoop' in src
+
+
+def test_guardian_exposes_own_permission_settings_for_automated_recovery():
+    src = (ROOT / "native-companion-template" / "src" / "dev" / "solbridge" / "companion" / "BridgeService.java").read_text()
+    assert 'Settings.ACTION_APPLICATION_DETAILS_SETTINGS' in src
+    assert 'p.startsWith("/permission_settings")' in src
+    wrapper = (ROOT / "deploy_guardian_heartbeat.py").read_text()
+    assert 'd.companion_get("/permission_settings")' in wrapper
+    assert 'run commands in termux environment' in wrapper.lower()
+    assert 'additional permissions' in wrapper.lower()
 
 
 def test_guardian_only_recovers_after_stale_heartbeat():
@@ -50,3 +61,12 @@ def test_install_script_exposes_only_fixed_recovery_script_and_external_gate():
 def test_boot_fallback_reuses_same_recovery_primitive():
     install = (ROOT / "install-termux.sh").read_text()
     assert 'exec "$HOME/.local/bin/solbridge-ensure"' in install
+
+
+def test_fault_injection_requires_native_attempt_and_heartbeat_recovery():
+    fault = (ROOT / "guardian_recovery_fault_test.py").read_text()
+    assert 'service_down()' in fault
+    assert 'guardian_attempt_advanced' in fault
+    assert 'service_recovered' in fault
+    assert 'heartbeat_resumed' in fault
+    assert 'all(result["checks"].values())' in fault
