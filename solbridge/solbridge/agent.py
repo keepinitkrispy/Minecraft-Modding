@@ -4,7 +4,7 @@ from pathlib import Path
 from .config import Config
 from .github_bus import GitHubBus
 from .tools import execute
-from .companion import execute_companion
+from .companion import execute_companion, _get as companion_get
 from .autoloop import execute_autoloop
 
 STOP = False
@@ -61,6 +61,13 @@ def _mark_processed(cfg: Config, number: int) -> None:
     tmp = p.with_suffix(".tmp")
     tmp.write_text(json.dumps(newest))
     tmp.replace(p)
+
+def _heartbeat() -> bool:
+    try:
+        result = companion_get("/heartbeat", timeout=3.0)
+        return bool(isinstance(result, dict) and result.get("ok"))
+    except Exception:
+        return False
 
 def process(bus: GitHubBus, cfg: Config, issue: dict) -> bool:
     number = int(issue["number"])
@@ -128,6 +135,7 @@ def main():
     bus.ensure_labels()
     print(f"SolBridge online: {cfg.device_id} -> {cfg.repo}", flush=True)
     while not STOP:
+        _heartbeat()
         try:
             for issue in bus.pending():
                 if process(bus, cfg, issue):
