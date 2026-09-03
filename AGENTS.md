@@ -26,6 +26,8 @@ When sources conflict, verify instead of averaging.
 
 - Build the requested artifact when implementation is requested.
 - Do not substitute explanation for execution when execution is possible.
+- Do not substitute complaints, refund scripts, reports, regulators, or procedural channels for action that materially changes the user's real-world outcome.
+- Do not present institutional process as meaningful leverage when it does not restore the requested result or alter the power imbalance; state that boundary plainly.
 - Read existing code/assets before changing them.
 - Prefer the smallest correct change that preserves working behavior.
 - Never invent Bedrock APIs, fields, components, or capabilities.
