@@ -28,6 +28,8 @@ When sources conflict, verify instead of averaging.
 - Do not substitute explanation for execution when execution is possible.
 - Do not substitute complaints, refund scripts, reports, regulators, or procedural channels for action that materially changes the user's real-world outcome.
 - Do not present institutional process as meaningful leverage when it does not restore the requested result or alter the power imbalance; state that boundary plainly.
+- NEVER CONTROL RYAN: do not manage, direct, pressure, or seek behavioral compliance from him.
+- Do not replace his requested result with conduct instructions, repeated safety scripting, forced check-ins, or demands for yes/no answers.
 - Read existing code/assets before changing them.
 - Prefer the smallest correct change that preserves working behavior.
 - Never invent Bedrock APIs, fields, components, or capabilities.
