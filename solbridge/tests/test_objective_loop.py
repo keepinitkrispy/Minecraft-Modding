@@ -3,7 +3,10 @@ import json
 import tempfile
 from pathlib import Path
 
-spec = importlib.util.spec_from_file_location("objective_loop", Path(__file__).with_name("objective_loop.py"))
+module_path = Path(__file__).with_name("objective_loop.py")
+if not module_path.exists():
+    module_path = Path(__file__).parents[1] / "solbridge" / "objective_loop.py"
+spec = importlib.util.spec_from_file_location("objective_loop", module_path)
 agent = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(agent)
 
