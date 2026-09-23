@@ -1,6 +1,10 @@
 import importlib.util
 import json
 import tempfile
+import threading
+import urllib.error
+import urllib.request
+from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 module_path = Path(__file__).with_name("objective_loop.py")
@@ -47,4 +51,25 @@ with tempfile.TemporaryDirectory() as tmp:
     assert after["generations"][0]["blocker_before"] == "No transport"
     assert len(after["generations"][0]["tested"]) == 2
     assert after["status"] != "PASS"
+    agent.SECRET = agent.ROOT / "agent" / "session_secret"
+    agent.SECRET.parent.mkdir(parents=True)
+    agent.SECRET.write_text("private-pairing-secret")
+    server = ThreadingHTTPServer(("127.0.0.1", 0), agent.Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.server_port}"
+    assert urllib.request.urlopen(base + "/health").status == 200
+    try:
+        urllib.request.urlopen(base + "/api/state")
+    except urllib.error.HTTPError as exc:
+        assert exc.code == 404
+    else:
+        raise AssertionError("Unauthenticated state must not be exposed")
+    request = urllib.request.Request(
+        base + "/api/message", data=json.dumps({"message": "Keep solving the original goal"}).encode(),
+        headers={"Cookie": "og_session=private-pairing-secret", "Content-Type": "application/json"},
+    )
+    assert urllib.request.urlopen(request).status == 202
+    assert agent.read_state()["chat"][-1]["text"] == "Keep solving the original goal"
+    server.shutdown()
 print("Two-route cycle, frozen objective and false PASS guard: PASS")
