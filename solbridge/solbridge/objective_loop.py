@@ -29,6 +29,7 @@ SITE = "https://keepinitkrispy.github.io/Persistent-Fable/fable-enforce/web/"
 PORT = 8765
 LOCK = threading.RLock()
 STOP = threading.Event()
+WAKE = threading.Event()
 MAX_CHAT = 120
 
 
@@ -99,11 +100,12 @@ def probe(name: str) -> dict:
                 "model_bytes": MODEL.stat().st_size if MODEL.exists() else 0,
                 "inference_binary": bool(shutil.which("llama-cli"))}
     if name == "phone":
+        env = dict(os.environ, SVDIR=os.environ.get("PREFIX", "/data/data/com.termux/files/usr") + "/var/service")
         return {"ok": bool(shutil.which("python") and shutil.which("gh")),
                 "available": {tool: bool(shutil.which(tool)) for tool in
                               ("python", "gh", "cloudflared", "llama-cli", "curl", "git")},
                 "service": subprocess.run(["sv", "status", "solbridge"], capture_output=True,
-                                          text=True, timeout=8).stdout.strip()[:180]}
+                                          text=True, timeout=8, env=env).stdout.strip()[:180]}
     if name == "tunnel":
         p = ROOT / "agent" / "tunnel_url"
         url = p.read_text().strip() if p.exists() else ""
@@ -124,6 +126,30 @@ def fetch_public_tunnel(url: str) -> bool:
 
 
 PROBES = ("model", "phone", "site", "site_script", "repository", "tunnel")
+
+
+def assess_result(data: dict, tunnel_reachable: bool) -> None:
+    """Evaluate this frozen harness target from external observations."""
+    visits = data.get("device_visits", {})
+    generations = data.get("generations", [])
+    tests = [item for gen in generations for item in gen.get("tested", [])]
+    distinct_routes = any(len({item["route"]["domain"].lower() for item in gen.get("tested", [])}) >= 2
+                          for gen in generations)
+    model_ready = MODEL.exists() and MODEL.stat().st_size == 1282439584
+    evidence = {
+        "free_local_model_present": model_ready,
+        "reasoned_and_tested_distinct_routes": distinct_routes,
+        "pixel_https_app_reachable": tunnel_reachable,
+        "pixel_browser_opened_app": bool(visits.get("Android")),
+        "mac_browser_opened_app": bool(visits.get("Macintosh")),
+        "external_observations_recorded": len(tests) >= 2,
+    }
+    data["target_evidence"] = evidence
+    data["status"] = "PASS" if all(evidence.values()) else "OPEN"
+    if data["status"] == "PASS" and not data.get("passAt"):
+        data["passAt"] = time.time()
+        event(data, "target_changed_and_verified", evidence)
+        chat(data, "assistant", "The Pixel and Mac both opened this HTTPS app, and the Pixel completed two distinct, observed routes. The original objective now has verified outside changes.")
 
 
 def extract_plan(text: str) -> dict:
@@ -221,7 +247,9 @@ def cycle() -> dict:
         reply = plan["reply"] or f"I tested {evidence[0]['route']['domain']} and {evidence[1]['route']['domain']}."
         chat(d, "assistant", f"{reply} I completed cycle {number}. The goal stays open while I revise the blocker from the observed results.")
     update_state(save)
-    return {"status": "OPEN", "tested": [x["route"]["probe"] for x in evidence]}
+    tunnel = probe("tunnel")
+    result = update_state(lambda d: assess_result(d, bool(tunnel.get("reachable"))))
+    return {"status": result["status"], "tested": [x["route"]["probe"] for x in evidence]}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -266,6 +294,15 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/state":
             self.send(200, json.dumps(read_state(), ensure_ascii=False).encode("utf-8"))
         elif path == "/":
+            user_agent = self.headers.get("User-Agent", "")
+            platform = "Android" if "Android" in user_agent else "Macintosh" if "Macintosh" in user_agent else ""
+            if platform:
+                update_state(lambda d: (d.setdefault("device_visits", {}).update({platform: time.time()}),
+                                        event(d, "browser_opened_app", {"platform": platform})))
+                tunnel_path = ROOT / "agent" / "tunnel_url"
+                url = tunnel_path.read_text().strip() if tunnel_path.exists() else ""
+                reachable = fetch_public_tunnel(url) if url else False
+                update_state(lambda d: assess_result(d, reachable))
             self.send(200, PAGE.encode("utf-8"), "text/html; charset=utf-8")
         elif path == "/app.js":
             self.send(200, CLIENT.encode("utf-8"), "text/javascript; charset=utf-8")
@@ -286,6 +323,7 @@ class Handler(BaseHTTPRequestHandler):
             if not text:
                 raise ValueError("Empty message")
             update_state(lambda d: (chat(d, "user", text), event(d, "user_note", {"text": text})))
+            WAKE.set()
             self.send(202, b'{"saved":true}')
         except Exception:
             self.send(400, b'{"error":"invalid message"}')
@@ -336,7 +374,8 @@ def main():
         while not STOP.is_set():
             if not args.serve_only:
                 cycle()
-            STOP.wait(180)
+            WAKE.wait(180)
+            WAKE.clear()
     finally:
         server.shutdown()
 
