@@ -25,6 +25,15 @@ gh repo view "$BUS_REPO" >/dev/null
 
 mkdir -p "$(dirname "$DEST")" "$(dirname "$CFG")" "$HOME/solbridge-workspace"
 if [ -d "$DEST/.git" ]; then
+  ORIGIN="$(git -C "$DEST" remote get-url origin)"
+  if [ "$ORIGIN" != "$SOURCE_REPO" ]; then
+    echo "Stopped: the existing checkout has a different origin; left it untouched."
+    exit 1
+  fi
+  if [ -n "$(git -C "$DEST" status --porcelain)" ]; then
+    echo "Stopped: the existing checkout has local changes; left it untouched."
+    exit 1
+  fi
   git -C "$DEST" fetch --depth 1 origin "$BRANCH"
   git -C "$DEST" checkout -B "$BRANCH" FETCH_HEAD
 else
@@ -34,6 +43,7 @@ else
   git clone --depth 1 --branch "$BRANCH" "$SOURCE_REPO" "$DEST"
 fi
 test -f "$DEST/solbridge/solbridge/agent.py"
+PYTHONPATH="$DEST/solbridge" python -c 'import solbridge.agent'
 
 python - "$CFG" "$BUS_REPO" <<'PY'
 import json, pathlib, sys
@@ -51,7 +61,9 @@ else:
     }
 # Keep auth in the existing GitHub CLI login; do not store or print a token in config.
 data["token"] = ""
-data.setdefault("source_dir", "~/.local/share/solbridge-src")
+data["device_id"] = "ryan-pixel"
+data.setdefault("workspace", "~/solbridge-workspace")
+data["source_dir"] = "~/.local/share/solbridge-src"
 p.write_text(json.dumps(data, indent=2) + "\n")
 p.chmod(0o600)
 PY
