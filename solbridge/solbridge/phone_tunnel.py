@@ -3,6 +3,7 @@ import os
 import re
 import subprocess
 import threading
+import time
 from pathlib import Path
 
 ROOT = Path.home() / "solbridge-workspace"
@@ -14,12 +15,15 @@ TUNNEL = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com")
 
 
 def notify(url: str):
+    for _ in range(60):
+        if SECRET.exists():
+            break
+        time.sleep(0.5)
     if not SECRET.exists():
         raise RuntimeError("Pixel app has not generated the private pairing link yet")
     link = url + "/invite/" + SECRET.read_text().strip()
     URL_PATH.parent.mkdir(parents=True, exist_ok=True)
     old = URL_PATH.read_text().strip() if URL_PATH.exists() else ""
-    URL_PATH.write_text(url + "\n")
     if old != url:
         result = subprocess.run(
             ["gh", "issue", "comment", ISSUE, "-R", REPO, "--body",
@@ -28,6 +32,7 @@ def notify(url: str):
         )
         if result.returncode:
             raise RuntimeError("Could not post private tunnel link: " + result.stderr[-300:])
+    URL_PATH.write_text(url + "\n")
     print("Tunnel is live: " + url, flush=True)
 
 
@@ -42,11 +47,16 @@ def main():
             lines.append(line[-500:])
             found = TUNNEL.search(line)
             if found and not getattr(read_stream, "published", False):
-                read_stream.published = True
-                try:
-                    notify(found.group(0))
-                except Exception as exc:
-                    print("Tunnel publish failed: " + str(exc), flush=True)
+                for _ in range(8):
+                    try:
+                        notify(found.group(0))
+                        read_stream.published = True
+                        break
+                    except Exception as exc:
+                        print("Tunnel publish retry: " + str(exc), flush=True)
+                        time.sleep(5)
+                if not getattr(read_stream, "published", False):
+                    process.terminate()
 
     threads = [threading.Thread(target=read_stream, args=(stream,), daemon=True)
                for stream in (process.stdout, process.stderr)]
