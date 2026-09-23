@@ -1,6 +1,7 @@
 """Install restartable Pixel agent and tunnel services without editing Termux configuration."""
 import os
 import subprocess
+import time
 from pathlib import Path
 
 root = Path.home() / "solbridge-workspace" / "agent"
@@ -18,6 +19,10 @@ for name, source in (("outcome-agent", "objective_loop.py"), ("outcome-tunnel", 
     run.chmod(0o700)
     log.chmod(0o700)
     (service / "down").unlink(missing_ok=True)
+    for _ in range(40):
+        if (service / "supervise" / "ok").exists():
+            break
+        time.sleep(0.25)
     result = subprocess.run([str(prefix / "bin/sv"), "up", name], capture_output=True, text=True, env=env, timeout=20)
     print(name, "up code", result.returncode, (result.stdout + result.stderr)[-220:])
 for name in ("outcome-agent", "outcome-tunnel"):
