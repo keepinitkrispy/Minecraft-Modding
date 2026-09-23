@@ -1,5 +1,5 @@
 from __future__ import annotations
-import fcntl, json, os, signal, sys, time, traceback
+import base64, fcntl, json, os, signal, sys, time, traceback
 from pathlib import Path
 from .config import Config
 from .github_bus import GitHubBus
@@ -24,6 +24,72 @@ def parse_command(issue: dict) -> dict:
 
 def result_block(data: dict) -> str:
     return "```json\n" + json.dumps(data, indent=2, ensure_ascii=False)[:60000] + "\n```"
+
+OUTCOME_GATE_URL = "https://keepinitkrispy.github.io/Persistent-Fable/fable-enforce/web/"
+
+def _is_outcome_gate_state(state: object) -> bool:
+    if not isinstance(state, dict) or state.get("schemaVersion") != 1:
+        return False
+    objectives = state.get("objectives")
+    active_id = state.get("activeId")
+    return (
+        isinstance(objectives, list)
+        and len(objectives) <= 1000
+        and isinstance(active_id, str)
+        and any(isinstance(item, dict) and item.get("id") == active_id for item in objectives)
+    )
+
+def _verify_active_objective_write(cfg: Config, cmd: dict, output: dict) -> dict | None:
+    args = cmd.get("args")
+    if cmd.get("tool") != "write_text" or not isinstance(args, dict):
+        return None
+    if args.get("path") != "objectives/active.json":
+        return None
+    expected_text = args.get("text")
+    if not isinstance(expected_text, str):
+        raise RuntimeError("active objective write payload is not text")
+    readback = execute(cfg, "read_text", {"path": "objectives/active.json"})
+    if not isinstance(readback, dict) or readback.get("truncated") or readback.get("text") != expected_text:
+        raise RuntimeError("active objective write did not match its phone read-back")
+    try:
+        state = json.loads(readback["text"])
+    except Exception as error:
+        raise RuntimeError("phone read-back is not valid JSON") from error
+    if not _is_outcome_gate_state(state):
+        raise RuntimeError("phone read-back is not a valid active Outcome Gate state")
+    output["readback_verified"] = True
+    return state
+
+def _outcome_gate_return_link(issue_number: int, cmd: dict, device_id: str, state: dict, result: dict) -> str | None:
+    args = cmd.get("args")
+    tool_result = result.get("result")
+    if (
+        cmd.get("tool") != "write_text"
+        or not isinstance(args, dict)
+        or args.get("path") != "objectives/active.json"
+        or not _is_outcome_gate_state(state)
+        or result.get("status") != "ok"
+        or not isinstance(tool_result, dict)
+        or tool_result.get("readback_verified") is not True
+    ):
+        return None
+    receipt = {
+        "schema": "outcome-gate-phone-receipt/v1",
+        "state": state,
+        "status": "ok",
+        "device_id": device_id,
+        "command_id": result.get("command_id"),
+        "issue_number": int(issue_number),
+        "tool": "write_text",
+        "path": "objectives/active.json",
+        "readback_verified": True,
+        "bytes": tool_result.get("bytes"),
+    }
+    raw = json.dumps(receipt, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    encoded = base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+    if len(encoded) > 12000:
+        return None
+    return OUTCOME_GATE_URL + "#bridge-state=" + encoded
 
 def _authorized_actor(issue: dict, cfg: Config, bus: GitHubBus, cmd: dict) -> bool:
     actor = str((issue.get("user") or {}).get("login") or "")
@@ -141,6 +207,7 @@ def process(bus: GitHubBus, cfg: Config, issue: dict) -> bool:
         failure = _execution_failure(tool, output)
         if failure:
             raise RuntimeError(failure)
+        verified_gate_state = _verify_active_objective_write(cfg, cmd, output) if isinstance(output, dict) else None
         result = {
             "solbridge": 1,
             "status": "ok",
@@ -150,7 +217,11 @@ def process(bus: GitHubBus, cfg: Config, issue: dict) -> bool:
             "elapsed_ms": int((time.time() - started) * 1000),
             "result": output,
         }
-        bus.comment(number, result_block(result))
+        comment = result_block(result)
+        return_url = _outcome_gate_return_link(number, cmd, cfg.device_id, verified_gate_state, result) if verified_gate_state else None
+        if return_url:
+            comment += f"\n\n[Open the saved goal in Outcome Gate]({return_url})"
+        bus.comment(number, comment)
         bus.labels(number, ["solbridge-done"])
         bus.close(number)
         _mark_processed(cfg, number)
