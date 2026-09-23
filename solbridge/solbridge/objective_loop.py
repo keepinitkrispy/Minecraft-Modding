@@ -203,7 +203,7 @@ def reason(data: dict) -> dict:
         "CURRENT BLOCKER: " + str(data.get("blocker", ""))[:500] + " "
         "LATEST USER MESSAGES: " + json.dumps([x["text"] for x in data.get("chat", [])
                                                 if x.get("role") == "user"][-2:], ensure_ascii=False)[:500] + " "
-        "PAST ATTEMPTS: " + json.dumps(history, ensure_ascii=False)[-1600:]
+        "PAST ATTEMPTS: " + json.dumps(history, ensure_ascii=False)[-1600:] + " /no_think"
     )
     cmd = [executable, "-m", str(MODEL), "-p", prompt, "-n", "500",
            "-c", "4096", "--temp", "0.25", "--no-display-prompt", "--simple-io"]
