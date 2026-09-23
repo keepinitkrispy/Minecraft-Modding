@@ -13,7 +13,8 @@ for name, source in (("outcome-agent", "objective_loop.py"), ("outcome-tunnel", 
     logs = service / "log"
     logs.mkdir(parents=True, exist_ok=True)
     run = service / "run"
-    run.write_text(f"#!{prefix}/bin/sh\nexec 2>&1\nexec {prefix}/bin/python {root / source}\n")
+    output = root / (name + ".log")
+    run.write_text(f"#!{prefix}/bin/sh\nexec >>{output} 2>&1\nexec {prefix}/bin/python {root / source}\n")
     log = logs / "run"
     log.write_text(f"#!{prefix}/bin/sh\nexec {prefix}/bin/svlogger {prefix}/var/log/sv/{name}\n")
     run.chmod(0o700)
@@ -26,5 +27,7 @@ for name, source in (("outcome-agent", "objective_loop.py"), ("outcome-tunnel", 
     result = subprocess.run([str(prefix / "bin/sv"), "up", name], capture_output=True, text=True, env=env, timeout=20)
     print(name, "up code", result.returncode, (result.stdout + result.stderr)[-220:])
 for name in ("outcome-agent", "outcome-tunnel"):
+    if name == "outcome-agent":
+        subprocess.run([str(prefix / "bin/sv"), "restart", name], capture_output=True, text=True, env=env, timeout=30)
     result = subprocess.run([str(prefix / "bin/sv"), "status", name], capture_output=True, text=True, env=env, timeout=20)
     print(name, "status", result.returncode, (result.stdout + result.stderr)[-350:])
