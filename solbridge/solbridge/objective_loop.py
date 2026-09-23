@@ -143,6 +143,7 @@ def assess_result(data: dict, tunnel_reachable: bool) -> None:
         "pixel_browser_opened_app": bool(visits.get("Android")),
         "mac_browser_opened_app": bool(visits.get("Macintosh")),
         "external_observations_recorded": len(tests) >= 2,
+        "worker_recovered_after_process_death": data.get("restart_verified") is True,
     }
     data["target_evidence"] = evidence
     data["status"] = "PASS" if all(evidence.values()) else "OPEN"
