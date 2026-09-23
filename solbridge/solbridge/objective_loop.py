@@ -199,17 +199,17 @@ def reason(data: dict) -> dict:
         '{\"domain\":\"...\",\"mechanism\":\"...\",\"mapping\":\"...\",'
         '\"test\":\"...\",\"probe\":\"phone\"}]}. '
         "Allowed probes: " + ", ".join(PROBES) + ". "
-        "OBJECTIVE: " + str(data["statement"])[:800] + " "
-        "TARGET: " + json.dumps(data["target"])[:800] + " "
-        "CURRENT BLOCKER: " + str(data.get("blocker", ""))[:500] + " "
+        "OBJECTIVE: " + str(data["statement"])[:430] + " "
+        "TARGET: " + json.dumps(data["target"])[:350] + " "
+        "CURRENT BLOCKER: " + str(data.get("blocker", ""))[:220] + " "
         "LATEST USER MESSAGES: " + json.dumps([x["text"] for x in data.get("chat", [])
                                                 if x.get("role") == "user"][-2:], ensure_ascii=False)[:500] + " "
-        "PAST ATTEMPTS: " + json.dumps(history, ensure_ascii=False)[-1600:] + " /no_think"
+        "PAST ATTEMPTS: " + json.dumps(history, ensure_ascii=False)[-500:] + " /no_think"
     )
     cmd = [executable, "-m", str(MODEL), "-p", prompt, "-n", "500",
-           "-c", "4096", "--temp", "0.25", "--no-display-prompt", "--simple-io"]
+           "-c", "4096", "--temp", "0.25", "--no-display-prompt", "--simple-io", "--single-turn"]
     try:
-        output = subprocess.run(cmd, capture_output=True, text=True, timeout=500)
+        output = subprocess.run(cmd, capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=500)
     except subprocess.TimeoutExpired as exc:
         partial = exc.stdout or b""
         partial = partial.decode("utf-8", "replace") if isinstance(partial, bytes) else partial
