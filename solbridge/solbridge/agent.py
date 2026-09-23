@@ -25,7 +25,7 @@ def parse_command(issue: dict) -> dict:
 def result_block(data: dict) -> str:
     return "```json\n" + json.dumps(data, indent=2, ensure_ascii=False)[:60000] + "\n```"
 
-OUTCOME_GATE_URL = "https://keepinitkrispy.github.io/Persistent-Fable/fable-enforce/web/"
+OUTCOME_GATE_URL = "https://keepinitkrispy.github.io/Persistent-Fable/"
 
 def _is_outcome_gate_state(state: object) -> bool:
     if not isinstance(state, dict) or state.get("schemaVersion") != 1:
