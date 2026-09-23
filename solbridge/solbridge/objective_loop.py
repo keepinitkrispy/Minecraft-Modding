@@ -207,7 +207,17 @@ def reason(data: dict) -> dict:
     )
     cmd = [executable, "-m", str(MODEL), "-p", prompt, "-n", "500",
            "-c", "4096", "--temp", "0.25", "--no-display-prompt", "--simple-io"]
-    output = subprocess.run(cmd, capture_output=True, text=True, timeout=500)
+    try:
+        output = subprocess.run(cmd, capture_output=True, text=True, timeout=500)
+    except subprocess.TimeoutExpired as exc:
+        partial = exc.stdout or b""
+        partial = partial.decode("utf-8", "replace") if isinstance(partial, bytes) else partial
+        if partial:
+            try:
+                return extract_plan(partial)
+            except (ValueError, json.JSONDecodeError):
+                pass
+        raise RuntimeError("Local model did not produce a complete plan within 500 seconds") from exc
     if output.returncode:
         raise RuntimeError(f"reasoner exit {output.returncode}: {output.stderr[-500:]}")
     return extract_plan(output.stdout)
