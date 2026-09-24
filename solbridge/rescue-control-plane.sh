@@ -54,17 +54,14 @@ JSON
   chmod 600 "$CFG"
 fi
 
-mkdir -p "$SERVICE/log" "$PREFIX/var/log/sv/solbridge"
+mkdir -p "$SERVICE"
+rm -rf "$SERVICE/log"
 cat > "$SERVICE/run" <<'RUN'
 #!/data/data/com.termux/files/usr/bin/sh
 exec 2>&1
 exec solbridge
 RUN
-cat > "$SERVICE/log/run" <<'RUN'
-#!/data/data/com.termux/files/usr/bin/sh
-exec svlogger "$PREFIX/var/log/sv/solbridge"
-RUN
-chmod 700 "$SERVICE/run" "$SERVICE/log/run"
+chmod 700 "$SERVICE/run"
 
 cat > "$ENSURE" <<'RUN'
 #!/data/data/com.termux/files/usr/bin/sh
