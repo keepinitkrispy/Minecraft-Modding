@@ -8,6 +8,27 @@ from .companion import execute_companion, _get as companion_get
 from .autoloop import execute_autoloop
 
 STOP = False
+LOCK_HANDLE = None
+
+def _acquire_singleton(cfg: Config) -> bool:
+    """Hold an OS-level advisory lock for the lifetime of the agent process."""
+    global LOCK_HANDLE
+    lock_path = cfg.workspace / ".solbridge-agent.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    handle = open(lock_path, "a+")
+    try:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        handle.close()
+        print("SolBridge singleton already active; exiting duplicate agent.", file=sys.stderr, flush=True)
+        return False
+    handle.seek(0)
+    handle.truncate()
+    handle.write(str(os.getpid()) + "\n")
+    handle.flush()
+    LOCK_HANDLE = handle
+    return True
+
 
 def stop(*_):
     global STOP
