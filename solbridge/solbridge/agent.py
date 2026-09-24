@@ -215,6 +215,9 @@ def process(bus: GitHubBus, cfg: Config, issue: dict) -> bool:
         target = cmd.get("device_id")
         if target not in (None, "*", cfg.device_id):
             return False
+        executor = cmd.get("executor")
+        if executor not in (None, "solbridge-agent"):
+            return False
         bus.labels(number, ["solbridge-command", "solbridge-running"])
         started = time.time()
         tool = str(cmd["tool"])
