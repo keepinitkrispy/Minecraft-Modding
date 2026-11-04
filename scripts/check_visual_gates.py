@@ -86,10 +86,11 @@ def collect_bp_entities(behavior_pack: Path):
     return entities
 
 
-def check_visual_gates(repo: Path) -> list[str]:
+def check_visual_gates(repo: Path, bp_name: str = "JunkBunch_BP", rp_name: str = "JunkBunch_RP") -> list[str]:
+    """`repo` is the project root holding packs/<bp_name>, packs/<rp_name> and characters/."""
     errors: list[str] = []
-    bp = repo / "packs" / "JunkBunch_BP"
-    rp = repo / "packs" / "JunkBunch_RP"
+    bp = repo / "packs" / bp_name
+    rp = repo / "packs" / rp_name
     characters = repo / "characters"
     gate_dir = characters / "visual_gates"
 
@@ -199,10 +200,13 @@ def check_visual_gates(repo: Path) -> list[str]:
 
 
 def main() -> int:
-    repo = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path(__file__).resolve().parents[1]
-    print(f"Checking character visual gates in: {repo}")
+    args = sys.argv[1:]
+    # Usage: check_visual_gates.py [project_root] [BP_NAME RP_NAME]
+    repo = Path(args[0]).resolve() if args else Path(__file__).resolve().parents[1]
+    names = args[1:3] if len(args) >= 3 else ["JunkBunch_BP", "JunkBunch_RP"]
+    print(f"Checking character visual gates in: {repo} ({names[0]}, {names[1]})")
     print("-" * 68)
-    errors = check_visual_gates(repo)
+    errors = check_visual_gates(repo, names[0], names[1])
     if errors:
         print(f"FAIL — {len(errors)} visual-gate problem(s):")
         for error in errors:

@@ -1,0 +1,33 @@
+{
+  "name": "Trundle",
+  "display_name": "Trundle",
+  "identifier": "cc:trundle",
+  "source": {
+    "type": "original_concept",
+    "date": "2026-11-04",
+    "concept": "Stone pill-bug: arched three-segment shell, one big eye, six stubby legs."
+  },
+  "role": "walker",
+  "stompable": true,
+  "behavior_contract": [
+    "patrols at walking speed",
+    "turns around at walls and ledges",
+    "stomp from above: defeated, player bounces",
+    "any other contact: player restarts at checkpoint",
+    "frozen at its placed spot outside runs; resets to its placed spot each attempt",
+    "immune to normal damage (only course rules defeat it)"
+  ],
+  "collision_box": {
+    "width": 0.8,
+    "height": 0.6
+  },
+  "model": {
+    "geometry": "geometry.cc.trundle",
+    "texture": "textures/entity/cc_trundle",
+    "scale": 1.0,
+    "geometry_file": "packs/CourseCraft_RP/models/entity/cc_trundle.geo.json"
+  },
+  "skin_slot": "cc_trundle.png (64x64 box-UV layout; hi-res multiples of the same layout allowed)",
+  "status": "visual_gate",
+  "created_date": "2026-11-04"
+}

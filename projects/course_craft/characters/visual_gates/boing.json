@@ -1,0 +1,19 @@
+{
+  "status": "pending_review",
+  "entity_identifier": "cc:boing",
+  "geometry_identifier": "geometry.cc.boing",
+  "rendered_geometry_sha256": "0c0c2176433c29ffba7930b8ee990c83cb4ec21e7b99ab9e260dac3bfe788f60",
+  "geometry_sha256": null,
+  "creator_approved": false,
+  "source_fidelity_checked": false,
+  "scale_checked": false,
+  "material_read_checked": false,
+  "views": {
+    "front": "characters/renders/cc_boing_front.png",
+    "side": "characters/renders/cc_boing_side.png",
+    "back": "characters/renders/cc_boing_back.png",
+    "three_quarter": "characters/renders/cc_boing_three_quarter.png"
+  },
+  "agent_review": "Renders of the exact geometry exist for all four views beside a 1.8-block player. Fixed during review: Bristle face was hidden behind its front slab; front spines overlapped an eye. Base colours are placeholders for the creator's skins.",
+  "next_gate": "Creator reviews characters/renders (ENEMY_LINEUP.png). On approval set status=approved, creator_approved/source_fidelity_checked/scale_checked/material_read_checked=true and geometry_sha256 to the current file hash. Only then are BP entities and behavior built."
+}

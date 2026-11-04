@@ -1,0 +1,33 @@
+{
+  "name": "Boing",
+  "display_name": "Boing",
+  "identifier": "cc:boing",
+  "source": {
+    "type": "original_concept",
+    "date": "2026-11-04",
+    "concept": "Tin-can robot riding a coil spring; one visor eye; hops in place and forward."
+  },
+  "role": "hopper",
+  "stompable": true,
+  "behavior_contract": [
+    "hops on a fixed rhythm, drifting forward",
+    "turns at walls",
+    "stomp from above: defeated, player bounces",
+    "side contact: player restarts at checkpoint",
+    "frozen at its placed spot outside runs; resets to its placed spot each attempt",
+    "immune to normal damage (only course rules defeat it)"
+  ],
+  "collision_box": {
+    "width": 0.6,
+    "height": 1.1
+  },
+  "model": {
+    "geometry": "geometry.cc.boing",
+    "texture": "textures/entity/cc_boing",
+    "scale": 1.0,
+    "geometry_file": "packs/CourseCraft_RP/models/entity/cc_boing.geo.json"
+  },
+  "skin_slot": "cc_boing.png (64x64 box-UV layout; hi-res multiples of the same layout allowed)",
+  "status": "visual_gate",
+  "created_date": "2026-11-04"
+}

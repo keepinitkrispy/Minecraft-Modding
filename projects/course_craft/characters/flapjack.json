@@ -1,0 +1,33 @@
+{
+  "name": "Flapjack",
+  "display_name": "Flapjack",
+  "identifier": "cc:flapjack",
+  "source": {
+    "type": "original_concept",
+    "date": "2026-11-04",
+    "concept": "Flying stack of two pancakes with a butter pat, sleepy eyes and purple wings; bobs in the air."
+  },
+  "role": "flyer",
+  "stompable": true,
+  "behavior_contract": [
+    "no gravity; bobs up and down around its placed height",
+    "drifts back and forth",
+    "stomp from above: defeated, player bounces",
+    "side contact: player restarts at checkpoint",
+    "frozen at its placed spot outside runs; resets to its placed spot each attempt",
+    "immune to normal damage (only course rules defeat it)"
+  ],
+  "collision_box": {
+    "width": 0.7,
+    "height": 0.6
+  },
+  "model": {
+    "geometry": "geometry.cc.flapjack",
+    "texture": "textures/entity/cc_flapjack",
+    "scale": 1.0,
+    "geometry_file": "packs/CourseCraft_RP/models/entity/cc_flapjack.geo.json"
+  },
+  "skin_slot": "cc_flapjack.png (64x64 box-UV layout; hi-res multiples of the same layout allowed)",
+  "status": "visual_gate",
+  "created_date": "2026-11-04"
+}
