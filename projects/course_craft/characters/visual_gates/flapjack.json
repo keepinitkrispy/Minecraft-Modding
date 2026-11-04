@@ -2,7 +2,7 @@
   "status": "pending_review",
   "entity_identifier": "cc:flapjack",
   "geometry_identifier": "geometry.cc.flapjack",
-  "rendered_geometry_sha256": "7e08d91f0317a041eb2d044f1456bb2fc254c51a3715f4063aca2997c3d57ea4",
+  "rendered_geometry_sha256": "d15cfec317070919efbe3089c8a3255953473c3dda076da4936963b80cfe344c",
   "geometry_sha256": null,
   "creator_approved": false,
   "source_fidelity_checked": false,
@@ -14,6 +14,15 @@
     "back": "characters/renders/cc_flapjack_back.png",
     "three_quarter": "characters/renders/cc_flapjack_three_quarter.png"
   },
-  "agent_review": "Renders of the exact geometry exist for all four views beside a 1.8-block player. Fixed during review: Bristle face was hidden behind its front slab; front spines overlapped an eye. Base colours are placeholders for the creator's skins.",
-  "next_gate": "Creator reviews characters/renders (ENEMY_LINEUP.png). On approval set status=approved, creator_approved/source_fidelity_checked/scale_checked/material_read_checked=true and geometry_sha256 to the current file hash. Only then are BP entities and behavior built."
+  "agent_review": "v2: rounded stepped volume, protruding eyes with pupils/highlights, chunky proportions, shaded materials (stone grain, cactus ribs, brushed metal, cake crumb, wing membrane), 128px texture. Fixed in review: Bristle side spines detached; Boing belly band off-centre.",
+  "next_gate": "Creator re-review of characters/renders (ENEMY_LINEUP.png).",
+  "revision": 2,
+  "history": [
+    {
+      "revision": 1,
+      "result": "failed",
+      "by": "creator",
+      "note": "'these are atrocious'"
+    }
+  ]
 }

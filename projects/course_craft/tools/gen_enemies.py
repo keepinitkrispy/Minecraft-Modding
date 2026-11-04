@@ -19,7 +19,7 @@ import render_geo  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RP = os.path.join(ROOT, "packs", "CourseCraft_RP")
-TEX = 64
+TEX = 128
 
 
 def shade(c, f):
@@ -43,24 +43,47 @@ def pack_uvs(cubes):
     return uvs
 
 
-def paint(img, uv, size, colour, front_paint):
+def paint(img, uv, size, colour, front_paint, mat="plain"):
+    """Shaded material: top-lit vertical gradient, 1px darker edge outline, material detail."""
     u, v = uv
     w, h, d = size
     px = img.load()
+    seed = (u * 73856093) ^ (v * 19349663)
 
-    def rect(x0, y0, rw, rh, c):
-        for yy in range(y0, y0 + rh):
-            for xx in range(x0, x0 + rw):
-                px[xx, yy] = c
+    def noise(x, y):
+        n = (x * 374761393 + y * 668265263 + seed) & 0xFFFFFFFF
+        n = (n ^ (n >> 13)) * 1274126177 & 0xFFFFFFFF
+        return ((n >> 8) & 0xFF) / 255.0
 
-    rect(u + d, v, w, d, shade(colour, 1.15))            # up
-    rect(u + d + w, v, w, d, shade(colour, 0.7))         # down
-    rect(u, v + d, d, h, shade(colour, 0.9))             # east
-    rect(u + d, v + d, w, h, shade(colour, 1.0))         # north (front)
-    rect(u + d + w, v + d, d, h, shade(colour, 0.9))     # west
-    rect(u + 2 * d + w, v + d, w, h, shade(colour, 0.85))  # south
-    for (fx, fy, fw, fh, c) in front_paint or []:
-        rect(u + d + fx, v + d + fy, fw, fh, c + (255,))
+    def face(x0, y0, fw, fh, light):
+        for j in range(fh):
+            for i in range(fw):
+                f = light * (1.12 - 0.28 * (j / max(1, fh - 1))) if fh > 1 else light
+                if mat == "stone":
+                    f *= 0.9 + 0.2 * noise(x0 + i, y0 + j)
+                elif mat == "plant" and fw > 2:
+                    f *= 0.86 if i % 3 == 1 else 1.0  # ribs
+                elif mat == "metal":
+                    f *= 1.18 if j == 0 else (0.94 + 0.08 * noise(x0 + i, y0 + j))
+                elif mat == "cake":
+                    f *= 0.92 + 0.14 * noise(x0 + i, y0 + j)
+                elif mat == "membrane":
+                    f *= 0.9 if (i + j) % 4 == 0 else 1.0
+                edge = (i == 0 or j == 0 or i == fw - 1 or j == fh - 1) and fw > 2 and fh > 2
+                if edge:
+                    f *= 0.78
+                px[x0 + i, y0 + j] = shade(colour, f)
+
+    face(u + d, v, w, d, 1.15)               # up
+    face(u + d + w, v, w, d, 0.68)           # down
+    face(u, v + d, d, h, 0.9)                # east
+    face(u + d, v + d, w, h, 1.0)            # north (front)
+    face(u + d + w, v + d, d, h, 0.9)        # west
+    face(u + 2 * d + w, v + d, w, h, 0.84)   # south
+    for (fx, fy, fw_, fh_, c) in front_paint or []:
+        for yy in range(v + d + fy, v + d + fy + fh_):
+            for xx in range(u + d + fx, u + d + fx + fw_):
+                px[xx, yy] = c + (255,)
 
 
 def build(eid, e):
@@ -72,7 +95,7 @@ def build(eid, e):
         cubes = []
         for c in b["cubes"]:
             o, s, col = c[0], c[1], c[2]
-            paint(img, uvs[i], s, col, c[3] if len(c) > 3 else None)
+            paint(img, uvs[i], s, col, c[3] if len(c) > 3 else None, c[4] if len(c) > 4 else "plain")
             cubes.append({"origin": o, "size": s, "uv": list(uvs[i])})
             i += 1
         bones.append({"name": b["name"], "pivot": b["pivot"], "cubes": cubes})

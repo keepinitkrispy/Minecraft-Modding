@@ -12,7 +12,7 @@ import os
 
 from PIL import Image, ImageDraw
 
-S = 9            # pixels per model unit
+S = 11            # pixels per model unit
 PLAYER_UNITS = 1.8 * 16
 VIEWS = {"front": (0, 0), "side": (90, 0), "back": (180, 0), "three_quarter": (35, 22)}
 

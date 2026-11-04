@@ -2,7 +2,7 @@
   "status": "pending_review",
   "entity_identifier": "cc:trundle",
   "geometry_identifier": "geometry.cc.trundle",
-  "rendered_geometry_sha256": "15888d9834d2c7209e2e63cc8bb65d37a21f41eeb342e89269ea0371f0b46a6d",
+  "rendered_geometry_sha256": "19e0e64387de783cbfa64a1932acc666ba182e2d8d3fe16241b5983acada6620",
   "geometry_sha256": null,
   "creator_approved": false,
   "source_fidelity_checked": false,
@@ -14,6 +14,15 @@
     "back": "characters/renders/cc_trundle_back.png",
     "three_quarter": "characters/renders/cc_trundle_three_quarter.png"
   },
-  "agent_review": "Renders of the exact geometry exist for all four views beside a 1.8-block player. Fixed during review: Bristle face was hidden behind its front slab; front spines overlapped an eye. Base colours are placeholders for the creator's skins.",
-  "next_gate": "Creator reviews characters/renders (ENEMY_LINEUP.png). On approval set status=approved, creator_approved/source_fidelity_checked/scale_checked/material_read_checked=true and geometry_sha256 to the current file hash. Only then are BP entities and behavior built."
+  "agent_review": "v2: rounded stepped volume, protruding eyes with pupils/highlights, chunky proportions, shaded materials (stone grain, cactus ribs, brushed metal, cake crumb, wing membrane), 128px texture. Fixed in review: Bristle side spines detached; Boing belly band off-centre.",
+  "next_gate": "Creator re-review of characters/renders (ENEMY_LINEUP.png).",
+  "revision": 2,
+  "history": [
+    {
+      "revision": 1,
+      "result": "failed",
+      "by": "creator",
+      "note": "'these are atrocious'"
+    }
+  ]
 }
