@@ -24,7 +24,7 @@ python3 -m unittest discover -s tests -p 'test_*.py'
 | Level | Status | Evidence |
 |---|---|---|
 | 1 Structural/package | PASS | `tools/validate.py`: manifests, UUIDs, deps, JSON, texture refs, lang |
-| 2 Schema/static | PARTIAL | Script typechecked (`tsc --strict`) against official 2.0.0 typings. Block/item JSON **not** checked against an official schema |
+| 2 Schema/static | PASS | Script typechecked (`tsc --strict`) against official 2.0.0 typings. All 10 blocks and the item pass **Mojang's official schemas** (bedrock-samples v1.26.60.5; `npm run schema`); negative control (broken files) correctly fails. Manifests, recipe and atlases pass the Blockception community schemas. All 8 sound IDs, both particle IDs and `minecraft:barrier` exist in the official samples |
 | 3 Import | UNKNOWN | Not runtime-tested |
 | 4 Placement | UNKNOWN | |
 | 5 Behavior | UNKNOWN in Bedrock | Logic and wiring pass in a mock world (`tests/world_sim.test.js`, incl. drag → walls → pit/escape → removal). That is not Bedrock evidence |
@@ -48,7 +48,7 @@ python3 -m unittest discover -s tests -p 'test_*.py'
 5. Spring height (`applyKnockback` vertical 1.6) and dash strength (2.4) feel right. These are tuning guesses.
 6. Pad detection while standing on block tops (samples y − 0.05).
 7. **Bounds:** does a creative punch with the wand fire `beforeEvents.playerBreakBlock` (cancelled), and a survival punch fire `entityHitBlock`? On mobile, punch = tap-and-hold on a block.
-8. The particle IDs `minecraft:villager_happy` and `minecraft:endrod` render. The `fillBlocks` size limit per call is UNKNOWN; slabs are capped at 8192.
+8. Particle IDs `minecraft:villager_happy`/`minecraft:endrod` exist in the official samples (VERIFIED); that they look good as outlines is UNKNOWN. The `fillBlocks` size limit per call is UNKNOWN; slabs are capped at 8192.
 9. Fills fail if part of the shell is in unloaded chunks. The player is told to stand nearer and re-apply.
 10. The Script API is allowed on the target Realm with no experiments enabled (INFERRED from stable module use).
 
