@@ -1,0 +1,15 @@
+{
+  "name": "course-craft",
+  "private": true,
+  "description": "Course Craft: open-world course maker add-on for Minecraft Bedrock (dev tooling only; not shipped in the pack)",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node --import ./tests/mock/register.mjs --test tests/*.test.js"
+  },
+  "devDependencies": {
+    "@minecraft/server": "2.0.0",
+    "@minecraft/server-ui": "2.0.0",
+    "typescript": "5.6.3"
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "resource_pack_name": "course_craft",
+  "texture_name": "atlas.terrain",
+  "padding": 8,
+  "num_mip_levels": 4,
+  "texture_data": {
+    "cc_start_pad_side": {
+      "textures": "textures/blocks/cc_start_pad_side"
+    },
+    "cc_start_pad_top": {
+      "textures": "textures/blocks/cc_start_pad_top"
+    },
+    "cc_goal_side": {
+      "textures": "textures/blocks/cc_goal_side"
+    },
+    "cc_goal_top": {
+      "textures": "textures/blocks/cc_goal_top"
+    },
+    "cc_checkpoint": {
+      "textures": "textures/blocks/cc_checkpoint"
+    },
+    "cc_spring_side": {
+      "textures": "textures/blocks/cc_spring_side"
+    },
+    "cc_spring_top": {
+      "textures": "textures/blocks/cc_spring_top"
+    },
+    "cc_dash_side": {
+      "textures": "textures/blocks/cc_dash_side"
+    },
+    "cc_dash_top": {
+      "textures": "textures/blocks/cc_dash_top"
+    },
+    "cc_spike_side": {
+      "textures": "textures/blocks/cc_spike_side"
+    },
+    "cc_spike_top": {
+      "textures": "textures/blocks/cc_spike_top"
+    },
+    "cc_shard": {
+      "textures": "textures/blocks/cc_shard"
+    },
+    "cc_bright_brick": {
+      "textures": "textures/blocks/cc_bright_brick"
+    },
+    "cc_toon_grass_side": {
+      "textures": "textures/blocks/cc_toon_grass_side"
+    },
+    "cc_toon_grass_top": {
+      "textures": "textures/blocks/cc_toon_grass_top"
+    },
+    "cc_toon_dirt": {
+      "textures": "textures/blocks/cc_toon_dirt"
+    },
+    "cc_cloud": {
+      "textures": "textures/blocks/cc_cloud"
+    }
+  }
+}

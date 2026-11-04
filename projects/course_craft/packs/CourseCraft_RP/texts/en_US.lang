@@ -1,0 +1,13 @@
+tile.cc:start_pad.name=Start Pad
+tile.cc:goal_block.name=Goal Block
+tile.cc:checkpoint.name=Checkpoint
+tile.cc:spring_pad.name=Spring Pad
+tile.cc:dash_pad.name=Dash Pad
+tile.cc:spike_block.name=Spike Block
+tile.cc:shard.name=Shard
+tile.cc:bright_brick.name=Bright Brick
+tile.cc:toon_grass.name=Toon Grass
+tile.cc:cloud_block.name=Cloud Block
+item.cc:maker_wand=Maker Wand
+pack.name=Course Craft
+pack.description=Build and play platformer courses anywhere.

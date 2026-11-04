@@ -1,0 +1,9 @@
+{
+  "resource_pack_name": "course_craft",
+  "texture_name": "atlas.items",
+  "texture_data": {
+    "cc_maker_wand": {
+      "textures": "textures/items/cc_maker_wand"
+    }
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Course Craft",
+    "description": "Build and play platformer courses anywhere in your world.",
+    "uuid": "6a1f3c2e-8b4d-4e7a-9c15-2d8e7f6a0b31",
+    "version": [
+      1,
+      0,
+      1
+    ],
+    "min_engine_version": [
+      1,
+      21,
+      90
+    ]
+  },
+  "modules": [
+    {
+      "type": "data",
+      "uuid": "c4e2a9d1-5f37-4b8c-a6e0-91d3b7f2c845",
+      "version": [
+        1,
+        0,
+        1
+      ]
+    },
+    {
+      "type": "script",
+      "language": "javascript",
+      "entry": "scripts/main.js",
+      "uuid": "0f8b6d24-3a9e-4c71-b5d2-7e4f1a6c9b03",
+      "version": [
+        1,
+        0,
+        1
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "uuid": "9d3e7b15-2c6a-4f84-8e1b-5a0c3d7f2e96",
+      "version": [
+        1,
+        0,
+        1
+      ]
+    },
+    {
+      "module_name": "@minecraft/server",
+      "version": "2.0.0"
+    },
+    {
+      "module_name": "@minecraft/server-ui",
+      "version": "2.0.0"
+    }
+  ]
+}

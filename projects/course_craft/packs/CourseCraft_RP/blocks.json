@@ -1,0 +1,33 @@
+{
+  "format_version": "1.1.0",
+  "cc:start_pad": {
+    "sound": "stone"
+  },
+  "cc:goal_block": {
+    "sound": "metal"
+  },
+  "cc:checkpoint": {
+    "sound": "stone"
+  },
+  "cc:spring_pad": {
+    "sound": "metal"
+  },
+  "cc:dash_pad": {
+    "sound": "metal"
+  },
+  "cc:spike_block": {
+    "sound": "metal"
+  },
+  "cc:shard": {
+    "sound": "glass"
+  },
+  "cc:bright_brick": {
+    "sound": "stone"
+  },
+  "cc:toon_grass": {
+    "sound": "grass"
+  },
+  "cc:cloud_block": {
+    "sound": "cloth"
+  }
+}

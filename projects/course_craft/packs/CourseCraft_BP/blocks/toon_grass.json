@@ -1,0 +1,32 @@
+{
+  "format_version": "1.21.60",
+  "minecraft:block": {
+    "description": {
+      "identifier": "cc:toon_grass",
+      "menu_category": {
+        "category": "construction"
+      }
+    },
+    "components": {
+      "minecraft:geometry": "minecraft:geometry.full_block",
+      "minecraft:material_instances": {
+        "*": {
+          "texture": "cc_toon_grass_side",
+          "render_method": "opaque"
+        },
+        "up": {
+          "texture": "cc_toon_grass_top",
+          "render_method": "opaque"
+        },
+        "down": {
+          "texture": "cc_toon_dirt",
+          "render_method": "opaque"
+        }
+      },
+      "minecraft:destructible_by_mining": {
+        "seconds_to_destroy": 0.4
+      },
+      "minecraft:destructible_by_explosion": false
+    }
+  }
+}
