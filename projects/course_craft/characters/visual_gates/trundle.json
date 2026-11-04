@@ -1,5 +1,5 @@
 {
-  "status": "pending_review",
+  "status": "failed",
   "entity_identifier": "cc:trundle",
   "geometry_identifier": "geometry.cc.trundle",
   "rendered_geometry_sha256": "19e0e64387de783cbfa64a1932acc666ba182e2d8d3fe16241b5983acada6620",
@@ -15,7 +15,7 @@
     "three_quarter": "characters/renders/cc_trundle_three_quarter.png"
   },
   "agent_review": "v2: rounded stepped volume, protruding eyes with pupils/highlights, chunky proportions, shaded materials (stone grain, cactus ribs, brushed metal, cake crumb, wing membrane), 128px texture. Fixed in review: Bristle side spines detached; Boing belly band off-centre.",
-  "next_gate": "Creator re-review of characters/renders (ENEMY_LINEUP.png).",
+  "next_gate": "Obtain creator concept/drawing per enemy role, rebuild, re-render, creator review.",
   "revision": 2,
   "history": [
     {
@@ -23,6 +23,16 @@
       "result": "failed",
       "by": "creator",
       "note": "'these are atrocious'"
+    },
+    {
+      "revision": 2,
+      "result": "failed",
+      "by": "creator",
+      "note": "'THOS EARE TERRIBLE ENEMIES'"
     }
+  ],
+  "failure_reasons": [
+    "Creator rejected v2 without specific defects; two agent-led concept rounds have failed.",
+    "Per WORKFLOW.md input contract, the next revision needs creator input (drawing, reference of their own, or plain-language concept) rather than another agent-chosen design."
   ]
 }
