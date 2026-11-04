@@ -28,7 +28,8 @@ def node_checks():
         print("SKIPPED: Script API type-check/tests (run `npm install` in projects/course_craft to enable).")
         return True
     ok = subprocess.run(["npx", "tsc", "-p", "tsconfig.json"], cwd=ROOT).returncode == 0
-    ok = subprocess.run(["node", "--import", "./tests/mock/register.mjs", "--test", "tests/course.test.js", "tests/world_sim.test.js"], cwd=ROOT).returncode == 0 and ok
+    tests = sorted(os.path.join("tests", f) for f in os.listdir(os.path.join(ROOT, "tests")) if f.endswith(".test.js"))
+    ok = subprocess.run(["node", "--import", "./tests/mock/register.mjs", "--test", *tests], cwd=ROOT).returncode == 0 and ok
     return ok
 
 

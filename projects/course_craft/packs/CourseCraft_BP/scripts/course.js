@@ -29,7 +29,8 @@ export const PAD_COOLDOWN_TICKS = 8;
 
 /**
  * @typedef {{x:number,y:number,z:number}} Vec3
- * @typedef {{id:string,name:string,dim:string,pos:Vec3,creator:string,bestTicks:number|null,bestBy:string|null,shards:number}} Course
+ * @typedef {{min:Vec3,max:Vec3}} Box
+ * @typedef {{id:string,name:string,dim:string,pos:Vec3,creator:string,bestTicks:number|null,bestBy:string|null,shards:number,bounds:Box|null}} Course
  */
 
 /** @param {number} n */
@@ -80,6 +81,7 @@ export function parseRegistry(raw) {
       bestTicks: Number.isFinite(c.bestTicks) ? c.bestTicks : null,
       bestBy: typeof c.bestBy === "string" ? c.bestBy : null,
       shards: Number.isFinite(c.shards) ? c.shards : 0,
+      bounds: parseBox(c.bounds),
     }));
   } catch {
     return [];
@@ -98,7 +100,7 @@ export function addCourse(list, dim, pos, creator) {
   if (existing) return { list, course: existing, created: false };
   const course = {
     id, name: `Course ${list.length + 1}`, dim, pos: blockPos(pos), creator,
-    bestTicks: null, bestBy: null, shards: 0,
+    bestTicks: null, bestBy: null, shards: 0, bounds: null,
   };
   return { list: [...list, course], course, created: true };
 }
@@ -178,4 +180,119 @@ export function parsePending(raw) {
     const d = JSON.parse(raw);
     return Array.isArray(d) ? d.filter((e) => e && typeof e.dim === "string" && e.pos).map((e) => ({ dim: e.dim, pos: blockPos(e.pos) })) : [];
   } catch { return []; }
+}
+
+// ---------------- course bounds (wand selection -> invisible walls) ----------------
+
+export const BARRIER = "minecraft:barrier";
+export const MAX_BOUNDS = Object.freeze({ x: 160, y: 128, z: 160 });
+export const MIN_BOUNDS = Object.freeze({ x: 3, y: 3, z: 3 });
+/** Max blocks per fillBlocks call. The engine limit is UNKNOWN, so stay well under the /fill limit (32768). */
+export const SLAB_MAX = 8192;
+
+/** @param {unknown} b @returns {Box|null} */
+export function parseBox(b) {
+  if (!b || typeof b !== "object") return null;
+  const o = /** @type {any} */ (b);
+  const ok = (/** @type {any} */ v) => v && Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z);
+  return ok(o.min) && ok(o.max) ? normBox(o.min, o.max) : null;
+}
+
+/** Inclusive block box from any two corners. @param {Vec3} a @param {Vec3} b @returns {Box} */
+export function normBox(a, b) {
+  const A = blockPos(a), B = blockPos(b);
+  return {
+    min: { x: Math.min(A.x, B.x), y: Math.min(A.y, B.y), z: Math.min(A.z, B.z) },
+    max: { x: Math.max(A.x, B.x), y: Math.max(A.y, B.y), z: Math.max(A.z, B.z) },
+  };
+}
+
+/** @param {Box} b */
+export function boxSize(b) {
+  return { x: b.max.x - b.min.x + 1, y: b.max.y - b.min.y + 1, z: b.max.z - b.min.z + 1 };
+}
+
+/** @param {Box} b @param {Vec3} p */
+export function insideBox(b, p) {
+  const q = blockPos(p);
+  return q.x >= b.min.x && q.x <= b.max.x && q.y >= b.min.y && q.y <= b.max.y && q.z >= b.min.z && q.z <= b.max.z;
+}
+
+/** Why a selection can't become course bounds, or null if it can. @param {Box} b @param {Vec3} start */
+export function boundsProblem(b, start) {
+  const s = boxSize(b);
+  if (s.x > MAX_BOUNDS.x || s.y > MAX_BOUNDS.y || s.z > MAX_BOUNDS.z)
+    return `Too big (${s.x}×${s.y}×${s.z}). Max ${MAX_BOUNDS.x}×${MAX_BOUNDS.y}×${MAX_BOUNDS.z}.`;
+  if (s.x < MIN_BOUNDS.x || s.y < MIN_BOUNDS.y || s.z < MIN_BOUNDS.z)
+    return `Too small (${s.x}×${s.y}×${s.z}). Min ${MIN_BOUNDS.x}×${MIN_BOUNDS.y}×${MIN_BOUNDS.z}.`;
+  // Start pad must be inside, with standing room above it.
+  if (!insideBox(b, start) || start.y + 2 > b.max.y) return "The Start Pad must be inside the box, with 2 blocks of headroom.";
+  return null;
+}
+
+/**
+ * Invisible shell: 4 side walls one block OUTSIDE the box (from the floor level up to and
+ * including the ceiling layer) plus a ceiling one block above it. The floor is left open:
+ * falling below it is the pit. Each wall is split into slabs of at most SLAB_MAX blocks.
+ * @param {Box} b @returns {Array<{from:Vec3,to:Vec3}>}
+ */
+export function shellSlabs(b) {
+  const x0 = b.min.x - 1, x1 = b.max.x + 1, z0 = b.min.z - 1, z1 = b.max.z + 1;
+  const y0 = b.min.y, y1 = b.max.y + 1;
+  /** @type {Array<{from:Vec3,to:Vec3}>} */
+  const walls = [
+    { from: { x: x0, y: y0, z: z0 }, to: { x: x0, y: y1, z: z1 } },
+    { from: { x: x1, y: y0, z: z0 }, to: { x: x1, y: y1, z: z1 } },
+    { from: { x: x0 + 1, y: y0, z: z0 }, to: { x: x1 - 1, y: y1, z: z0 } },
+    { from: { x: x0 + 1, y: y0, z: z1 }, to: { x: x1 - 1, y: y1, z: z1 } },
+    { from: { x: x0 + 1, y: y1, z: z0 + 1 }, to: { x: x1 - 1, y: y1, z: z1 - 1 } },
+  ];
+  const out = [];
+  for (const w of walls) {
+    const sx = w.to.x - w.from.x + 1, sz = w.to.z - w.from.z + 1, sy = w.to.y - w.from.y + 1;
+    if (sx <= 0 || sz <= 0 || sy <= 0) continue;
+    const layer = sx * sz;
+    if (layer > SLAB_MAX) {
+      // Ceiling bigger than one slab: split along x.
+      const rows = Math.max(1, Math.floor(SLAB_MAX / sz));
+      for (let x = w.from.x; x <= w.to.x; x += rows)
+        out.push({ from: { ...w.from, x }, to: { ...w.to, x: Math.min(w.to.x, x + rows - 1) } });
+      continue;
+    }
+    const layers = Math.max(1, Math.floor(SLAB_MAX / layer));
+    for (let y = w.from.y; y <= w.to.y; y += layers)
+      out.push({ from: { ...w.from, y }, to: { ...w.to, y: Math.min(w.to.y, y + layers - 1) } });
+  }
+  return out;
+}
+
+/** "pit" below the floor, "escape" outside the walls/ceiling, else null. @param {Box} b @param {Vec3} p */
+export function outOfBounds(b, p) {
+  const q = blockPos(p);
+  if (q.y < b.min.y) return "pit";
+  if (q.x < b.min.x || q.x > b.max.x || q.z < b.min.z || q.z > b.max.z || q.y > b.max.y + 1) return "escape";
+  return null;
+}
+
+/** Points along the 12 edges of a box (block-corner aligned), capped for particle budgets. @param {Box} b @param {number} [cap] @returns {Vec3[]} */
+export function edgePoints(b, cap = 240) {
+  const lo = b.min, hi = { x: b.max.x + 1, y: b.max.y + 1, z: b.max.z + 1 };
+  const per = 4 * ((hi.x - lo.x) + (hi.y - lo.y) + (hi.z - lo.z));
+  const step = Math.max(1, Math.ceil(per / cap));
+  /** @type {Vec3[]} */
+  const pts = [];
+  for (const y of [lo.y, hi.y]) for (const z of [lo.z, hi.z]) for (let x = lo.x; x <= hi.x; x += step) pts.push({ x, y, z });
+  for (const x of [lo.x, hi.x]) for (const z of [lo.z, hi.z]) for (let y = lo.y; y <= hi.y; y += step) pts.push({ x, y, z });
+  for (const x of [lo.x, hi.x]) for (const y of [lo.y, hi.y]) for (let z = lo.z; z <= hi.z; z += step) pts.push({ x, y, z });
+  return pts;
+}
+
+/** @param {Course[]} list @param {string} id @param {Box|null} bounds */
+export function setBounds(list, id, bounds) {
+  return list.map((c) => (c.id === id ? { ...c, bounds } : c));
+}
+
+/** Course whose start pad lies inside the box (same dimension). @param {Course[]} list @param {string} dim @param {Box} b */
+export function courseInBox(list, dim, b) {
+  return list.find((c) => c.dim === dim && insideBox(b, c.pos)) ?? null;
 }

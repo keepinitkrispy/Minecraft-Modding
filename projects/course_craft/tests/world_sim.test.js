@@ -79,3 +79,75 @@ test("breaking the start pad removes the course", () => {
   S.world.afterEvents.playerBreakBlock.fire({ brokenBlockPermutation: { type: { id: "cc:start_pad" } }, block: ow.getBlock({ x: 0, y: 64, z: 0 }), dimension: ow, player: p });
   assert.equal(JSON.parse(S.world.getDynamicProperty("cc:courses")).length, 0);
 });
+
+test("wand drag selection -> invisible walls, pit and escape respawn, removal", async () => {
+  S.tick(5);
+  place({ x: 20, y: 64, z: 20 }, "cc:start_pad");
+  ow.blocks.set("27,66,20", "minecraft:stone");           // a build sitting where a wall will go
+  p.held = "cc:maker_wand"; p.mode = S.GameMode.Creative; stand(20, 65, 20);
+
+  // Creative punch: break is cancelled and becomes corner A.
+  const brk = { itemStack: { typeId: "cc:maker_wand" }, player: p, block: ow.getBlock({ x: 14, y: 60, z: 14 }), cancel: false };
+  S.world.beforeEvents.playerBreakBlock.fire(brk);
+  assert.equal(brk.cancel, true);
+  S.tick(1);
+  // Drag: box follows the look target.
+  p.lookAt = { x: 26, y: 72, z: 26 };
+  S.tick(4);
+  assert.match(p.actionbar, /^Dragging 13×13×13/);
+  assert.ok(S.particles.includes("minecraft:villager_happy"));
+  // Use in the air while dragging drops corner B at the look target (menu must NOT open).
+  const menus = shown.length;
+  S.world.afterEvents.itemUse.fire({ itemStack: { typeId: "cc:maker_wand" }, source: p });
+  S.tick(1);
+  assert.equal(shown.length, menus);
+
+  // Menu -> Set course bounds.
+  S.world.afterEvents.itemUse.fire({ itemStack: { typeId: "cc:maker_wand" }, source: p });
+  S.tick(1);
+  const menu = shown.at(-1);
+  const idx = menu.buttons.findIndex((b) => b.includes("Set course bounds"));
+  assert.ok(idx >= 0, menu.buttons.join(" | "));
+  menu._resolve({ canceled: false, selection: idx });
+  await new Promise((r) => setImmediate(r));
+  S.tick(10);
+  assert.equal(ow.getBlock({ x: 13, y: 65, z: 20 }).typeId, "minecraft:barrier", "west wall");
+  assert.equal(ow.getBlock({ x: 20, y: 73, z: 20 }).typeId, "minecraft:barrier", "ceiling");
+  assert.equal(ow.getBlock({ x: 20, y: 59, z: 20 }).typeId, "minecraft:air", "floor open");
+  assert.equal(ow.getBlock({ x: 27, y: 66, z: 20 }).typeId, "minecraft:stone", "existing build kept");
+  assert.equal(ow.getBlock({ x: 20, y: 66, z: 20 }).typeId, "minecraft:air", "interior untouched");
+
+  // Play it: pit below floor and escaping past a wall both reset to the checkpoint (start).
+  p.held = undefined;
+  S.world.afterEvents.itemUse.fire({ itemStack: { typeId: "cc:maker_wand" }, source: p });
+  S.tick(1);
+  const m2 = shown.at(-1);
+  m2._resolve({ canceled: false, selection: m2.buttons.findIndex((b) => b.startsWith("§aPlay:")) });
+  await new Promise((r) => setImmediate(r));
+  stand(20, 59, 20); S.tick(1);
+  assert.deepEqual([p.location.x, p.location.y, p.location.z], [20.5, 65, 20.5], "pit -> start");
+  stand(30, 65, 20); S.tick(1);
+  assert.deepEqual([p.location.x, p.location.z], [20.5, 20.5], "escape -> start");
+  const pearl = { itemStack: { typeId: "minecraft:ender_pearl" }, source: p, cancel: false };
+  S.world.beforeEvents.itemUse.fire(pearl);
+  assert.equal(pearl.cancel, true, "pearls blocked during a run");
+
+  // Breaking the start pad clears the walls (barriers only).
+  S.world.afterEvents.playerBreakBlock.fire({ brokenBlockPermutation: { type: { id: "cc:start_pad" } }, block: ow.getBlock({ x: 20, y: 64, z: 20 }), dimension: ow, player: p });
+  S.tick(10);
+  assert.equal(ow.getBlock({ x: 13, y: 65, z: 20 }).typeId, "minecraft:air");
+  assert.equal(ow.getBlock({ x: 27, y: 66, z: 20 }).typeId, "minecraft:stone");
+  assert.ok([...ow.blocks.values()].every((t) => t !== "minecraft:barrier"), "no barriers left");
+});
+
+test("use on a block sets a corner and does not open the menu", () => {
+  p.held = "cc:maker_wand";
+  const before = shown.length;
+  const ev = { itemStack: { typeId: "cc:maker_wand" }, player: p, block: ow.getBlock({ x: 1, y: 64, z: 1 }), isFirstEvent: true, cancel: false };
+  S.world.beforeEvents.playerInteractWithBlock.fire(ev);
+  assert.equal(ev.cancel, true);
+  S.tick(1);
+  S.world.afterEvents.itemUse.fire({ itemStack: { typeId: "cc:maker_wand" }, source: p });
+  S.tick(1);
+  assert.equal(shown.length, before);
+});

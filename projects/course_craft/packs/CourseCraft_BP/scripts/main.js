@@ -1,11 +1,12 @@
 // @ts-check
 // Course Craft: build platformer courses anywhere in an open world, then play them.
-import { world, system, ItemStack, GameMode, Player } from "@minecraft/server";
+import { world, system, ItemStack, GameMode, Player, BlockVolume } from "@minecraft/server";
 import { ActionFormData, ModalFormData } from "@minecraft/server-ui";
 import {
   BLOCKS, WAND, KIT, PAD_COOLDOWN_TICKS,
   parseRegistry, serializeRegistry, addCourse, removeCourse, renameCourse, recordFinish,
   nearestCourse, triggers, dashVector, fellOut, formatTime, parsePending, posKey, courseId,
+  BARRIER, normBox, boxSize, boundsProblem, shellSlabs, outOfBounds, edgePoints, setBounds, courseInBox,
 } from "./course.js";
 
 const REG_PROP = "cc:courses";
@@ -15,12 +16,23 @@ const GOT_WAND_PROP = "cc:got_wand";
 /**
  * @typedef {import("./course.js").Course} Course
  * @typedef {import("./course.js").Vec3} Vec3
+ * @typedef {import("./course.js").Box} Box
  * @typedef {{courseId:string,start:Vec3,dim:string,startTick:number,checkpoint:Vec3,shards:number,
- *   collected:Array<{dim:string,pos:Vec3}>,padCooldownUntil:number,prevMode:GameMode,lastCheckpointKey:string}} Run
+ *   collected:Array<{dim:string,pos:Vec3}>,padCooldownUntil:number,prevMode:GameMode,lastCheckpointKey:string,bounds:Box|null}} Run
+ * @typedef {{dim:string,a:Vec3,b:Vec3,dragging:boolean}} Selection
  */
 
 /** @type {Map<string, Run>} */
 const runs = new Map();
+/** @type {Map<string, Selection>} */
+const selections = new Map();
+/** Tick of each player's last wand use on a block, so the air-use menu doesn't also open. @type {Map<string, number>} */
+const lastBlockUse = new Map();
+/** Pending barrier fills/clears, processed a few per tick. @type {Array<{dim:string,from:Vec3,to:Vec3,place:boolean,owner:string}>} */
+const fillQueue = [];
+const FILLS_PER_TICK = 4;
+const DRAG_REACH = 48;
+const BLOCKED_IN_RUN = new Set(["minecraft:ender_pearl", "minecraft:chorus_fruit"]);
 
 // ---------- persistence ----------
 /** @returns {Course[]} */
@@ -80,6 +92,7 @@ function startRun(player, course) {
     courseId: course.id, start: course.pos, dim: course.dim, startTick: system.currentTick,
     checkpoint: course.pos, shards: 0, collected: [], padCooldownUntil: 0,
     prevMode: prev === GameMode.Adventure ? GameMode.Creative : prev, lastCheckpointKey: "",
+    bounds: course.bounds,
   };
   runs.set(player.id, run);
   player.setGameMode(GameMode.Adventure);
@@ -173,7 +186,7 @@ system.runInterval(() => {
     }
     if (!runs.has(player.id)) continue;
 
-    if (fellOut(loc.y, run.start)) respawnAtCheckpoint(player, run);
+    if (run.bounds ? outOfBounds(run.bounds, loc) : fellOut(loc.y, run.start)) respawnAtCheckpoint(player, run);
     if (now % 2 === 0) {
       player.onScreenDisplay.setActionBar(`⏱ ${formatTime(now - run.startTick)}   ✦ ${run.shards}`);
     }
@@ -194,7 +207,9 @@ world.afterEvents.playerBreakBlock.subscribe((ev) => {
   if (ev.brokenBlockPermutation.type.id !== BLOCKS.START) return;
   const id = courseId(ev.dimension.id, ev.block.location);
   const list = loadCourses();
-  if (list.some((c) => c.id === id)) {
+  const gone = list.find((c) => c.id === id);
+  if (gone) {
+    if (gone.bounds) queueShell(gone.dim, gone.bounds, false, ev.player.name);
     saveCourses(removeCourse(list, id));
     tell(ev.player, "Course removed (its start pad was broken).");
   }
@@ -231,8 +246,151 @@ system.run(() => {
 world.afterEvents.itemUse.subscribe((ev) => {
   if (ev.itemStack.typeId !== WAND) return;
   const player = ev.source;
+  const last = lastBlockUse.get(player.id);
+  if (last !== undefined && system.currentTick - last <= 2) return; // that use was a corner click
+  const sel = selections.get(player.id);
+  if (sel?.dragging) { system.run(() => dropCorner(player, dragTarget(player))); return; }
   system.run(() => openMenu(player));
 });
+
+// ---------- wand selection (punch = corner A + start drag, use = drop corner B) ----------
+/** @param {Player} player */
+function holdingWand(player) {
+  const inv = player.getComponent("minecraft:inventory");
+  return inv?.container?.getItem(player.selectedSlotIndex)?.typeId === WAND;
+}
+
+/** @param {Player} player @returns {Vec3} */
+function dragTarget(player) {
+  const hit = player.getBlockFromViewDirection({ maxDistance: DRAG_REACH, includePassableBlocks: false });
+  if (hit) return hit.block.location;
+  const v = player.getViewDirection(), h = player.getHeadLocation();
+  return { x: Math.floor(h.x + v.x * 8), y: Math.floor(h.y + v.y * 8), z: Math.floor(h.z + v.z * 8) };
+}
+
+/** @param {Player} player @param {Vec3} pos */
+function startDrag(player, pos) {
+  if (runs.has(player.id)) return;
+  selections.set(player.id, { dim: player.dimension.id, a: pos, b: pos, dragging: true });
+  player.playSound("random.click");
+  tell(player, "Corner A set. Look to stretch the box, then use the wand to drop corner B.");
+}
+
+/** @param {Player} player @param {Vec3} pos */
+function dropCorner(player, pos) {
+  const sel = selections.get(player.id);
+  if (!sel || sel.dim !== player.dimension.id) { tell(player, "Punch a block with the wand to set corner A first."); return; }
+  sel.b = pos; sel.dragging = false;
+  const s = boxSize(normBox(sel.a, sel.b));
+  player.playSound("random.click");
+  tell(player, `Corner B set: §a${s.x}×${s.y}×${s.z}§r. Open the wand menu → §aSet course bounds§r.`);
+}
+
+// Punch (survival hit) with the wand: corner A.
+world.afterEvents.entityHitBlock.subscribe((ev) => {
+  const player = ev.damagingEntity;
+  if (!(player instanceof Player) || !holdingWand(player)) return;
+  startDrag(player, ev.hitBlock.location);
+});
+
+// Creative punch breaks instantly: cancel it and treat it as corner A instead.
+world.beforeEvents.playerBreakBlock.subscribe((ev) => {
+  if (ev.itemStack?.typeId !== WAND) return;
+  ev.cancel = true;
+  const player = ev.player, pos = ev.block.location;
+  system.run(() => {
+    const sel = selections.get(player.id);
+    if (!(sel?.dragging && posKey(sel.a) === posKey(pos))) startDrag(player, pos);
+  });
+});
+
+// Use on a block with the wand: corner B (or corner A if nothing is selected yet). Never places/opens.
+world.beforeEvents.playerInteractWithBlock.subscribe((ev) => {
+  if (ev.itemStack?.typeId !== WAND) return;
+  ev.cancel = true;
+  if (!ev.isFirstEvent) return;
+  const player = ev.player, pos = ev.block.location;
+  lastBlockUse.set(player.id, system.currentTick);
+  system.run(() => {
+    lastBlockUse.set(player.id, system.currentTick);
+    if (selections.has(player.id)) dropCorner(player, pos); else startDrag(player, pos);
+  });
+});
+
+// No teleport items during a run.
+world.beforeEvents.itemUse.subscribe((ev) => {
+  if (BLOCKED_IN_RUN.has(ev.itemStack.typeId) && runs.has(ev.source.id)) ev.cancel = true;
+});
+
+// Live drag + outlines, 5x per second.
+system.runInterval(() => {
+  for (const player of world.getAllPlayers()) {
+    if (runs.has(player.id) || !holdingWand(player)) continue;
+    const sel = selections.get(player.id);
+    if (sel && sel.dim === player.dimension.id) {
+      if (sel.dragging) sel.b = dragTarget(player);
+      const box = normBox(sel.a, sel.b), s = boxSize(box);
+      drawBox(player, box, "minecraft:villager_happy");
+      player.onScreenDisplay.setActionBar(`${sel.dragging ? "Dragging" : "Selected"} ${s.x}×${s.y}×${s.z}`);
+    }
+    const near = nearestCourse(loadCourses(), player.dimension.id, player.location, 96);
+    if (near?.bounds) drawBox(player, near.bounds, "minecraft:endrod");
+  }
+}, 4);
+
+/** @param {Player} player @param {Box} box @param {string} particle */
+function drawBox(player, box, particle) {
+  for (const p of edgePoints(box)) {
+    try { player.dimension.spawnParticle(particle, p); } catch { /* unloaded */ }
+  }
+}
+
+// ---------- invisible walls ----------
+/** @param {string} dim @param {Box} box @param {boolean} place @param {string} owner */
+function queueShell(dim, box, place, owner) {
+  for (const s of shellSlabs(box)) fillQueue.push({ dim, from: s.from, to: s.to, place, owner });
+}
+
+system.runInterval(() => {
+  for (let i = 0; i < FILLS_PER_TICK && fillQueue.length; i++) {
+    const job = /** @type {{dim:string,from:Vec3,to:Vec3,place:boolean,owner:string}} */ (fillQueue.shift());
+    const dim = world.getDimension(job.dim);
+    try {
+      // Walls only replace air (never your builds); clearing only removes barriers.
+      dim.fillBlocks(new BlockVolume(job.from, job.to), job.place ? BARRIER : "minecraft:air",
+        { blockFilter: { includeTypes: [job.place ? "minecraft:air" : BARRIER] } });
+    } catch {
+      const p = world.getAllPlayers().find((x) => x.name === job.owner);
+      if (p) tell(p, "§cPart of the boundary is in unloaded chunks.§r Stand nearer the course and set bounds again.");
+    }
+  }
+}, 1);
+
+/** @param {Player} player */
+function applySelectionAsBounds(player) {
+  const sel = selections.get(player.id);
+  if (!sel) return;
+  const box = normBox(sel.a, sel.b);
+  const list = loadCourses();
+  const course = courseInBox(list, sel.dim, box);
+  if (!course) { tell(player, "§cNo Start Pad inside the selection.§r"); return; }
+  const problem = boundsProblem(box, course.pos);
+  if (problem) { tell(player, `§c${problem}`); return; }
+  if (course.bounds) queueShell(course.dim, course.bounds, false, player.name);
+  queueShell(course.dim, box, true, player.name);
+  saveCourses(setBounds(list, course.id, box));
+  selections.delete(player.id);
+  const s = boxSize(box);
+  tell(player, `Bounds set for §a${course.name}§r: ${s.x}×${s.y}×${s.z}. Invisible walls and ceiling; the bottom is the pit.`);
+}
+
+/** @param {Player} player @param {Course} course */
+function removeBounds(player, course) {
+  if (!course.bounds) return;
+  queueShell(course.dim, course.bounds, false, player.name);
+  saveCourses(setBounds(loadCourses(), course.id, null));
+  tell(player, `Bounds removed from §a${course.name}§r.`);
+}
 
 /** @param {Player} player */
 function openMenu(player) {
@@ -255,10 +413,15 @@ function openMenu(player) {
       player.setGameMode(GameMode.Creative);
       tell(player, "Builder mode on.");
     }]);
+    const sel = selections.get(player.id);
+    if (sel && !sel.dragging) entries.push(["§aSet course bounds§r (from selection)", () => applySelectionAsBounds(player)]);
+    if (sel) entries.push(["Clear selection", () => { selections.delete(player.id); player.onScreenDisplay.setActionBar(""); }]);
+    if (near?.bounds) entries.push([`Remove bounds: ${near.name}`, () => removeBounds(player, near)]);
     entries.push(["Get Course Kit", () => giveKit(player)]);
   }
   const form = new ActionFormData().title("Course Craft").body(
-    near ? `Nearest: §a${near.name}§r  best ${near.bestTicks === null ? "—" : formatTime(near.bestTicks) + " by " + near.bestBy}` : "Place a §aStart Pad§r to create a course."
+    (near ? `Nearest: §a${near.name}§r  best ${near.bestTicks === null ? "—" : formatTime(near.bestTicks) + " by " + near.bestBy}` : "Place a §aStart Pad§r to create a course.") +
+      "\n§7Bounds: punch a block with the wand, look to drag, use to drop the far corner."
   );
   for (const [label] of entries) form.button(label);
   form.show(player).then((r) => {
