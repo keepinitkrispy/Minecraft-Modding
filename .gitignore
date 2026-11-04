@@ -1,3 +1,4 @@
 build/
 projects/course_craft/node_modules/
 projects/course_craft/textures_in/
+__pycache__/
